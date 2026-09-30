@@ -2,9 +2,15 @@
 
 Monorepo for a social proximity product. People nearby (~40–50 ft) show up as matches with a wearable score light — **no mic, no voice, just proximity.**
 
-## Stage 1 firmware (hardware first)
+## Layers
 
-Two Seeed XIAO nRF52840 boards + WS2812 16-LED rings: BLE mutual detection and a walk-by LED bar (fake local score).
+1. **Apps** — rich voluntary profiles (photo, bio, prompts) + “Help me say hi” facilitator
+2. **API** — compatibility score + optional LLM icebreakers
+3. **Hardware** — BLE walk-by ring (Stage 1 RSSI bar → Stage 2/3 real score)
+
+## Stage 1 firmware
+
+Two Seeed XIAO nRF52840 boards + WS2812 16-LED rings: BLE mutual detection and a walk-by LED bar.
 
 → [`firmware/stage1-ble-ring/`](firmware/stage1-ble-ring/)
 
@@ -14,68 +20,40 @@ Two Seeed XIAO nRF52840 boards + WS2812 16-LED rings: BLE mutual detection and a
 |---------|------|------|
 | `@nearby/web` | `apps/web` | Next.js web app |
 | `@nearby/mobile` | `apps/mobile` | Expo React Native app |
-| `@nearby/api` | `apps/api` | Hono API (Firebase Admin) |
-| `@nearby/shared` | `packages/shared` | Shared types + scoring helpers |
-
-## Stack
-
-- **pnpm workspaces** monorepo
-- Next.js 15 + Tailwind CSS v4 (web)
-- Expo / React Native (mobile)
-- Hono + Firebase Admin (API)
-- Firebase Auth + Cloud Firestore
-- TanStack Query
+| `@nearby/api` | `apps/api` | Hono API |
+| `@nearby/shared` | `packages/shared` | Types, scoring, mock facilitator |
 
 ## Setup
 
 ```bash
 pnpm install
+pnpm dev          # web :3000 + api :4000
+pnpm dev:mobile   # Expo
 ```
 
-### Web
+Copy env files from each app’s `.env.example`. Optional `OPENAI_API_KEY` on the API enables real icebreakers (otherwise mock).
 
-```bash
-cp apps/web/.env.example apps/web/.env
-# fill NEXT_PUBLIC_FIREBASE_*
-pnpm dev:web
-```
+## API highlights
 
-Open [http://localhost:3000](http://localhost:3000).
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /v1/matches` | Nearby profiles + scores |
+| `POST /v1/facilitate` | Why you vibe + 3 icebreakers |
+| `GET /v1/devices/:id?band=0\|1\|2` | Wearable ID → profile + walk-by score |
 
-### API
-
-```bash
-cp apps/api/.env.example apps/api/.env
-pnpm dev:api
-```
-
-Runs on [http://localhost:4000](http://localhost:4000). Without Firebase Admin credentials it serves **mock** match data (`Authorization: Bearer dev`).
-
-### Mobile
-
-```bash
-cp apps/mobile/.env.example apps/mobile/.env
-pnpm dev:mobile
-```
-
-Then press `i` / `a` for simulator, or scan the QR with Expo Go.
-
-### All (web + api in parallel)
-
-```bash
-pnpm --filter @nearby/web --filter @nearby/api --parallel run dev
-```
+Auth: `Authorization: Bearer <firebase-id-token>` or `Bearer dev` in mock mode.
 
 ## Firebase
 
-In Firebase Console:
+- Auth: Email/Password
+- Firestore rules: `apps/api/firestore.rules`
+- Storage rules (profile photos): `apps/api/storage.rules`
 
-- **Authentication → Sign-in method → Email/Password → Enable**
-- **Firestore → create database** (paste `apps/api/firestore.rules`)
-
-## Firestore shape
+## Profile shape
 
 ```
 users/{uid}
-  id, email, name, age, role, interests[], avatarHue, initials, createdAt, updatedAt
+  id, email, name, age, role, interests[]
+  photoUrl?, bio?, lookingFor?, vibes[], prompts[]
+  deviceId?, avatarHue, initials, createdAt, updatedAt
 ```

@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "connectionRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fromId", "order": "ASCENDING" },
+        { "fieldPath": "toId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "connectionRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
