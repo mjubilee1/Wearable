@@ -9,6 +9,8 @@
     "dev:api": "pnpm --filter @nearby/api dev",
     "dev:mobile": "pnpm --filter @nearby/mobile start",
     "build": "pnpm --filter @nearby/shared --filter @nearby/api --filter @nearby/web run build",
+    "build:api": "pnpm --filter @nearby/shared --filter @nearby/api run build",
+    "start": "pnpm --filter @nearby/api start",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck"
   },
@@ -23,6 +25,5 @@
       "react": "19.2.3",
       "react-dom": "19.2.3"
     }
-  },
-  "main": "expo-router/entry"
+  }
 }

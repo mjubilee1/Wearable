@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, Suspense, useEffect, useRef, useState } from "react";
 import {
   INTEREST_OPTIONS,
   LOOKING_FOR_OPTIONS,
@@ -8,6 +8,7 @@ import {
   VIBE_OPTIONS,
   type ProfilePrompt,
 } from "@nearby/shared";
+import { NearbyPlusBillingCard } from "@/components/NearbyPlusBillingCard";
 import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
 import { uploadProfilePhoto } from "@/lib/storage";
@@ -164,6 +165,10 @@ export default function ProfilePage() {
       </header>
 
       <main className="max-w-xl flex-1">
+        <Suspense fallback={null}>
+          <NearbyPlusBillingCard />
+        </Suspense>
+
         <div className="mb-6 flex items-center gap-4">
           <button
             type="button"

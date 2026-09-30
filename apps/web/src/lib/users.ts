@@ -68,6 +68,24 @@ function mapUser(id: string, data: DocumentData): UserProfile {
       data.deviceId === undefined || data.deviceId === null
         ? null
         : String(data.deviceId),
+    plan: data.plan === "plus" ? "plus" : "free",
+    subscriptionStatus:
+      typeof data.subscriptionStatus === "string"
+        ? (data.subscriptionStatus as UserProfile["subscriptionStatus"])
+        : "none",
+    stripeCustomerId:
+      data.stripeCustomerId === undefined || data.stripeCustomerId === null
+        ? null
+        : String(data.stripeCustomerId),
+    stripeSubscriptionId:
+      data.stripeSubscriptionId === undefined ||
+      data.stripeSubscriptionId === null
+        ? null
+        : String(data.stripeSubscriptionId),
+    planUpdatedAt:
+      data.planUpdatedAt === undefined
+        ? undefined
+        : Number(data.planUpdatedAt),
     createdAt: Number(data.createdAt ?? Date.now()),
     updatedAt: Number(data.updatedAt ?? Date.now()),
   };
@@ -103,6 +121,10 @@ export async function createUserProfile(input: {
     prompts: [],
     vibes: [],
     deviceId: null,
+    plan: "free",
+    subscriptionStatus: "none",
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
     createdAt: now,
     updatedAt: now,
   };

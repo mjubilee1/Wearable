@@ -4,6 +4,18 @@ export type ProfilePrompt = {
   answer: string;
 };
 
+/** Paid plan tier. Hardware is separate; this is the recurring SaaS layer. */
+export type PlanTier = "free" | "plus";
+
+export type SubscriptionStatus =
+  | "none"
+  | "active"
+  | "trialing"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "incomplete";
+
 export type UserProfile = {
   id: string;
   email: string;
@@ -25,9 +37,22 @@ export type UserProfile = {
   vibes?: string[];
   /** Wearable device short ID (e.g. A1B2 from NB-A1B2). */
   deviceId?: string | null;
+  /** SaaS plan — only the API/webhooks may write this. */
+  plan?: PlanTier;
+  subscriptionStatus?: SubscriptionStatus;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  planUpdatedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
+
+/** Active Nearby+ (or trialing). */
+export function isNearbyPlus(profile: Pick<UserProfile, "plan" | "subscriptionStatus">): boolean {
+  if (profile.plan !== "plus") return false;
+  const status = profile.subscriptionStatus ?? "none";
+  return status === "active" || status === "trialing";
+}
 
 export type MatchProfile = UserProfile & {
   score: number;

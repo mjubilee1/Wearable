@@ -7,8 +7,17 @@ type FirestoreDoc = {
   data: () => Record<string, unknown> | undefined;
 };
 
+type FirestoreDocRef = {
+  get: () => Promise<FirestoreDoc>;
+  set: (
+    data: Record<string, unknown>,
+    options?: { merge?: boolean },
+  ) => Promise<void>;
+  update: (data: Record<string, unknown>) => Promise<void>;
+};
+
 type FirestoreCollection = {
-  doc: (id: string) => { get: () => Promise<FirestoreDoc> };
+  doc: (id: string) => FirestoreDocRef;
   get: () => Promise<{ docs: FirestoreDoc[] }>;
 };
 
@@ -26,12 +35,33 @@ type AdminApp = {
 let adminApp: AdminApp | null = null;
 let configured: boolean | null = null;
 
+function loadServiceAccount(): object | null {
+  const inline = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
+  if (inline) {
+    try {
+      return JSON.parse(inline) as object;
+    } catch {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON");
+    }
+  }
+
+  const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (credPath && existsSync(credPath)) {
+    return JSON.parse(readFileSync(credPath, "utf8")) as object;
+  }
+
+  return null;
+}
+
 export function isFirebaseConfigured(): boolean {
   if (configured !== null) return configured;
 
-  const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   const projectId = process.env.FIREBASE_PROJECT_ID;
-  configured = Boolean(projectId && credPath && existsSync(credPath));
+  try {
+    configured = Boolean(projectId && loadServiceAccount());
+  } catch {
+    configured = false;
+  }
   return configured;
 }
 
@@ -58,8 +88,10 @@ export function getFirebaseAdmin(): AdminApp {
     return adminApp;
   }
 
-  const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS!;
-  const serviceAccount = JSON.parse(readFileSync(credPath, "utf8")) as object;
+  const serviceAccount = loadServiceAccount();
+  if (!serviceAccount) {
+    throw new Error("Firebase Admin is not configured");
+  }
 
   adminApp = admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),

@@ -6,6 +6,7 @@ import { logger } from "hono/logger";
 import {
   SEED_PROFILES,
   compatibilityScore,
+  isNearbyPlus,
   mockFacilitate,
   normalizeDeviceId,
   vibeCaption,
@@ -14,6 +15,13 @@ import {
   type UserProfile,
 } from "@nearby/shared";
 import { verifyAuth } from "./auth.js";
+import {
+  createCheckoutSession,
+  createPortalSession,
+  handleStripeWebhook,
+  isStripeConfigured,
+  isStripeWebhookConfigured,
+} from "./billing.js";
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 
@@ -46,6 +54,10 @@ function demoSelf(authUid: string, email?: string): UserProfile {
     prompts: [],
     photoUrl: null,
     deviceId: null,
+    plan: "free",
+    subscriptionStatus: "none",
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -89,8 +101,88 @@ app.get("/health", (c) =>
     service: "nearby-api",
     firebase: isFirebaseConfigured(),
     llm: Boolean(process.env.OPENAI_API_KEY),
+    stripe: isStripeConfigured(),
+    stripeWebhook: isStripeWebhookConfigured(),
   }),
 );
+
+/** Stripe webhook — raw body required for signature verification. */
+app.post("/v1/billing/webhook", async (c) => {
+  if (!isStripeWebhookConfigured()) {
+    return c.json({ error: "Webhook secret not configured" }, 503);
+  }
+  const signature = c.req.header("stripe-signature");
+  if (!signature) return c.json({ error: "Missing stripe-signature" }, 400);
+
+  const rawBody = await c.req.text();
+  try {
+    await handleStripeWebhook(rawBody, signature);
+    return c.json({ received: true });
+  } catch (err) {
+    console.error("[billing] webhook error", err);
+    return c.json(
+      {
+        error: err instanceof Error ? err.message : "Webhook failed",
+      },
+      400,
+    );
+  }
+});
+
+app.post("/v1/billing/checkout", async (c) => {
+  if (!isStripeConfigured()) {
+    return c.json({ error: "Billing not configured" }, 503);
+  }
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+
+  const profile =
+    (await loadProfile(auth.uid)) ?? demoSelf(auth.uid, auth.email);
+  if (isNearbyPlus(profile)) {
+    return c.json({ error: "Already on Nearby+" }, 409);
+  }
+
+  try {
+    const session = await createCheckoutSession({
+      uid: auth.uid,
+      email: auth.email ?? profile.email,
+      stripeCustomerId: profile.stripeCustomerId,
+    });
+    return c.json(session);
+  } catch (err) {
+    console.error("[billing] checkout error", err);
+    return c.json(
+      { error: err instanceof Error ? err.message : "Checkout failed" },
+      500,
+    );
+  }
+});
+
+app.post("/v1/billing/portal", async (c) => {
+  if (!isStripeConfigured()) {
+    return c.json({ error: "Billing not configured" }, 503);
+  }
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+
+  const profile = await loadProfile(auth.uid);
+  if (!profile?.stripeCustomerId) {
+    return c.json({ error: "No billing account yet" }, 404);
+  }
+
+  try {
+    const session = await createPortalSession({
+      stripeCustomerId: profile.stripeCustomerId,
+    });
+    return c.json(session);
+  } catch (err) {
+    console.error("[billing] portal error", err);
+    return c.json(
+      { error: err instanceof Error ? err.message : "Portal failed" },
+      500,
+    );
+  }
+});
 
 app.get("/v1/matches", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));

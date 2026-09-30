@@ -20,6 +20,25 @@ service cloud.firestore {
       return signedIn() && request.auth.uid in resource.data.userIds;
     }
 
+    // Client updates may only touch profile fields — never billing.
+    function profileFieldsOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'name', 'age', 'role', 'interests', 'photoUrl', 'bio', 'lookingFor',
+        'prompts', 'vibes', 'deviceId', 'updatedAt', 'initials', 'avatarHue',
+        'email'
+      ]);
+    }
+
+    function noClientBillingOnCreate() {
+      return (!('plan' in request.resource.data) || request.resource.data.plan == 'free')
+        && (!('subscriptionStatus' in request.resource.data)
+            || request.resource.data.subscriptionStatus == 'none')
+        && !('stripeCustomerId' in request.resource.data
+            && request.resource.data.stripeCustomerId != null)
+        && !('stripeSubscriptionId' in request.resource.data
+            && request.resource.data.stripeSubscriptionId != null);
+    }
+
     match /users/{userId} {
       // Authenticated read for Nearby matching. Field-level privacy
       // (hide email/deviceId) still needs Cloud Functions or private docs.
@@ -28,9 +47,9 @@ service cloud.firestore {
       allow create: if signedIn() && (
         request.auth.uid == userId ||
         userId.matches('seed-.*')
-      );
+      ) && noClientBillingOnCreate();
 
-      allow update: if isSelf(userId);
+      allow update: if isSelf(userId) && profileFieldsOnly();
       allow delete: if false;
     }
 

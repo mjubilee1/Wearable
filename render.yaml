@@ -1,0 +1,47 @@
+# Render Blueprint — Nearby API (Web Service)
+# https://render.com/docs/blueprint-spec
+#
+# Setup:
+# 1. Push this repo to GitHub/GitLab
+# 2. Render Dashboard → New → Blueprint → connect the repo
+# 3. Fill in the sync:false env vars (Firebase service account JSON, etc.)
+# 4. Point web/mobile (this deploy):
+#      NEXT_PUBLIC_API_URL=https://wearable-9zxd.onrender.com
+#      EXPO_PUBLIC_API_URL=https://wearable-9zxd.onrender.com
+#
+# Free plan sleeps after ~15m idle; first request after sleep is slow.
+
+services:
+  - type: web
+    name: nearby-api
+    runtime: node
+    plan: free
+    region: oregon
+    # Must be repo root (pnpm workspace). Do NOT set to apps/mobile —
+    # that package's main is expo-router/entry and will crash on Render.
+    rootDir: .
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm run build:api
+    startCommand: pnpm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22.12.0"
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      # Paste the full service-account JSON as one line (Render secret)
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: APP_BASE_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID_NEARBY_PLUS
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
