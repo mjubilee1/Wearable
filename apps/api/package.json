@@ -1,0 +1,24 @@
+{
+  "name": "@nearby/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"no lint configured\""
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.4",
+    "@nearby/shared": "workspace:*",
+    "firebase-admin": "^13.4.0",
+    "hono": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  }
+}

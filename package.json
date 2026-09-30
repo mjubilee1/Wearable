@@ -1,0 +1,23 @@
+{
+  "name": "nearby",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.6.1",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @nearby/web --filter @nearby/api run dev",
+    "dev:web": "pnpm --filter @nearby/web dev",
+    "dev:api": "pnpm --filter @nearby/api dev",
+    "dev:mobile": "pnpm --filter @nearby/mobile start",
+    "build": "pnpm --filter @nearby/shared --filter @nearby/api --filter @nearby/web run build",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@firebase/util",
+      "protobufjs",
+      "unrs-resolver"
+    ]
+  }
+}
