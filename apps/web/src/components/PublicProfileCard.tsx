@@ -11,8 +11,8 @@ type PublicProfileCardProps = {
 
 function Avatar({ profile }: { profile: PublicProfilePreview }) {
   if (profile.photoUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
     return (
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={profile.photoUrl}
         alt=""

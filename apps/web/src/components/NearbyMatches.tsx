@@ -43,7 +43,10 @@ export function NearbyMatches() {
     },
   });
 
-  const matches = matchesQuery.data ?? [];
+  const matches = useMemo(
+    () => matchesQuery.data ?? [],
+    [matchesQuery.data],
+  );
   const matchIds = useMemo(() => matches.map((m) => m.id), [matches]);
 
   const statusQuery = useQuery({
