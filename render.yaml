@@ -20,7 +20,9 @@ services:
     # Must be repo root (pnpm workspace). Do NOT set to apps/mobile —
     # that package's main is expo-router/entry and will crash on Render.
     rootDir: .
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm run build:api
+    # Do not run `corepack enable` — Render's /usr/bin is read-only (EROFS).
+    # pnpm is already on PATH; packageManager in package.json pins the version.
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build:api
     startCommand: pnpm start
     healthCheckPath: /health
     envVars:

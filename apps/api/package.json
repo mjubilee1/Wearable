@@ -13,6 +13,7 @@
   "dependencies": {
     "@hono/node-server": "^1.14.4",
     "@nearby/shared": "workspace:*",
+    "dotenv": "^18.0.4",
     "firebase-admin": "^13.4.0",
     "hono": "^4.8.3",
     "stripe": "^22.6.2"

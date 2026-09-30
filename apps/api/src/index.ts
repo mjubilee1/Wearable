@@ -1,3 +1,6 @@
+import { config as loadEnv } from "dotenv";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
@@ -24,6 +27,10 @@ import {
 } from "./billing.js";
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
+
+// Load apps/api/.env whether started from repo root or apps/api
+const apiDir = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
+loadEnv({ path: resolve(apiDir, ".env") });
 
 const app = new Hono();
 const port = Number(process.env.PORT ?? 4000);
