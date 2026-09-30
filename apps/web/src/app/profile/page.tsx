@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
+  INTEREST_OPTIONS,
   LOOKING_FOR_OPTIONS,
   PROFILE_PROMPT_BANK,
   VIBE_OPTIONS,
@@ -11,21 +12,6 @@ import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
 import { uploadProfilePhoto } from "@/lib/storage";
 import { updateUserProfile } from "@/lib/users";
-
-const INTEREST_OPTIONS = [
-  "Coffee walks",
-  "Indie film",
-  "Climbing",
-  "Basketball",
-  "Synthwave",
-  "Dogs",
-  "Farmers markets",
-  "Pottery",
-  "Jazz",
-  "Running",
-  "Board games",
-  "Thai food",
-];
 
 export default function ProfilePage() {
   const { profile, signOut, refreshProfile } = useAuth();

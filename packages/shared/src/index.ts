@@ -163,6 +163,21 @@ export function sanitizeIntroMessage(raw: string): string {
   return cleaned.slice(0, INTRO_MESSAGE_MAX);
 }
 
+export const INTEREST_OPTIONS = [
+  "Coffee walks",
+  "Indie film",
+  "Climbing",
+  "Basketball",
+  "Synthwave",
+  "Dogs",
+  "Farmers markets",
+  "Pottery",
+  "Jazz",
+  "Running",
+  "Board games",
+  "Thai food",
+] as const;
+
 export const PROFILE_PROMPT_BANK = [
   "A perfect Saturday nearby looks like…",
   "I'm unusually good at…",

@@ -3,22 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { INTEREST_OPTIONS } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
-
-const INTEREST_OPTIONS = [
-  "Coffee walks",
-  "Indie film",
-  "Climbing",
-  "Basketball",
-  "Synthwave",
-  "Dogs",
-  "Farmers markets",
-  "Pottery",
-  "Jazz",
-  "Running",
-  "Board games",
-  "Thai food",
-];
 
 export default function SignupPage() {
   const { signUp } = useAuth();
