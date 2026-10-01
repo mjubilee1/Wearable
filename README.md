@@ -12,7 +12,13 @@ Monorepo for a social proximity product. People nearby (~40–50 ft) show up as 
 
 Two Seeed XIAO nRF52840 boards + WS2812 16-LED rings: BLE mutual detection and a walk-by LED bar.
 
-→ [`firmware/stage1-ble-ring/`](firmware/stage1-ble-ring/)
+→ [`firmware/stage1-ble-ring/`](firmware/stage1-ble-ring/) — **PlatformIO only** (skip Arduino IDE). NeoPixel + Bluefruit BLE are already in `platformio.ini`.
+
+```bash
+cd firmware/stage1-ble-ring
+pio run -e xiaoble -t upload          # or -e xiaoblesense
+pio device monitor -e xiaoble -b 115200
+```
 
 ## Apps
 
