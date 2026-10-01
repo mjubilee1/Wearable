@@ -19,165 +19,178 @@
 #include "config.h"
 
 // -----------------------------------------------------------------------------
-// Device identity
+// Local device identity (unique per chip)
 // -----------------------------------------------------------------------------
 
-static uint8_t g_deviceId[4];
-static char g_localName[12];  // "NB-A1B2\0"
+static uint8_t localDeviceId[4];
+static char bleDeviceName[12];  // e.g. "NB-A1B2\0"
 
-static void initDeviceId() {
-  // FICR DEVICEID is unique per chip; stable across resets.
-  const uint32_t id = NRF_FICR->DEVICEID[0];
-  g_deviceId[0] = (uint8_t)(id >> 24);
-  g_deviceId[1] = (uint8_t)(id >> 16);
-  g_deviceId[2] = (uint8_t)(id >> 8);
-  g_deviceId[3] = (uint8_t)(id);
+static void initLocalDeviceId() {
+  // FICR DEVICEID is unique per chip and stable across resets.
+  const uint32_t hardwareId = NRF_FICR->DEVICEID[0];
+  localDeviceId[0] = (uint8_t)(hardwareId >> 24);
+  localDeviceId[1] = (uint8_t)(hardwareId >> 16);
+  localDeviceId[2] = (uint8_t)(hardwareId >> 8);
+  localDeviceId[3] = (uint8_t)(hardwareId);
 
-  snprintf(g_localName, sizeof(g_localName), "%s%02X%02X", NEARBY_NAME_PREFIX,
-           g_deviceId[2], g_deviceId[3]);
+  snprintf(bleDeviceName, sizeof(bleDeviceName), "%s%02X%02X", NEARBY_NAME_PREFIX,
+           localDeviceId[2], localDeviceId[3]);
 }
 
-static bool isSelfId(const uint8_t id[4]) {
-  return memcmp(id, g_deviceId, 4) == 0;
+static bool isOwnDeviceId(const uint8_t candidateId[4]) {
+  return memcmp(candidateId, localDeviceId, 4) == 0;
 }
 
 // -----------------------------------------------------------------------------
-// Peer / fake score
+// Peer proximity (RSSI → smoothed fake score)
 // -----------------------------------------------------------------------------
 
-struct PeerState {
-  bool seen;
-  int8_t rssi;
-  uint32_t lastSeenMs;
-  float scoreEma;  // 0–100
+struct PeerProximity {
+  bool isVisible;
+  int8_t lastRssiDbm;
+  uint32_t lastSeenAtMs;
+  float smoothedScore;  // 0–100
 };
 
-static PeerState g_peer = {};
+static PeerProximity peer = {};
 
-static float rssiToScore(int8_t rssi) {
-  if (rssi <= RSSI_FAR_DBM) return 0.0f;
-  if (rssi >= RSSI_NEAR_DBM) return 100.0f;
-  const float t =
-      (float)(rssi - RSSI_FAR_DBM) / (float)(RSSI_NEAR_DBM - RSSI_FAR_DBM);
-  return t * 100.0f;
+static float rssiToProximityScore(int8_t rssiDbm) {
+  if (rssiDbm <= RSSI_FAR_DBM) return 0.0f;
+  if (rssiDbm >= RSSI_NEAR_DBM) return 100.0f;
+
+  const float normalized =
+      (float)(rssiDbm - RSSI_FAR_DBM) / (float)(RSSI_NEAR_DBM - RSSI_FAR_DBM);
+  return normalized * 100.0f;
 }
 
-static void notePeerSighting(int8_t rssi) {
-  const float instant = rssiToScore(rssi);
-  if (!g_peer.seen) {
-    g_peer.scoreEma = instant;
+static void recordPeerSighting(int8_t rssiDbm) {
+  const float instantScore = rssiToProximityScore(rssiDbm);
+
+  if (!peer.isVisible) {
+    peer.smoothedScore = instantScore;
   } else {
-    g_peer.scoreEma =
-        SCORE_EMA_ALPHA * instant + (1.0f - SCORE_EMA_ALPHA) * g_peer.scoreEma;
+    peer.smoothedScore = SCORE_EMA_ALPHA * instantScore +
+                         (1.0f - SCORE_EMA_ALPHA) * peer.smoothedScore;
   }
-  g_peer.seen = true;
-  g_peer.rssi = rssi;
-  g_peer.lastSeenMs = millis();
+
+  peer.isVisible = true;
+  peer.lastRssiDbm = rssiDbm;
+  peer.lastSeenAtMs = millis();
 }
 
-static void decayPeerIfStale() {
-  if (!g_peer.seen) return;
-  if ((millis() - g_peer.lastSeenMs) < PEER_STALE_MS) return;
+static void fadePeerIfTimedOut() {
+  if (!peer.isVisible) return;
+  if ((millis() - peer.lastSeenAtMs) < PEER_STALE_MS) return;
 
-  g_peer.seen = false;
-  g_peer.rssi = 0;
-  // Soft fade-out so the bar doesn't hard-cut when one advert packet is missed.
-  g_peer.scoreEma *= 0.85f;
-  if (g_peer.scoreEma < 2.0f) g_peer.scoreEma = 0.0f;
+  peer.isVisible = false;
+  peer.lastRssiDbm = 0;
+  // Soft fade so one missed advert packet doesn't hard-cut the ring.
+  peer.smoothedScore *= 0.85f;
+  if (peer.smoothedScore < 2.0f) peer.smoothedScore = 0.0f;
 }
 
 // -----------------------------------------------------------------------------
-// LEDs — walk-by progress bar
+// LED ring — walk-by progress bar
 // -----------------------------------------------------------------------------
 
-static Adafruit_NeoPixel g_ring(NEARBY_LED_COUNT, NEARBY_NEOPIXEL_PIN,
-                                NEO_GRB + NEO_KHZ800);
+static Adafruit_NeoPixel ledRing(NEARBY_LED_COUNT, NEARBY_NEOPIXEL_PIN,
+                                 NEO_GRB + NEO_KHZ800);
 
-static uint32_t scoreColor(float score) {
-  // red (0) → orange (~45) → green (100)
-  uint8_t r, g, b = 0;
+static uint32_t colorForProximityScore(float score) {
+  // red (far / 0) → orange (~45) → green (near / 100)
+  uint8_t red;
+  uint8_t green;
+  const uint8_t blue = 0;
+
   if (score <= 45.0f) {
-    const float t = score / 45.0f;
-    r = 255;
-    g = (uint8_t)(t * 140.0f);
+    const float blendTowardOrange = score / 45.0f;
+    red = 255;
+    green = (uint8_t)(blendTowardOrange * 140.0f);
   } else {
-    const float t = (score - 45.0f) / 55.0f;
-    r = (uint8_t)(255.0f * (1.0f - t));
-    g = (uint8_t)(140.0f + t * 115.0f);
+    const float blendTowardGreen = (score - 45.0f) / 55.0f;
+    red = (uint8_t)(255.0f * (1.0f - blendTowardGreen));
+    green = (uint8_t)(140.0f + blendTowardGreen * 115.0f);
   }
-  return g_ring.Color(r, g, b);
+
+  return ledRing.Color(red, green, blue);
 }
 
-static void renderWalkByBar(float score) {
-  const uint32_t color = scoreColor(score);
-  const float lit = (score / 100.0f) * (float)NEARBY_LED_COUNT;
+static void renderWalkByRing(float proximityScore) {
+  const uint32_t fillColor = colorForProximityScore(proximityScore);
+  const float litLedCount =
+      (proximityScore / 100.0f) * (float)NEARBY_LED_COUNT;
 
-  for (int i = 0; i < NEARBY_LED_COUNT; i++) {
-    if ((float)(i + 1) <= lit) {
-      g_ring.setPixelColor(i, color);
-    } else if ((float)i < lit) {
-      // Partial last LED for smoother progress.
-      const float frac = lit - (float)i;
-      const uint8_t r = (uint8_t)(((color >> 16) & 0xFF) * frac);
-      const uint8_t g = (uint8_t)(((color >> 8) & 0xFF) * frac);
-      const uint8_t b = (uint8_t)((color & 0xFF) * frac);
-      g_ring.setPixelColor(i, g_ring.Color(r, g, b));
+  for (int ledIndex = 0; ledIndex < NEARBY_LED_COUNT; ledIndex++) {
+    if ((float)(ledIndex + 1) <= litLedCount) {
+      ledRing.setPixelColor(ledIndex, fillColor);
+    } else if ((float)ledIndex < litLedCount) {
+      // Dim the edge LED for smoother progress between whole steps.
+      const float partialBrightness = litLedCount - (float)ledIndex;
+      const uint8_t red =
+          (uint8_t)(((fillColor >> 16) & 0xFF) * partialBrightness);
+      const uint8_t green =
+          (uint8_t)(((fillColor >> 8) & 0xFF) * partialBrightness);
+      const uint8_t blue = (uint8_t)((fillColor & 0xFF) * partialBrightness);
+      ledRing.setPixelColor(ledIndex, ledRing.Color(red, green, blue));
     } else {
-      g_ring.setPixelColor(i, 0);
+      ledRing.setPixelColor(ledIndex, 0);
     }
   }
 
   // Idle heartbeat on LED 0 when alone so you know the board is alive.
-  if (score < 1.0f) {
-    const float breath =
-        0.5f + 0.5f * sinf((float)millis() / 500.0f);  // ~slow pulse
-    const uint8_t v = (uint8_t)(8.0f + breath * 18.0f);
-    g_ring.setPixelColor(0, g_ring.Color(0, 0, v));
+  if (proximityScore < 1.0f) {
+    const float breathWave =
+        0.5f + 0.5f * sinf((float)millis() / 500.0f);  // slow pulse
+    const uint8_t breathBlue = (uint8_t)(8.0f + breathWave * 18.0f);
+    ledRing.setPixelColor(0, ledRing.Color(0, 0, breathBlue));
   }
 
-  g_ring.show();
+  ledRing.show();
 }
 
 // -----------------------------------------------------------------------------
 // BLE advertise + scan (no connection)
 // -----------------------------------------------------------------------------
 
-static uint8_t g_mfgPayload[8];
+static uint8_t manufacturerPayload[8];
 
-static void buildMfgPayload() {
-  g_mfgPayload[0] = (uint8_t)(NEARBY_COMPANY_ID & 0xFF);
-  g_mfgPayload[1] = (uint8_t)(NEARBY_COMPANY_ID >> 8);
-  g_mfgPayload[2] = NEARBY_MAGIC[0];
-  g_mfgPayload[3] = NEARBY_MAGIC[1];
-  memcpy(&g_mfgPayload[4], g_deviceId, 4);
+static void buildManufacturerPayload() {
+  manufacturerPayload[0] = (uint8_t)(NEARBY_COMPANY_ID & 0xFF);
+  manufacturerPayload[1] = (uint8_t)(NEARBY_COMPANY_ID >> 8);
+  manufacturerPayload[2] = NEARBY_MAGIC[0];
+  manufacturerPayload[3] = NEARBY_MAGIC[1];
+  memcpy(&manufacturerPayload[4], localDeviceId, 4);
 }
 
-static bool parseNearbyMfg(const uint8_t *buf, uint8_t len, uint8_t outId[4]) {
+static bool tryParseNearbyManufacturerData(const uint8_t *buffer, uint8_t length,
+                                           uint8_t outPeerId[4]) {
   // SoftDevice reports company ID already included in manufacturer payload.
-  if (len < 8) return false;
-  if (buf[0] != (uint8_t)(NEARBY_COMPANY_ID & 0xFF)) return false;
-  if (buf[1] != (uint8_t)(NEARBY_COMPANY_ID >> 8)) return false;
-  if (buf[2] != NEARBY_MAGIC[0] || buf[3] != NEARBY_MAGIC[1]) return false;
-  memcpy(outId, &buf[4], 4);
+  if (length < 8) return false;
+  if (buffer[0] != (uint8_t)(NEARBY_COMPANY_ID & 0xFF)) return false;
+  if (buffer[1] != (uint8_t)(NEARBY_COMPANY_ID >> 8)) return false;
+  if (buffer[2] != NEARBY_MAGIC[0] || buffer[3] != NEARBY_MAGIC[1]) return false;
+  memcpy(outPeerId, &buffer[4], 4);
   return true;
 }
 
-static void scanCallback(ble_gap_evt_adv_report_t *report) {
-  uint8_t buffer[32];
-  const uint8_t len = Bluefruit.Scanner.parseReportByType(
-      report, BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA, buffer, sizeof(buffer));
+static void onScanAdvertisement(ble_gap_evt_adv_report_t *report) {
+  uint8_t manufacturerBuffer[32];
+  const uint8_t payloadLength = Bluefruit.Scanner.parseReportByType(
+      report, BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA, manufacturerBuffer,
+      sizeof(manufacturerBuffer));
 
-  uint8_t peerId[4];
-  if (!parseNearbyMfg(buffer, len, peerId)) {
+  uint8_t peerDeviceId[4];
+  if (!tryParseNearbyManufacturerData(manufacturerBuffer, payloadLength,
+                                      peerDeviceId)) {
     Bluefruit.Scanner.resume();
     return;
   }
-  if (isSelfId(peerId)) {
+  if (isOwnDeviceId(peerDeviceId)) {
     Bluefruit.Scanner.resume();
     return;
   }
 
-  notePeerSighting(report->rssi);
+  recordPeerSighting(report->rssi);
   Bluefruit.Scanner.resume();
 }
 
@@ -187,9 +200,10 @@ static void startAdvertising() {
 
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
   Bluefruit.Advertising.addTxPower();
-  Bluefruit.Advertising.addManufacturerData(g_mfgPayload, sizeof(g_mfgPayload));
+  Bluefruit.Advertising.addManufacturerData(manufacturerPayload,
+                                            sizeof(manufacturerPayload));
 
-  // Put the readable name in the scan response (fits better there).
+  // Readable name fits better in the scan response than the adv packet.
   Bluefruit.ScanResponse.addName();
 
   Bluefruit.Advertising.restartOnDisconnect(true);
@@ -199,7 +213,7 @@ static void startAdvertising() {
 }
 
 static void startScanning() {
-  Bluefruit.Scanner.setRxCallback(scanCallback);
+  Bluefruit.Scanner.setRxCallback(onScanAdvertisement);
   Bluefruit.Scanner.restartOnDisconnect(true);
   Bluefruit.Scanner.setInterval(SCAN_INTERVAL, SCAN_WINDOW);
   Bluefruit.Scanner.filterRssi(RSSI_FAR_DBM - 5);
@@ -208,22 +222,22 @@ static void startScanning() {
 }
 
 static void setupBle() {
-  // Peripheral (advertise) + Central (scan) roles concurrently.
+  // Peripheral (advertise) + Central (scan) roles at the same time.
   if (!Bluefruit.begin(1, 1)) {
     Serial.println("Bluefruit.begin failed");
     while (1) delay(100);
   }
 
   Bluefruit.setTxPower(4);  // max for many XIAO configs; ok for demo range
-  Bluefruit.setName(g_localName);
+  Bluefruit.setName(bleDeviceName);
 
-  buildMfgPayload();
+  buildManufacturerPayload();
   startAdvertising();
   startScanning();
 
-  Serial.printf("Advertising as %s\n", g_localName);
-  Serial.printf("Device ID %02X%02X%02X%02X\n", g_deviceId[0], g_deviceId[1],
-                g_deviceId[2], g_deviceId[3]);
+  Serial.printf("Advertising as %s\n", bleDeviceName);
+  Serial.printf("Device ID %02X%02X%02X%02X\n", localDeviceId[0], localDeviceId[1],
+                localDeviceId[2], localDeviceId[3]);
 }
 
 // -----------------------------------------------------------------------------
@@ -233,17 +247,17 @@ static void setupBle() {
 void setup() {
   Serial.begin(115200);
   // Don't block forever if USB serial isn't open.
-  uint32_t t0 = millis();
-  while (!Serial && (millis() - t0) < 2000) {
+  const uint32_t serialWaitStartedAtMs = millis();
+  while (!Serial && (millis() - serialWaitStartedAtMs) < 2000) {
     delay(10);
   }
 
-  initDeviceId();
+  initLocalDeviceId();
 
-  g_ring.begin();
-  g_ring.setBrightness(NEARBY_LED_BRIGHTNESS);
-  g_ring.clear();
-  g_ring.show();
+  ledRing.begin();
+  ledRing.setBrightness(NEARBY_LED_BRIGHTNESS);
+  ledRing.clear();
+  ledRing.show();
 
   Serial.println();
   Serial.println("Nearby Stage 1 — BLE walk-by ring");
@@ -254,21 +268,22 @@ void setup() {
 }
 
 void loop() {
-  decayPeerIfStale();
+  fadePeerIfTimedOut();
 
-  // Continue fading toward 0 when peer is gone.
-  if (!g_peer.seen && g_peer.scoreEma > 0.0f) {
-    g_peer.scoreEma *= 0.92f;
-    if (g_peer.scoreEma < 1.0f) g_peer.scoreEma = 0.0f;
+  // Keep fading toward 0 after the peer leaves range.
+  if (!peer.isVisible && peer.smoothedScore > 0.0f) {
+    peer.smoothedScore *= 0.92f;
+    if (peer.smoothedScore < 1.0f) peer.smoothedScore = 0.0f;
   }
 
-  renderWalkByBar(g_peer.scoreEma);
+  renderWalkByRing(peer.smoothedScore);
 
-  static uint32_t lastLog = 0;
-  if (millis() - lastLog > 500) {
-    lastLog = millis();
-    if (g_peer.seen || g_peer.scoreEma > 0.0f) {
-      Serial.printf("peer rssi=%d score=%.0f\n", g_peer.rssi, g_peer.scoreEma);
+  static uint32_t lastLogAtMs = 0;
+  if (millis() - lastLogAtMs > 500) {
+    lastLogAtMs = millis();
+    if (peer.isVisible || peer.smoothedScore > 0.0f) {
+      Serial.printf("peer rssi=%d score=%.0f\n", peer.lastRssiDbm,
+                    peer.smoothedScore);
     }
   }
 
