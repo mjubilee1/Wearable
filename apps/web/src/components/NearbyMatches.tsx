@@ -195,7 +195,10 @@ export function NearbyMatches() {
       </header>
 
       <div className="mb-6 max-w-md">
-        <DeviceStrip score={displayScore} />
+        <DeviceStrip
+          score={displayScore}
+          deviceId={profile?.deviceId ?? null}
+        />
       </div>
 
       {facilitate || facilitateError ? (

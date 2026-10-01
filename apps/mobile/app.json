@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Nearby",
-    "slug": "nearby",
+    "slug": "wearable",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "nearby",
@@ -9,7 +9,11 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nearby.app"
+      "bundleIdentifier": "com.nearby.app",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Nearby uses Bluetooth to find and link your wearable ring, and to notice other Nearby rings when you walk by.",
+        "NSBluetoothPeripheralUsageDescription": "Nearby uses Bluetooth to find and link your wearable ring."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +23,15 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.nearby.app",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -32,7 +44,24 @@
           "photosPermission": "Allow Nearby to use your photos for your profile."
         }
       ],
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [
+            "central"
+          ],
+          "bluetoothAlwaysPermission": "Nearby uses Bluetooth to find and link your wearable ring, and to notice other Nearby rings when you walk by."
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "53cd2c2f-95e3-4fb2-ab7b-97cd1cacb70d"
+      }
+    },
+    "owner": "jubileeinvestments"
   }
 }

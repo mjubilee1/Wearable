@@ -1,8 +1,11 @@
-import { Text, View, StyleSheet } from "react-native";
+import { Pressable, Text, View, StyleSheet } from "react-native";
+import { useRouter } from "expo-router";
 import { colors } from "@/lib/theme";
 
 type DeviceStripProps = {
   score: number;
+  /** Linked wearable short id, e.g. A1B2 */
+  deviceId?: string | null;
 };
 
 function lightFromScore(score: number): { label: string; color: string } {
@@ -11,22 +14,40 @@ function lightFromScore(score: number): { label: string; color: string } {
   return { label: "Bright green", color: "#22c55e" };
 }
 
-export function DeviceStrip({ score }: DeviceStripProps) {
+export function DeviceStrip({ score, deviceId }: DeviceStripProps) {
+  const router = useRouter();
+  const linked = Boolean(deviceId);
   const light = lightFromScore(score);
 
   return (
-    <View style={styles.wrap}>
-      <View style={[styles.dot, { backgroundColor: light.color }]} />
+    <Pressable
+      onPress={() => router.push("/link-ring?from=profile")}
+      style={styles.wrap}
+    >
+      <View
+        style={[
+          styles.dot,
+          { backgroundColor: linked ? light.color : colors.muted },
+        ]}
+      />
       <View style={styles.copy}>
-        <Text style={styles.title}>Wearable · BLE connected</Text>
+        <Text style={styles.title}>
+          {linked
+            ? `Wearable · NB-${deviceId}`
+            : "Wearable · Not linked"}
+        </Text>
         <Text style={styles.sub} numberOfLines={1}>
-          Score light: {light.label}
+          {linked
+            ? `Score light: ${light.label}`
+            : "Tap to find and link your ring"}
         </Text>
       </View>
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>Live</Text>
+      <View style={[styles.badge, !linked && styles.badgeMuted]}>
+        <Text style={[styles.badgeText, !linked && styles.badgeTextMuted]}>
+          {linked ? "Linked" : "Setup"}
+        </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -52,11 +73,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
+  badgeMuted: {
+    backgroundColor: colors.surface,
+  },
   badgeText: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.6,
     textTransform: "uppercase",
     color: colors.teal,
+  },
+  badgeTextMuted: {
+    color: colors.muted,
   },
 });

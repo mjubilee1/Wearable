@@ -4,15 +4,22 @@ import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import {
+  OnboardingProvider,
+  useOnboarding,
+} from "@/lib/onboarding-context";
 import { colors } from "@/lib/theme";
 
 function AuthGate({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
+  const { skipLinkRing } = useOnboarding();
   const segments = useSegments();
   const router = useRouter();
+
   const root = segments[0];
   const inAuthGroup = root === "(auth)";
   const onIndex = root === undefined || root === "index";
+  const onLinkRing = root === "link-ring";
 
   useEffect(() => {
     if (loading) return;
@@ -20,12 +27,32 @@ function AuthGate({ children }: { children: ReactNode }) {
       router.replace("/(auth)/login");
       return;
     }
-    if (user && (inAuthGroup || onIndex)) {
-      router.replace("/(tabs)");
-    }
-  }, [user, loading, inAuthGroup, onIndex, router]);
+    if (!user) return;
+    if (!profile) return;
+    if (skipLinkRing === null && !profile.deviceId) return;
 
-  if (loading) {
+    const needsLinkRing = !profile.deviceId && skipLinkRing === false;
+
+    if (needsLinkRing && !onLinkRing) {
+      router.replace("/link-ring");
+      return;
+    }
+
+    if (inAuthGroup || onIndex) {
+      router.replace(needsLinkRing ? "/link-ring" : "/(tabs)");
+    }
+  }, [
+    user,
+    profile,
+    loading,
+    inAuthGroup,
+    onIndex,
+    onLinkRing,
+    skipLinkRing,
+    router,
+  ]);
+
+  if (loading || (user && !profile)) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={colors.teal} size="large" />
@@ -36,6 +63,15 @@ function AuthGate({ children }: { children: ReactNode }) {
 
   if (!user && !inAuthGroup) return null;
   if (user && (inAuthGroup || onIndex)) return null;
+  if (
+    user &&
+    profile &&
+    skipLinkRing === false &&
+    !profile.deviceId &&
+    !onLinkRing
+  ) {
+    return null;
+  }
 
   return <>{children}</>;
 }
@@ -56,10 +92,12 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <StatusBar style="dark" />
-        <AuthGate>
-          <Stack screenOptions={{ headerShown: false }} />
-        </AuthGate>
+        <OnboardingProvider>
+          <StatusBar style="dark" />
+          <AuthGate>
+            <Stack screenOptions={{ headerShown: false }} />
+          </AuthGate>
+        </OnboardingProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

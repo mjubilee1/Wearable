@@ -189,7 +189,10 @@ export default function NearbyScreen() {
               </Pressable>
             </View>
 
-            <DeviceStrip score={displayScore} />
+            <DeviceStrip
+              score={displayScore}
+              deviceId={profile?.deviceId ?? null}
+            />
 
             {facilitate || facilitateError ? (
               <View style={styles.facilitator}>

@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import {
   INTEREST_OPTIONS,
@@ -24,6 +25,7 @@ import { updateUserProfile } from "@/lib/users";
 import { colors } from "@/lib/theme";
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { profile, signOut, refreshProfile } = useAuth();
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -407,6 +409,16 @@ export default function ProfileScreen() {
             autoCapitalize="characters"
             style={[styles.input, styles.mono]}
           />
+          <Pressable
+            onPress={() => router.push("/link-ring?from=profile")}
+            style={styles.linkRingBtn}
+          >
+            <Text style={styles.linkRingBtnText}>
+              {deviceId.trim()
+                ? "Find ring again over Bluetooth"
+                : "Find my ring over Bluetooth"}
+            </Text>
+          </Pressable>
         </View>
 
         {error ? (
@@ -509,6 +521,20 @@ const styles = StyleSheet.create({
   },
   textarea: { minHeight: 80, textAlignVertical: "top" },
   mono: { fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  linkRingBtn: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(13,148,136,0.25)",
+    backgroundColor: colors.tealSoft,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  linkRingBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.teal,
+  },
   hint: { fontSize: 11, color: colors.muted },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
