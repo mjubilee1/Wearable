@@ -39,11 +39,22 @@ Brightness defaults to `40/255` to avoid brownouts. Raise with `-DNEARBY_LED_BRI
 
 Flash the **same** firmware to both boards.
 
-## Tooling
+## Tooling (PlatformIO only)
 
-Install [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation.html) (CLI) or the PlatformIO IDE extension.
+Use **PlatformIO** — not the Arduino IDE. Board target, Adafruit NeoPixel, and Bluefruit BLE are already set in `platformio.ini`.
 
-This project uses the **Adafruit nRF52 / Bluefruit** board target (`xiaoble_adafruit`), not the mbed target — required for concurrent advertise + scan.
+Install [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation.html) (CLI) or the Cursor/VS Code PlatformIO extension.
+
+This project uses the **Adafruit nRF52 / Bluefruit** board target (`xiaoble_adafruit` / `xiaoblesense_adafruit`), not the mbed Seeed target — required for concurrent advertise + scan.
+
+What’s already configured in `platformio.ini`:
+
+| Piece | Setting |
+|---|---|
+| Board | Seeed XIAO nRF52840 → `xiaoble` (or `xiaoblesense`) |
+| BLE | Bluefruit (bundled with Adafruit nRF52 core) |
+| LEDs | `adafruit/Adafruit NeoPixel` |
+| DIN pin | `NEARBY_NEOPIXEL_PIN=0` (D0) |
 
 ## Build & upload
 
@@ -51,7 +62,8 @@ This project uses the **Adafruit nRF52 / Bluefruit** board target (`xiaoble_adaf
 cd firmware/stage1-ble-ring
 
 # Non-Sense XIAO nRF52840
-pio run -e xiaoble -t upload
+pio run -e xiaoble              # build
+pio run -e xiaoble -t upload    # flash (board plugged in)
 
 # Sense variant
 pio run -e xiaoblesense -t upload
@@ -59,7 +71,12 @@ pio run -e xiaoblesense -t upload
 
 Upload board A, unplug, plug board B, upload again.
 
-If the port isn’t found: double-tap RESET to enter the bootloader, then re-run upload.
+If upload hits the wrong port (earbuds, etc.) or times out:
+
+1. Use a **USB-C data** cable
+2. Double-tap **RESET** to enter the bootloader
+3. Pass the port explicitly:  
+   `pio run -e xiaoble -t upload --upload-port /dev/cu.usbmodem…`
 
 Serial monitor:
 
