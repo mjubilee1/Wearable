@@ -14,6 +14,7 @@ import {
   normalizeDeviceId,
   vibeCaption,
   walkByScore,
+  type ClipSightingPost,
   type MatchProfile,
   type UserProfile,
 } from "@nearby/shared";
@@ -27,6 +28,7 @@ import {
 } from "./billing.js";
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
+import { listClipSightingsForUser, recordClipSighting } from "./sightings.js";
 
 // Load apps/api/.env whether started from repo root or apps/api
 const apiDir = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -97,7 +99,18 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: ["http://localhost:3000", "http://localhost:8081"],
+    origin: (origin) => {
+      if (!origin) return "http://localhost:3000";
+      if (
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:") ||
+        origin.endsWith(".vercel.app") ||
+        origin === process.env.WEB_ORIGIN
+      ) {
+        return origin;
+      }
+      return "http://localhost:3000";
+    },
     allowHeaders: ["Content-Type", "Authorization"],
   }),
 );
@@ -224,6 +237,68 @@ app.get("/v1/me", async (c) => {
     (await loadProfile(auth.uid)) ?? demoSelf(auth.uid, auth.email);
   return c.json({
     profile,
+    mode: isFirebaseConfigured() ? "firebase" : "mock",
+  });
+});
+
+/**
+ * Phone posts a foreground BLE sighting (manufacturer-matched clip only).
+ * Body: { remoteClipId, rssi, timestamp } — no names, no interests.
+ */
+app.post("/v1/ble/sightings", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+
+  const body = (await c.req.json().catch(() => null)) as ClipSightingPost | null;
+  const remoteClipId = normalizeDeviceId(String(body?.remoteClipId ?? ""));
+  const rssi = Number(body?.rssi);
+  const timestamp = Number(body?.timestamp ?? Date.now());
+
+  if (!remoteClipId) return c.json({ error: "remoteClipId required" }, 400);
+  if (!Number.isFinite(rssi) || rssi > 0 || rssi < -120) {
+    return c.json({ error: "rssi out of range" }, 400);
+  }
+  if (!Number.isFinite(timestamp)) {
+    return c.json({ error: "timestamp required" }, 400);
+  }
+
+  const reporter =
+    (await loadProfile(auth.uid)) ?? demoSelf(auth.uid, auth.email);
+
+  try {
+    const record = await recordClipSighting({
+      reporterUserId: auth.uid,
+      reporter,
+      remoteClipId,
+      rssi,
+      timestamp,
+      allProfiles: await loadAllProfiles(),
+    });
+    return c.json({
+      remoteClipId: record.remoteClipId,
+      rssi: record.rssi,
+      timestamp: record.timestamp,
+      close: record.close,
+      green: record.green,
+      mode: isFirebaseConfigured() ? "firebase" : "mock",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to record";
+    if (message.includes("own clip")) {
+      return c.json({ error: message }, 400);
+    }
+    return c.json({ error: message }, 400);
+  }
+});
+
+/** Debug feed: last BLE reports this user posted. No names. */
+app.get("/v1/ble/sightings", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+
+  const reports = await listClipSightingsForUser(auth.uid);
+  return c.json({
+    reports,
     mode: isFirebaseConfigured() ? "firebase" : "mock",
   });
 });

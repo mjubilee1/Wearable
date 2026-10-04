@@ -1,22 +1,24 @@
 /**
- * Nearby ring BLE discovery (mobile-only).
+ * Nearby clip BLE discovery (mobile-only, Expo dev build).
  *
- * Firmware advertises local name `NB-XXXX` plus manufacturer data
- * `FF FF | 'N' 'B' | id0..id3`. We scan for that and normalize to `XXXX`.
+ * Stage 1 firmware advertises manufacturer data:
+ *   FF FF | 'N' 'B' | id0 id1 id2 id3
  *
- * Requires a native build with `react-native-ble-plx` (not Expo Go).
- * Falls back to "unavailable" so link-ring can still use manual entry.
+ * Scan-only — no connect, no pair, no GATT. Ignore every other advert.
  */
 
-import { normalizeDeviceId } from "@nearby/shared";
+import {
+  CLIP_RSSI_EMA_ALPHA,
+  clipIdFromManufacturerBytes,
+  normalizeDeviceId,
+} from "@nearby/shared";
 import { Platform } from "react-native";
 
-export type NearbyRingSighting = {
-  /** Short wearable id, e.g. A1B2 */
-  deviceId: string;
-  /** Local name if present, e.g. NB-A1B2 */
-  localName: string | null;
-  rssi: number | null;
+export type NearbyClipSighting = {
+  /** Full 8-char hex clip id from manufacturer payload. */
+  clipId: string;
+  rssi: number;
+  smoothedRssi: number;
   lastSeenAtMs: number;
 };
 
@@ -31,7 +33,10 @@ type BleManagerLike = {
   startDeviceScan: (
     uuids: string[] | null,
     options: { allowDuplicates?: boolean } | null,
-    listener: (error: { message?: string } | null, device: ScannedDevice | null) => void,
+    listener: (
+      error: { message?: string } | null,
+      device: ScannedDevice | null,
+    ) => void,
   ) => void;
   stopDeviceScan: () => void;
   destroy: () => void;
@@ -48,9 +53,6 @@ type ScannedDevice = {
 type BlePlxModule = {
   BleManager: new () => BleManagerLike;
 };
-
-const NEARBY_COMPANY_ID_LE = [0xff, 0xff];
-const NEARBY_MAGIC = [0x4e, 0x42]; // 'N' 'B'
 
 let cachedModule: BlePlxModule | null | undefined;
 
@@ -88,7 +90,6 @@ function decodeBase64(data: string): Uint8Array | null {
     // fall through
   }
 
-  // Minimal base64 decode for RN when atob is missing.
   const alphabet =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const cleaned = data.replace(/=+$/, "");
@@ -108,30 +109,30 @@ function decodeBase64(data: string): Uint8Array | null {
   return Uint8Array.from(output);
 }
 
-/** Prefer local name; fall back to manufacturer payload used by Stage 1 firmware. */
+/** Manufacturer prefix only — ignore name-only / other BLE ads. */
+export function clipIdFromAdvertisement(device: {
+  manufacturerData?: string | null;
+}): string | null {
+  if (!device.manufacturerData) return null;
+  const bytes = decodeBase64(device.manufacturerData);
+  if (!bytes) return null;
+  return clipIdFromManufacturerBytes(bytes);
+}
+
+/**
+ * Link-ring helper: prefer manufacturer 8-char id; fall back to NB-XXXX name.
+ */
 export function deviceIdFromAdvertisement(device: {
   name?: string | null;
   localName?: string | null;
   manufacturerData?: string | null;
 }): string | null {
-  const fromName =
+  const fromMfg = clipIdFromAdvertisement(device);
+  if (fromMfg) return fromMfg;
+  return (
     normalizeDeviceId(device.localName ?? "") ??
-    normalizeDeviceId(device.name ?? "");
-  if (fromName) return fromName;
-
-  if (!device.manufacturerData) return null;
-  const bytes = decodeBase64(device.manufacturerData);
-  if (!bytes || bytes.length < 8) return null;
-  if (bytes[0] !== NEARBY_COMPANY_ID_LE[0] || bytes[1] !== NEARBY_COMPANY_ID_LE[1]) {
-    return null;
-  }
-  if (bytes[2] !== NEARBY_MAGIC[0] || bytes[3] !== NEARBY_MAGIC[1]) return null;
-
-  // Firmware short name uses the last two of the four id bytes.
-  const short = `${bytes[6].toString(16).padStart(2, "0")}${bytes[7]
-    .toString(16)
-    .padStart(2, "0")}`.toUpperCase();
-  return normalizeDeviceId(short);
+    normalizeDeviceId(device.name ?? "")
+  );
 }
 
 export async function getBleAvailability(): Promise<BleAvailability> {
@@ -140,7 +141,7 @@ export async function getBleAvailability(): Promise<BleAvailability> {
     return {
       status: "unavailable",
       reason:
-        "Bluetooth scan needs a Nearby development build (not Expo Go). You can still enter your ring ID manually.",
+        "Bluetooth scan needs a Nearby development build (not Expo Go). You can still enter your clip ID manually.",
     };
   }
 
@@ -151,36 +152,37 @@ export async function getBleAvailability(): Promise<BleAvailability> {
     if (state === "Unauthorized") {
       return {
         status: "unauthorized",
-        reason: "Bluetooth permission is off. Enable it in Settings to auto-find your ring.",
+        reason:
+          "Bluetooth permission is off. Enable it in Settings to find Nearby clips.",
       };
     }
     if (state === "PoweredOff") {
       return {
         status: "poweredOff",
-        reason: "Turn on Bluetooth to auto-find your Nearby ring.",
+        reason: "Turn on Bluetooth to find Nearby clips.",
       };
     }
     return {
       status: "unavailable",
-      reason: `Bluetooth is ${state}. Try again in a moment, or enter your ring ID manually.`,
+      reason: `Bluetooth is ${state}. Try again in a moment.`,
     };
   } finally {
     manager.destroy();
   }
 }
 
-export type RingScanHandle = {
+export type ClipScanHandle = {
   stop: () => void;
 };
 
 /**
- * Continuously scan for Nearby rings. Calls `onUpdate` with the latest map
- * of deviceId → sighting (strongest / freshest RSSI wins).
+ * Foreground scan for Nearby manufacturer ads only.
+ * Applies RSSI EMA per clip id. No GATT connect.
  */
-export function startNearbyRingScan(
-  onUpdate: (sightings: NearbyRingSighting[]) => void,
+export function startNearbyClipScan(
+  onUpdate: (sightings: NearbyClipSighting[]) => void,
   onError?: (message: string) => void,
-): RingScanHandle {
+): ClipScanHandle {
   const mod = loadBlePlx();
   if (!mod) {
     onError?.(
@@ -190,46 +192,49 @@ export function startNearbyRingScan(
   }
 
   const manager = new mod.BleManager();
-  const byId = new Map<string, NearbyRingSighting>();
+  const byId = new Map<string, NearbyClipSighting>();
 
   const publish = () => {
-    const list = Array.from(byId.values()).sort((a, b) => {
-      const rssiA = a.rssi ?? -999;
-      const rssiB = b.rssi ?? -999;
-      return rssiB - rssiA;
-    });
+    const list = Array.from(byId.values()).sort(
+      (a, b) => b.smoothedRssi - a.smoothedRssi,
+    );
     onUpdate(list);
   };
 
   const start = () => {
-    manager.startDeviceScan(null, { allowDuplicates: true }, (error, device) => {
-      if (error) {
-        onError?.(error.message ?? "Bluetooth scan failed");
-        return;
-      }
-      if (!device) return;
+    manager.startDeviceScan(
+      null,
+      { allowDuplicates: true },
+      (error, device) => {
+        if (error) {
+          onError?.(error.message ?? "Bluetooth scan failed");
+          return;
+        }
+        if (!device) return;
 
-      const deviceId = deviceIdFromAdvertisement(device);
-      if (!deviceId) return;
+        const clipId = clipIdFromAdvertisement(device);
+        if (!clipId) return;
 
-      const prev = byId.get(deviceId);
-      const rssi = device.rssi ?? null;
-      byId.set(deviceId, {
-        deviceId,
-        localName: device.localName ?? device.name ?? prev?.localName ?? null,
-        rssi:
-          rssi === null
-            ? (prev?.rssi ?? null)
-            : prev?.rssi === null || prev === undefined
-              ? rssi
-              : Math.max(prev.rssi, rssi),
-        lastSeenAtMs: Date.now(),
-      });
-      publish();
-    });
+        const rssi = device.rssi;
+        if (rssi === null || rssi === undefined) return;
+
+        const prev = byId.get(clipId);
+        const smoothedRssi = prev
+          ? CLIP_RSSI_EMA_ALPHA * rssi +
+            (1 - CLIP_RSSI_EMA_ALPHA) * prev.smoothedRssi
+          : rssi;
+
+        byId.set(clipId, {
+          clipId,
+          rssi,
+          smoothedRssi,
+          lastSeenAtMs: Date.now(),
+        });
+        publish();
+      },
+    );
   };
 
-  // Wait until the radio is ready, then scan.
   void (async () => {
     try {
       const state = await manager.state();
@@ -238,7 +243,7 @@ export function startNearbyRingScan(
           state === "Unauthorized"
             ? "Bluetooth permission is off."
             : state === "PoweredOff"
-              ? "Turn on Bluetooth to find your ring."
+              ? "Turn on Bluetooth to find clips."
               : `Bluetooth is ${state}.`,
         );
         return;
@@ -266,3 +271,26 @@ export function startNearbyRingScan(
     },
   };
 }
+
+/** @deprecated Use startNearbyClipScan */
+export const startNearbyRingScan = (
+  onUpdate: (
+    sightings: {
+      deviceId: string;
+      localName: string | null;
+      rssi: number | null;
+      lastSeenAtMs: number;
+    }[],
+  ) => void,
+  onError?: (message: string) => void,
+) =>
+  startNearbyClipScan((sightings) => {
+    onUpdate(
+      sightings.map((s) => ({
+        deviceId: s.clipId,
+        localName: null,
+        rssi: s.smoothedRssi,
+        lastSeenAtMs: s.lastSeenAtMs,
+      })),
+    );
+  }, onError);

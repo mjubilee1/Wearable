@@ -311,13 +311,107 @@ export function vibeCaption(otherName: string, score: number): string {
   return `You and ${otherName} could click with a little time`;
 }
 
-/** Parse NB-A1B2 local name / short id into uppercase hex nibble. */
+/**
+ * Stage-1 manufacturer payload (company id already included by SoftDevice):
+ *   [0xFF, 0xFF, 'N', 'B', id0, id1, id2, id3]
+ */
+export const NEARBY_MFG_COMPANY_ID_LE = [0xff, 0xff] as const;
+export const NEARBY_MFG_MAGIC = [0x4e, 0x42] as const; // 'N' 'B'
+
+/** RSSI at/above this = "close enough" for walk-by green evaluation. */
+export const CLIP_RSSI_CLOSE_DBM = -60;
+
+/** Phone-side EMA for RSSI before POST. */
+export const CLIP_RSSI_EMA_ALPHA = 0.25;
+
+/** Minimum shared interests (after close) to mark similar/green. */
+export const CLIP_MIN_SHARED_INTERESTS = 1;
+
+/** Phone → API sighting body. No names, no interests. */
+export type ClipSightingPost = {
+  remoteClipId: string;
+  rssi: number;
+  timestamp: number;
+};
+
+/** Debug / client view of a stored sighting. No names. */
+export type ClipSightingView = {
+  remoteClipId: string;
+  rssi: number;
+  timestamp: number;
+  close: boolean;
+  /** true only when close AND interest-similar; otherwise false. */
+  green: boolean;
+};
+
+/** Parse manufacturer bytes → 8-char uppercase hex clip id, or null. */
+export function clipIdFromManufacturerBytes(bytes: Uint8Array | number[]): string | null {
+  if (bytes.length < 8) return null;
+  if (bytes[0] !== NEARBY_MFG_COMPANY_ID_LE[0]) return null;
+  if (bytes[1] !== NEARBY_MFG_COMPANY_ID_LE[1]) return null;
+  if (bytes[2] !== NEARBY_MFG_MAGIC[0] || bytes[3] !== NEARBY_MFG_MAGIC[1]) {
+    return null;
+  }
+  return [bytes[4], bytes[5], bytes[6], bytes[7]]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
+/**
+ * Normalize a clip / device id.
+ * Accepts 8-char full id, 4-char short (NB-XXXX / legacy profile), or NB-XXXX.
+ */
 export function normalizeDeviceId(raw: string): string | null {
   const trimmed = raw.trim().toUpperCase();
   const withPrefix = trimmed.match(/^NB-([0-9A-F]{4})$/);
   if (withPrefix) return withPrefix[1];
+  if (/^[0-9A-F]{8}$/.test(trimmed)) return trimmed;
   if (/^[0-9A-F]{4}$/.test(trimmed)) return trimmed;
   return null;
+}
+
+/** True when two ids refer to the same clip (full 8 vs short last-4). */
+export function clipsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = normalizeDeviceId(String(a ?? ""));
+  const right = normalizeDeviceId(String(b ?? ""));
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.length === 8 && right.length === 4) return left.endsWith(right);
+  if (left.length === 4 && right.length === 8) return right.endsWith(left);
+  return false;
+}
+
+export function isClipCloseEnough(rssi: number): boolean {
+  return rssi >= CLIP_RSSI_CLOSE_DBM;
+}
+
+export function sharedInterestCount(
+  a: string[] | undefined,
+  b: string[] | undefined,
+): number {
+  return sharedCount(a, b);
+}
+
+export function isInterestSimilarEnough(
+  selfInterests: string[] | undefined,
+  otherInterests: string[] | undefined,
+): boolean {
+  return sharedInterestCount(selfInterests, otherInterests) >= CLIP_MIN_SHARED_INTERESTS;
+}
+
+/** Green = close enough AND similar enough. Never exposes names. */
+export function walkBySignal(input: {
+  rssi: number;
+  selfInterests?: string[];
+  otherInterests?: string[] | null;
+}): { close: boolean; green: boolean } {
+  const close = isClipCloseEnough(input.rssi);
+  if (!close || !input.otherInterests) {
+    return { close, green: false };
+  }
+  const green = isInterestSimilarEnough(input.selfInterests, input.otherInterests);
+  return { close, green };
 }
 
 export function mockFacilitate(

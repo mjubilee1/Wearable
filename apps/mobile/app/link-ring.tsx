@@ -14,8 +14,8 @@ import { useAuth } from "@/lib/auth-context";
 import {
   getBleAvailability,
   isBleNativeAvailable,
-  startNearbyRingScan,
-  type NearbyRingSighting,
+  startNearbyClipScan,
+  type NearbyClipSighting,
 } from "@/lib/ble";
 import { useOnboarding } from "@/lib/onboarding-context";
 import { updateUserProfile } from "@/lib/users";
@@ -32,7 +32,7 @@ export default function LinkRingScreen() {
     null,
   );
   const [scanning, setScanning] = useState(false);
-  const [sightings, setSightings] = useState<NearbyRingSighting[]>([]);
+  const [sightings, setSightings] = useState<NearbyClipSighting[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
   const [manualId, setManualId] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -70,15 +70,15 @@ export default function LinkRingScreen() {
       setScanning(true);
       setScanError(null);
 
-      handle = startNearbyRingScan(
+      handle = startNearbyClipScan(
         (next) => {
           if (cancelled) return;
           setSightings(next);
           setSelectedId((current) => {
-            if (current && next.some((item) => item.deviceId === current)) {
+            if (current && next.some((item) => item.clipId === current)) {
               return current;
             }
-            if (next.length === 1) return next[0].deviceId;
+            if (next.length === 1) return next[0].clipId;
             return current;
           });
         },
@@ -181,27 +181,26 @@ export default function LinkRingScreen() {
 
         {sightings.length === 0 && bleNative && !availabilityMessage ? (
           <Text style={styles.hint}>
-            Waiting for a ring advertising NB-XXXX… Power it on and hold it near
-            your phone.
+            Waiting for manufacturer ads (FF FF N B + 4-byte id)… Power the clip
+            on and hold it near your phone.
           </Text>
         ) : null}
 
         {sightings.map((item) => {
-          const selected = selectedId === item.deviceId;
+          const selected = selectedId === item.clipId;
           return (
             <Pressable
-              key={item.deviceId}
+              key={item.clipId}
               onPress={() => {
-                setSelectedId(item.deviceId);
-                setManualId(item.deviceId);
+                setSelectedId(item.clipId);
+                setManualId(item.clipId);
               }}
               style={[styles.deviceRow, selected && styles.deviceRowSelected]}
             >
               <View style={styles.deviceCopy}>
-                <Text style={styles.deviceId}>NB-{item.deviceId}</Text>
+                <Text style={styles.deviceId}>{item.clipId}</Text>
                 <Text style={styles.deviceMeta}>
-                  {item.rssi !== null ? `${item.rssi} dBm` : "signal n/a"}
-                  {item.localName ? ` · ${item.localName}` : ""}
+                  {Math.round(item.smoothedRssi)} dBm smoothed
                 </Text>
               </View>
               <Text style={styles.selectLabel}>
@@ -215,7 +214,8 @@ export default function LinkRingScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Or enter ID manually</Text>
         <Text style={styles.hint}>
-          From the serial monitor or BLE name: NB-A1B2 → type A1B2.
+          Prefer the 8-char manufacturer id (id0..id3). Short NB-XXXX (last 4
+          hex) still works for legacy links.
         </Text>
         <TextInput
           value={manualId}
@@ -223,10 +223,10 @@ export default function LinkRingScreen() {
             setManualId(value.toUpperCase());
             setSelectedId(null);
           }}
-          maxLength={7}
+          maxLength={8}
           autoCapitalize="characters"
           autoCorrect={false}
-          placeholder="A1B2"
+          placeholder="AABBCCDD"
           placeholderTextColor={colors.muted}
           style={styles.input}
         />

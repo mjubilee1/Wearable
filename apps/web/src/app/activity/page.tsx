@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TabBar } from "@/components/TabBar";
 
 export default function ActivityPage() {
@@ -11,13 +12,23 @@ export default function ActivityPage() {
           Activity
         </h1>
         <p className="mt-2 text-sm text-muted sm:text-base">
-          Recent walk-bys and score moments.
+          Walk-by moments from your phone’s BLE scan — not from this browser.
         </p>
       </header>
-      <main className="flex flex-1 items-start">
-        <p className="rounded-2xl bg-card px-5 py-8 text-sm text-muted shadow-sm">
-          Coming soon
-        </p>
+      <main className="flex flex-1 flex-col gap-4">
+        <div className="rounded-2xl border border-black/5 bg-card px-5 py-6 shadow-sm">
+          <p className="text-sm font-semibold text-ink">BLE debug feed</p>
+          <p className="mt-2 text-sm text-muted">
+            Clip id, RSSI, close / not close, and green when close + similar
+            interests. No names. The site never opens Web Bluetooth.
+          </p>
+          <Link
+            href="/debug/ble"
+            className="mt-4 inline-flex rounded-2xl bg-teal px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
+          >
+            Open BLE reports
+          </Link>
+        </div>
       </main>
       <TabBar active="activity" />
     </div>

@@ -15,6 +15,14 @@
         { "fieldPath": "toId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "clipSightings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "reporterUserId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

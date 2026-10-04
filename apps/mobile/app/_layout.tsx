@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { ClipScanProvider } from "@/lib/clip-scan-context";
 import {
   OnboardingProvider,
   useOnboarding,
@@ -93,10 +94,12 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <OnboardingProvider>
-          <StatusBar style="dark" />
-          <AuthGate>
-            <Stack screenOptions={{ headerShown: false }} />
-          </AuthGate>
+          <ClipScanProvider>
+            <StatusBar style="dark" />
+            <AuthGate>
+              <Stack screenOptions={{ headerShown: false }} />
+            </AuthGate>
+          </ClipScanProvider>
         </OnboardingProvider>
       </AuthProvider>
     </QueryClientProvider>

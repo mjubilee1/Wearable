@@ -115,6 +115,6 @@ Edit `include/config.h` or `build_flags` in `platformio.ini`:
 
 ## Out of scope (later) — now tracked in monorepo
 
-- **Stage 2 (app bridge):** mobile `link-ring` onboarding scans for `NB-XXXX`, saves `deviceId` on the profile, then looks up peers via `GET /v1/devices/:deviceId`. Firmware already advertises the ID.
+- **Stage 2 (app bridge):** phone foreground-scans manufacturer `FF FF|NB|id[4]`, `POST /v1/ble/sightings` (clip id + RSSI only). Web `/debug/ble` shows those reports — no Web Bluetooth, no names in the walk-by path.
 - **Stage 3 (real score on ring):** API `walkByScore(self, other, proximityBand)` = profile compatibility gated by RSSI band. Phone pushes the agreed percent to the ring (or both phones fetch the same deterministic pair score).
 - **Stage 4+:** Crossed Paths / social graph; AI facilitator already lives at `POST /v1/facilitate` on `@nearby/api`.

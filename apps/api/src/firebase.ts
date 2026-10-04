@@ -16,9 +16,15 @@ type FirestoreDocRef = {
   update: (data: Record<string, unknown>) => Promise<void>;
 };
 
-type FirestoreCollection = {
-  doc: (id: string) => FirestoreDocRef;
+type FirestoreQuery = {
+  where: (field: string, op: string, value: unknown) => FirestoreQuery;
+  orderBy: (field: string, direction?: "asc" | "desc") => FirestoreQuery;
+  limit: (n: number) => FirestoreQuery;
   get: () => Promise<{ docs: FirestoreDoc[] }>;
+};
+
+type FirestoreCollection = FirestoreQuery & {
+  doc: (id: string) => FirestoreDocRef;
 };
 
 type AdminApp = {

@@ -399,16 +399,16 @@ export default function ProfilePage() {
 
           <label className="block space-y-1.5">
             <span className="text-xs font-semibold text-ink">
-              Wearable ID{" "}
+              Clip ID{" "}
               <span className="font-normal text-muted">
-                (optional, e.g. A1B2 from NB-A1B2)
+                (optional, 8-char manufacturer id or NB-XXXX short)
               </span>
             </span>
             <input
               value={deviceId}
               onChange={(e) => setDeviceId(e.target.value.toUpperCase())}
-              maxLength={4}
-              placeholder="A1B2"
+              maxLength={8}
+              placeholder="AABBCCDD"
               className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 font-mono text-sm uppercase outline-none ring-teal/30 focus:ring-2"
             />
           </label>

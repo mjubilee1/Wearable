@@ -29,13 +29,15 @@ pio device monitor -e xiaoble -b 115200
 | `@nearby/api` | `apps/api` | Hono API |
 | `@nearby/shared` | `packages/shared` | Types, scoring, mock facilitator |
 
-### Mobile ring linking (Stage 2 start)
+### Phone BLE bridge (Stage 2)
 
-After signup, mobile opens **Link your Nearby ring** (`/link-ring`): scans for `NB-XXXX`, saves `deviceId` on the profile, or lets you enter the ID / skip. Auto-scan needs a **dev build** (`npx expo run:ios` / `run:android`) — Expo Go falls back to manual entry.
+- **Phone only** scans BLE (Expo dev build + `react-native-ble-plx`). Website never uses Web Bluetooth.
+- Foreground scan matches manufacturer `FF FF | N B | id[4]`, EMA-smooths RSSI, `POST /v1/ble/sightings` (clip id + RSSI + timestamp — no names).
+- Backend marks **close** / **green** (close + shared interests). Other person only sees color, not your name.
+- Web debug: [`/debug/ble`](apps/web) — last reports for your account (clip id, RSSI, close/green).
 
 ```bash
-pnpm --filter @nearby/mobile add react-native-ble-plx   # if not installed yet
-cd apps/mobile && npx expo prebuild && npx expo run:ios # or run:android
+cd apps/mobile && npx expo run:ios   # or run:android — not Expo Go
 ```
 
 ## Setup

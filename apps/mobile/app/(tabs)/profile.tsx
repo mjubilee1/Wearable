@@ -398,13 +398,13 @@ export default function ProfileScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>
-            Wearable ID (optional, e.g. A1B2 from NB-A1B2)
+            Clip ID (optional, 8-char manufacturer id or NB-XXXX short)
           </Text>
           <TextInput
             value={deviceId}
             onChangeText={(v) => setDeviceId(v.toUpperCase())}
-            maxLength={4}
-            placeholder="A1B2"
+            maxLength={8}
+            placeholder="AABBCCDD"
             placeholderTextColor={colors.muted}
             autoCapitalize="characters"
             style={[styles.input, styles.mono]}

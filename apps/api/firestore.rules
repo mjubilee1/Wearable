@@ -110,5 +110,10 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if isSelf(resource.data.blockerId);
     }
+
+    // Clip BLE sightings are written/read only via the API (Admin SDK).
+    match /clipSightings/{sightingId} {
+      allow read, write: if false;
+    }
   }
 }
