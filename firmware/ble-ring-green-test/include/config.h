@@ -20,7 +20,9 @@ static const uint8_t NEARBY_MAGIC[2] = {'N', 'B'};
 static const char NEARBY_NAME_PREFIX[] = "NB-";
 
 // Peer counts as "in range" above this RSSI; gone after this silence.
-static const int8_t RSSI_IN_RANGE_DBM = -80;
+// ~-55 to -60 is roughly arm's length / ~2 ft on a desk (tune if needed).
+// Was -80 for whole-room testing.
+static const int8_t RSSI_IN_RANGE_DBM = -58;
 static const uint32_t PEER_STALE_MS = 1500;
 
 static const uint16_t ADV_INTERVAL_FAST = 32;

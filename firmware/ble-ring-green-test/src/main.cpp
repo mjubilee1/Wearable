@@ -5,8 +5,7 @@
  * - Scans for another Nearby board (ignores self).
  * - Ring solid GREEN while a peer was seen recently; OFF when alone.
  *
- * Flash this onto the board with the ring on D6.
- * Power a second XIAO that still runs Stage 1 (no ring required).
+ * Flash onto boards with the ring on D6. Watch Serial at 115200 for logs.
  */
 
 #include <Arduino.h>
@@ -19,14 +18,27 @@
 static uint8_t localDeviceId[4];
 static char bleDeviceName[12];
 
+// In-range peer (drives the ring)
 static bool peerInRange = false;
 static int8_t peerRssi = 0;
 static uint32_t peerLastSeenAtMs = 0;
+static uint8_t peerId[4] = {};
+
+// Last Nearby advert heard (even if too far for green)
+static bool heardNearby = false;
+static int8_t lastHeardRssi = 0;
+static uint32_t lastHeardAtMs = 0;
+static uint8_t lastHeardId[4] = {};
+static uint32_t nearbyPacketCount = 0;
 
 static Adafruit_NeoPixel ledRing(NEARBY_LED_COUNT, NEARBY_NEOPIXEL_PIN,
                                  NEO_GRB + NEO_KHZ800);
 
 static uint8_t manufacturerPayload[8];
+
+static void logPeerId(const char *label, const uint8_t id[4]) {
+  Serial.printf("%s %02X%02X%02X%02X", label, id[0], id[1], id[2], id[3]);
+}
 
 static void initLocalDeviceId() {
   const uint32_t hardwareId = NRF_FICR->DEVICEID[0];
@@ -64,14 +76,13 @@ static void renderRing() {
   }
 }
 
-/** Prove the ring can show green before waiting on a BLE peer. */
 static void runGreenSelfTest(uint32_t durationMs) {
-  Serial.printf("Self-test: solid GREEN for %lu seconds…\n",
+  Serial.printf("[self-test] solid GREEN for %lu s\n",
                 (unsigned long)(durationMs / 1000));
   fillRingGreen();
   delay(durationMs);
   clearRing();
-  Serial.println("Self-test done. Waiting for a Nearby peer…");
+  Serial.println("[self-test] done — listening for Nearby peers");
 }
 
 static void buildManufacturerPayload() {
@@ -108,14 +119,21 @@ static void onScanAdvertisement(ble_gap_evt_adv_report_t *report) {
     Bluefruit.Scanner.resume();
     return;
   }
-  if (report->rssi < RSSI_IN_RANGE_DBM) {
-    Bluefruit.Scanner.resume();
-    return;
+
+  // Keep scan callback light — just store state; loop() prints.
+  nearbyPacketCount++;
+  heardNearby = true;
+  lastHeardRssi = report->rssi;
+  lastHeardAtMs = millis();
+  memcpy(lastHeardId, peerDeviceId, 4);
+
+  if (report->rssi >= RSSI_IN_RANGE_DBM) {
+    peerInRange = true;
+    peerRssi = report->rssi;
+    peerLastSeenAtMs = millis();
+    memcpy(peerId, peerDeviceId, 4);
   }
 
-  peerInRange = true;
-  peerRssi = report->rssi;
-  peerLastSeenAtMs = millis();
   Bluefruit.Scanner.resume();
 }
 
@@ -137,14 +155,15 @@ static void startScanning() {
   Bluefruit.Scanner.setRxCallback(onScanAdvertisement);
   Bluefruit.Scanner.restartOnDisconnect(true);
   Bluefruit.Scanner.setInterval(SCAN_INTERVAL, SCAN_WINDOW);
-  Bluefruit.Scanner.filterRssi(RSSI_IN_RANGE_DBM - 5);
+  // Hear a bit weaker than the green threshold so we can log "too far".
+  Bluefruit.Scanner.filterRssi(RSSI_IN_RANGE_DBM - 25);
   Bluefruit.Scanner.useActiveScan(true);
   Bluefruit.Scanner.start(0);
 }
 
 static void setupBle() {
   if (!Bluefruit.begin(1, 1)) {
-    Serial.println("Bluefruit.begin failed");
+    Serial.println("[ble] Bluefruit.begin FAILED");
     while (1) delay(100);
   }
 
@@ -154,10 +173,14 @@ static void setupBle() {
   startAdvertising();
   startScanning();
 
-  Serial.printf("Advertising as %s\n", bleDeviceName);
-  Serial.printf("Device ID %02X%02X%02X%02X\n", localDeviceId[0], localDeviceId[1],
-                localDeviceId[2], localDeviceId[3]);
-  Serial.println("Ring GREEN when another Nearby board is heard; OFF alone.");
+  Serial.println("[ble] advertise + scan started");
+  Serial.printf("[ble] local name %s\n", bleDeviceName);
+  logPeerId("[ble] local id", localDeviceId);
+  Serial.println();
+  Serial.printf("[ble] green if RSSI >= %d dBm; stale after %lu ms\n",
+                (int)RSSI_IN_RANGE_DBM, (unsigned long)PEER_STALE_MS);
+  Serial.printf("[led] pin D%d  count %d  brightness %d\n", NEARBY_NEOPIXEL_PIN,
+                NEARBY_LED_COUNT, NEARBY_LED_BRIGHTNESS);
 }
 
 void setup() {
@@ -175,25 +198,61 @@ void setup() {
   ledRing.show();
 
   Serial.println();
-  Serial.println("BLE ring green test (D6)");
-  // 15s green so you can confirm wiring without a second board.
+  Serial.println("======== BLE ring green test ========");
   runGreenSelfTest(15000);
   setupBle();
+  Serial.println("======== ready ========");
 }
 
 void loop() {
+  static bool wasInRange = false;
+  static uint32_t lastStatusLogAtMs = 0;
+  static int8_t lastLoggedFarRssi = 0;
+
+  // Peer timed out → ring off
   if (peerInRange && (millis() - peerLastSeenAtMs) > PEER_STALE_MS) {
     peerInRange = false;
     peerRssi = 0;
-    Serial.println("peer lost — ring OFF");
+    Serial.print("[peer] LOST ");
+    logPeerId("id", peerId);
+    Serial.println(" — ring OFF");
   }
+
+  // Entered range
+  if (peerInRange && !wasInRange) {
+    Serial.print("[peer] ENTER range ");
+    logPeerId("id", peerId);
+    Serial.printf(" rssi=%d — ring GREEN\n", (int)peerRssi);
+  }
+  wasInRange = peerInRange;
 
   renderRing();
 
-  static uint32_t lastLogAtMs = 0;
-  if (peerInRange && (millis() - lastLogAtMs) > 500) {
-    lastLogAtMs = millis();
-    Serial.printf("peer rssi=%d — ring GREEN\n", peerRssi);
+  const uint32_t now = millis();
+  if (now - lastStatusLogAtMs < 500) {
+    delay(40);
+    return;
+  }
+  lastStatusLogAtMs = now;
+
+  if (peerInRange) {
+    Serial.print("[peer] alive ");
+    logPeerId("id", peerId);
+    Serial.printf(" rssi=%d packets=%lu — GREEN\n", (int)peerRssi,
+                  (unsigned long)nearbyPacketCount);
+  } else if (heardNearby && (now - lastHeardAtMs) < 2000) {
+    // Heard Nearby but not close enough for green (helps tune 2ft threshold)
+    if (lastHeardRssi != lastLoggedFarRssi || (now - lastHeardAtMs) < 600) {
+      Serial.print("[peer] heard but FAR ");
+      logPeerId("id", lastHeardId);
+      Serial.printf(" rssi=%d (need >= %d) — ring OFF\n", (int)lastHeardRssi,
+                    (int)RSSI_IN_RANGE_DBM);
+      lastLoggedFarRssi = lastHeardRssi;
+    }
+  } else if ((now / 2000) != ((now - 500) / 2000)) {
+    // Occasional idle heartbeat so you know scan is alive
+    Serial.printf("[idle] scanning… packets=%lu threshold=%d dBm\n",
+                  (unsigned long)nearbyPacketCount, (int)RSSI_IN_RANGE_DBM);
   }
 
   delay(40);

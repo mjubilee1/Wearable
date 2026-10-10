@@ -20,5 +20,7 @@ pio device monitor -e xiaoblesense -b 115200
 |-----------|------|--------|
 | Right after flash/boot | Solid green **15s** | `Self-test: solid GREEN…` |
 | After self-test, alone | Off | `Waiting for a Nearby peer…` |
-| Stage 1 peer nearby | Solid green | `peer rssi=… — ring GREEN` |
-| Peer walks away | Off | `peer lost — ring OFF` |
+| Peer within ~2 ft (RSSI ≥ -58) | Solid green | `peer rssi=… — ring GREEN` |
+| Peer farther away | Off | `peer lost — ring OFF` |
+
+Tune range in `include/config.h` → `RSSI_IN_RANGE_DBM` (higher / closer to 0 = shorter range).
