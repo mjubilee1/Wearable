@@ -15,6 +15,8 @@
     "typecheck": "pnpm -r run typecheck",
     "fw:green": "cd firmware/ble-ring-green-test && pio run -e xiaoblesense -t upload",
     "fw:green:monitor": "cd firmware/ble-ring-green-test && pio device monitor -e xiaoblesense -b 115200",
+    "fw:peer": "cd firmware/ble-peer-beacon-test && pio run -e xiaoblesense -t upload",
+    "fw:peer:monitor": "cd firmware/ble-peer-beacon-test && pio device monitor -e xiaoblesense -b 115200",
     "fw:spin": "cd firmware/led-ring-spin-test && pio run -e xiaoblesense -t upload",
     "fw:stage1": "cd firmware/stage1-ble-ring && pio run -e xiaoblesense -t upload"
   },
