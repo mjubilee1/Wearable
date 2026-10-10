@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { ConnectionRequestStatus } from "@nearby/shared";
+import { nearbyCaption, type ConnectionRequestStatus } from "@nearby/shared";
 import type { MatchProfile } from "@/lib/types";
 import { CompatibilityScore } from "./CompatibilityScore";
 
@@ -35,6 +35,7 @@ export function ProfileCard({
 }: ProfileCardProps) {
   const score = displayScore ?? profile.score;
   const badge = statusLabel(connectionStatus);
+  const revealed = connectionStatus === "accepted";
   const canHello =
     connectionStatus === "none" ||
     connectionStatus === "cancelled" ||
@@ -52,7 +53,7 @@ export function ProfileCard({
     >
       <button type="button" onClick={onSelect} className="w-full text-left">
         <div className="flex gap-3.5">
-          {profile.photoUrl ? (
+          {revealed && profile.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={profile.photoUrl}
@@ -63,29 +64,44 @@ export function ProfileCard({
             <div
               className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-lg font-bold text-white shadow-inner"
               style={{
-                background: `linear-gradient(145deg, hsl(${profile.avatarHue} 55% 52%), hsl(${profile.avatarHue} 60% 38%))`,
+                background: revealed
+                  ? `linear-gradient(145deg, hsl(${profile.avatarHue} 55% 52%), hsl(${profile.avatarHue} 60% 38%))`
+                  : "#22c55e",
               }}
               aria-hidden
             >
-              {profile.initials}
+              {revealed ? profile.initials : null}
             </div>
           )}
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <h2 className="truncate text-lg font-bold tracking-tight text-ink">
-                {profile.name}
-              </h2>
-              <span className="text-sm font-medium text-muted">
-                {profile.age}
-              </span>
-            </div>
-            <p className="mt-0.5 truncate text-sm text-muted">{profile.role}</p>
-            {profile.bio ? (
-              <p className="mt-1 line-clamp-2 text-xs text-ink/80">
-                {profile.bio}
-              </p>
-            ) : null}
+            {revealed ? (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <h2 className="truncate text-lg font-bold tracking-tight text-ink">
+                    {profile.name}
+                  </h2>
+                  <span className="text-sm font-medium text-muted">
+                    {profile.age}
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-sm text-muted">{profile.role}</p>
+                {profile.bio ? (
+                  <p className="mt-1 line-clamp-2 text-xs text-ink/80">
+                    {profile.bio}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <h2 className="truncate text-lg font-bold tracking-tight text-ink">
+                  Someone nearby
+                </h2>
+                <p className="mt-0.5 text-sm text-muted">
+                  Name stays hidden until you both say hello
+                </p>
+              </>
+            )}
           </div>
 
           {badge ? (
@@ -95,6 +111,7 @@ export function ProfileCard({
           ) : null}
         </div>
 
+        {revealed ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {profile.interests.map((interest) => (
             <span
@@ -108,8 +125,12 @@ export function ProfileCard({
             </span>
           ))}
         </div>
+        ) : null}
 
-        <CompatibilityScore score={score} caption={profile.vibeCaption} />
+        <CompatibilityScore
+          score={score}
+          caption={revealed ? profile.vibeCaption : nearbyCaption(score)}
+        />
       </button>
 
       {selected ? (

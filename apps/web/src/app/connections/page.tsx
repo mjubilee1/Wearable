@@ -181,6 +181,7 @@ export default function ConnectionsPage() {
           <PublicProfileCard
             key={`${tab}-${request.id}-${other.id}`}
             profile={other}
+            revealed={tab === "connected"}
             message={
               tab === "incoming" || tab === "sent"
                 ? request.message

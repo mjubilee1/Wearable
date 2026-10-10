@@ -5,7 +5,11 @@ import {
   Text,
   View,
 } from "react-native";
-import type { ConnectionRequestStatus, MatchProfile } from "@nearby/shared";
+import {
+  nearbyCaption,
+  type ConnectionRequestStatus,
+  type MatchProfile,
+} from "@nearby/shared";
 import { CompatibilityScore } from "@/components/CompatibilityScore";
 import { colors } from "@/lib/theme";
 
@@ -39,6 +43,7 @@ export function ProfileCard({
 }: ProfileCardProps) {
   const score = displayScore ?? profile.score;
   const badge = statusLabel(connectionStatus);
+  const revealed = connectionStatus === "accepted";
   const canHello =
     connectionStatus === "none" ||
     connectionStatus === "cancelled" ||
@@ -48,36 +53,49 @@ export function ProfileCard({
     <View style={[styles.card, selected && styles.cardSelected]}>
       <Pressable onPress={onSelect}>
         <View style={styles.header}>
-          {profile.photoUrl ? (
+          {revealed && profile.photoUrl ? (
             <Image source={{ uri: profile.photoUrl }} style={styles.avatar} />
           ) : (
             <View
               style={[
                 styles.avatar,
                 {
-                  backgroundColor: `hsl(${profile.avatarHue}, 55%, 45%)`,
+                  backgroundColor: revealed
+                    ? `hsl(${profile.avatarHue}, 55%, 45%)`
+                    : "#22c55e",
                 },
               ]}
             >
-              <Text style={styles.initials}>{profile.initials}</Text>
+              {revealed ? (
+                <Text style={styles.initials}>{profile.initials}</Text>
+              ) : null}
             </View>
           )}
 
           <View style={styles.meta}>
-            <View style={styles.nameRow}>
-              <Text style={styles.name} numberOfLines={1}>
-                {profile.name}
-              </Text>
-              <Text style={styles.age}>{profile.age}</Text>
-            </View>
-            <Text style={styles.role} numberOfLines={1}>
-              {profile.role}
-            </Text>
-            {profile.bio ? (
-              <Text style={styles.bio} numberOfLines={2}>
-                {profile.bio}
-              </Text>
-            ) : null}
+            {revealed ? (
+              <>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {profile.name}
+                  </Text>
+                  <Text style={styles.age}>{profile.age}</Text>
+                </View>
+                <Text style={styles.role} numberOfLines={1}>
+                  {profile.role}
+                </Text>
+                {profile.bio ? (
+                  <Text style={styles.bio} numberOfLines={2}>
+                    {profile.bio}
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <Text style={styles.name}>Someone nearby</Text>
+                <Text style={styles.role}>Name stays hidden until you both say hello</Text>
+              </>
+            )}
           </View>
 
           {badge ? (
@@ -87,6 +105,7 @@ export function ProfileCard({
           ) : null}
         </View>
 
+        {revealed ? (
         <View style={styles.chips}>
           {profile.interests.map((interest) => (
             <View
@@ -101,8 +120,12 @@ export function ProfileCard({
             </View>
           ))}
         </View>
+        ) : null}
 
-        <CompatibilityScore score={score} caption={profile.vibeCaption} />
+        <CompatibilityScore
+          score={score}
+          caption={revealed ? profile.vibeCaption : nearbyCaption(score)}
+        />
       </Pressable>
 
       {selected ? (

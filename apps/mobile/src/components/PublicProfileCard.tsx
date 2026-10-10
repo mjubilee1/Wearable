@@ -7,6 +7,8 @@ type PublicProfileCardProps = {
   profile: PublicProfilePreview;
   message?: string;
   footer?: ReactNode;
+  /** Name and profile stay hidden until both people have said hello. */
+  revealed?: boolean;
 };
 
 function Avatar({ profile }: { profile: PublicProfilePreview }) {
@@ -30,32 +32,48 @@ export function PublicProfileCard({
   profile,
   message,
   footer,
+  revealed = true,
 }: PublicProfileCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Avatar profile={profile} />
+        {revealed ? (
+          <Avatar profile={profile} />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: "#22c55e" }]} />
+        )}
         <View style={styles.meta}>
-          <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>
-              {profile.name}
-            </Text>
-            <Text style={styles.age}>{profile.age}</Text>
-          </View>
-          <Text style={styles.role} numberOfLines={1}>
-            {profile.role}
-          </Text>
-          {profile.lookingFor ? (
-            <Text style={styles.looking}>
-              Open to {profile.lookingFor.toLowerCase()}
-            </Text>
-          ) : null}
+          {revealed ? (
+            <>
+              <View style={styles.nameRow}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {profile.name}
+                </Text>
+                <Text style={styles.age}>{profile.age}</Text>
+              </View>
+              <Text style={styles.role} numberOfLines={1}>
+                {profile.role}
+              </Text>
+              {profile.lookingFor ? (
+                <Text style={styles.looking}>
+                  Open to {profile.lookingFor.toLowerCase()}
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Text style={styles.name}>Someone nearby</Text>
+              <Text style={styles.role}>
+                Name stays hidden until you both say hello
+              </Text>
+            </>
+          )}
         </View>
       </View>
 
-      {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
+      {revealed && profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
 
-      {(profile.interests.length > 0 || (profile.vibes?.length ?? 0) > 0) && (
+      {revealed && (profile.interests.length > 0 || (profile.vibes?.length ?? 0) > 0) && (
         <View style={styles.chips}>
           {profile.vibes?.map((vibe) => (
             <View key={`v-${vibe}`} style={styles.vibeChip}>
@@ -70,7 +88,7 @@ export function PublicProfileCard({
         </View>
       )}
 
-      {profile.prompts && profile.prompts.length > 0 ? (
+      {revealed && profile.prompts && profile.prompts.length > 0 ? (
         <View style={styles.prompts}>
           {profile.prompts.slice(0, 2).map((prompt) => (
             <View key={prompt.id} style={styles.prompt}>

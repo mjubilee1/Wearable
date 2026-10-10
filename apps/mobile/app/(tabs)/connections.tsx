@@ -190,6 +190,7 @@ export default function ConnectionsScreen() {
           <View style={styles.cardWrap}>
             <PublicProfileCard
               profile={other}
+              revealed={tab === "connected"}
               message={
                 tab === "incoming" || tab === "sent"
                   ? request.message

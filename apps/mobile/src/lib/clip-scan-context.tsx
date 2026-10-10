@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { AppState, type AppStateStatus } from "react-native";
 import { clipsMatch, type ClipSightingView } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -35,7 +34,6 @@ const LED_KEEPALIVE_MS = 2000;
 
 export function ClipScanProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
-  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
   const [scanning, setScanning] = useState(false);
   const [availabilityMessage, setAvailabilityMessage] = useState<string | null>(
     null,
@@ -49,11 +47,6 @@ export function ClipScanProvider({ children }: { children: ReactNode }) {
   const scanHandleRef = useRef<ClipScanHandle | null>(null);
   const lastReportsRef = useRef<ClipSightingView[]>([]);
   const desiredGreenRef = useRef(false);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", setAppState);
-    return () => sub.remove();
-  }, []);
 
   const pushOwnLed = useCallback(async (green: boolean) => {
     desiredGreenRef.current = green;
@@ -89,7 +82,7 @@ export function ClipScanProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (!user || appState !== "active") {
+    if (!user) {
       setScanning(false);
       setLiveSightings([]);
       const handle = scanHandleRef.current;
@@ -189,7 +182,7 @@ export function ClipScanProvider({ children }: { children: ReactNode }) {
       desiredGreenRef.current = false;
       setScanning(false);
     };
-  }, [user, appState, ownClipId, mergeReport, pushOwnLed]);
+  }, [user, ownClipId, mergeReport, pushOwnLed]);
 
   const value = useMemo(
     () => ({

@@ -7,6 +7,8 @@ type PublicProfileCardProps = {
   profile: PublicProfilePreview;
   message?: string;
   footer?: ReactNode;
+  /** Name and profile stay hidden until both people have said hello. */
+  revealed?: boolean;
 };
 
 function Avatar({ profile }: { profile: PublicProfilePreview }) {
@@ -38,32 +40,54 @@ export function PublicProfileCard({
   profile,
   message,
   footer,
+  revealed = true,
 }: PublicProfileCardProps) {
   return (
     <article className="rounded-3xl border border-black/5 bg-card p-4 shadow-sm">
       <div className="flex gap-3.5">
-        <Avatar profile={profile} />
+        {revealed ? (
+          <Avatar profile={profile} />
+        ) : (
+          <div
+            className="h-14 w-14 shrink-0 rounded-2xl shadow-inner"
+            style={{ background: "#22c55e" }}
+            aria-hidden
+          />
+        )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <h2 className="truncate text-lg font-bold tracking-tight text-ink">
-              {profile.name}
-            </h2>
-            <span className="text-sm font-medium text-muted">{profile.age}</span>
-          </div>
-          <p className="mt-0.5 truncate text-sm text-muted">{profile.role}</p>
-          {profile.lookingFor ? (
-            <p className="mt-1 text-xs font-medium text-teal">
-              Open to {profile.lookingFor.toLowerCase()}
-            </p>
-          ) : null}
+          {revealed ? (
+            <>
+              <div className="flex items-baseline gap-2">
+                <h2 className="truncate text-lg font-bold tracking-tight text-ink">
+                  {profile.name}
+                </h2>
+                <span className="text-sm font-medium text-muted">{profile.age}</span>
+              </div>
+              <p className="mt-0.5 truncate text-sm text-muted">{profile.role}</p>
+              {profile.lookingFor ? (
+                <p className="mt-1 text-xs font-medium text-teal">
+                  Open to {profile.lookingFor.toLowerCase()}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <h2 className="truncate text-lg font-bold tracking-tight text-ink">
+                Someone nearby
+              </h2>
+              <p className="mt-0.5 text-sm text-muted">
+                Name stays hidden until you both say hello
+              </p>
+            </>
+          )}
         </div>
       </div>
 
-      {profile.bio ? (
+      {revealed && profile.bio ? (
         <p className="mt-3 text-sm leading-snug text-ink/85">{profile.bio}</p>
       ) : null}
 
-      {(profile.interests.length > 0 || (profile.vibes?.length ?? 0) > 0) && (
+      {revealed && (profile.interests.length > 0 || (profile.vibes?.length ?? 0) > 0) && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {profile.vibes?.map((vibe) => (
             <span
@@ -84,7 +108,7 @@ export function PublicProfileCard({
         </div>
       )}
 
-      {profile.prompts && profile.prompts.length > 0 ? (
+      {revealed && profile.prompts && profile.prompts.length > 0 ? (
         <ul className="mt-3 space-y-2">
           {profile.prompts.slice(0, 2).map((prompt) => (
             <li key={prompt.id} className="rounded-2xl bg-surface/80 px-3 py-2">

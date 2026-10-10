@@ -139,8 +139,13 @@ type ScannedDevice = {
   manufacturerData: string | null;
 };
 
+type BleManagerOptions = {
+  restoreStateIdentifier?: string;
+  restoreStateFunction?: (restoredState: unknown) => void;
+};
+
 type BlePlxModule = {
-  BleManager: new () => BleManagerLike;
+  BleManager: new (options?: BleManagerOptions) => BleManagerLike;
 };
 
 let cachedModule: BlePlxModule | null | undefined;
@@ -168,7 +173,9 @@ function getSharedBleManager(): BleManagerLike | null {
   const mod = loadBlePlx();
   if (!mod) return null;
   if (!sharedManager) {
-    sharedManager = new mod.BleManager();
+    sharedManager = new mod.BleManager({
+      restoreStateIdentifier: "nearby-clip-central",
+    });
   }
   return sharedManager;
 }
@@ -367,7 +374,8 @@ export function startNearbyClipScan(
     scanning = true;
     manager.startDeviceScan(
       null,
-      { allowDuplicates: true },
+      // iOS drops background scans when duplicates are allowed.
+      { allowDuplicates: false },
       (error, device) => {
         if (error) {
           // Ignore cancel noise when we stop to GATT-write.

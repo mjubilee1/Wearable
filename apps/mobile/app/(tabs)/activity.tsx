@@ -59,7 +59,7 @@ export default function ActivityScreen() {
                   <View style={styles.idleDot} />
                 )}
                 <Text style={styles.statusText}>
-                  {scanning ? "Scanning (foreground)" : "Scan idle"}
+                  {scanning ? "Scanning" : "Scan idle"}
                 </Text>
               </View>
               {availabilityMessage ? (

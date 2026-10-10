@@ -311,6 +311,14 @@ export function vibeCaption(otherName: string, score: number): string {
   return `You and ${otherName} could click with a little time`;
 }
 
+/** Nearby list, before both people say hello. No name. */
+export function nearbyCaption(score: number): string {
+  if (score >= 75) return "Strong overlap nearby";
+  if (score >= 55) return "Solid overlap nearby";
+  if (score >= 35) return "A little overlap nearby";
+  return "Someone is nearby";
+}
+
 /**
  * Stage-1 manufacturer payload (company id already included by SoftDevice):
  *   [0xFF, 0xFF, 'N', 'B', id0, id1, id2, id3]
@@ -451,12 +459,12 @@ export function mockFacilitate(
   const whyYouVibe =
     sharedInterests.length > 0
       ? `You both light up around ${sharedInterests.slice(0, 2).join(" and ")} — easy opener if you cross paths.`
-      : `${other.name}'s into ${hook}. You've got enough overlap to make a short hello feel natural.`;
+      : `There's enough overlap around ${hook} to make a short hello feel natural.`;
 
   const icebreakers = [
     sharedInterests[0]
       ? `Hey — saw we both like ${sharedInterests[0]}. Got a favorite spot for that around here?`
-      : `Hey ${other.name} — what's been the best part of your day so far?`,
+      : `Hey — what's been the best part of your day so far?`,
     other.prompts?.[0]?.answer
       ? `You wrote about “${other.prompts[0].question.replace(/…$/, "")}” — curious what that looks like for you.`
       : other.bio

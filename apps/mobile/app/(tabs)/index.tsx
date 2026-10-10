@@ -154,7 +154,7 @@ export default function NearbyScreen() {
   const draft =
     facilitate?.icebreakers[0] ??
     (selected
-      ? `Hey ${selected.name} — we seem to overlap nearby. Want to connect?`
+      ? "Hey — we seem to overlap nearby. Want to connect?"
       : "");
 
   return (
