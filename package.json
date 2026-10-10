@@ -12,8 +12,13 @@
     "build:api": "pnpm --filter @nearby/shared --filter @nearby/api run build",
     "start": "pnpm --filter @nearby/api start",
     "lint": "pnpm -r run lint",
-    "typecheck": "pnpm -r run typecheck"
+    "typecheck": "pnpm -r run typecheck",
+    "fw:green": "cd firmware/ble-ring-green-test && pio run -e xiaoblesense -t upload",
+    "fw:green:monitor": "cd firmware/ble-ring-green-test && pio device monitor -e xiaoblesense -b 115200",
+    "fw:spin": "cd firmware/led-ring-spin-test && pio run -e xiaoblesense -t upload",
+    "fw:stage1": "cd firmware/stage1-ble-ring && pio run -e xiaoblesense -t upload"
   },
+
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
