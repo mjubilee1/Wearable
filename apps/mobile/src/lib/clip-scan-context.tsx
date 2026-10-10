@@ -8,7 +8,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { clipsMatch, type ClipSightingView } from "@nearby/shared";
+import {
+  clipsMatch,
+  isClipCloseEnough,
+  type ClipSightingView,
+} from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import {
   getBleAvailability,
@@ -43,6 +47,7 @@ export function ClipScanProvider({ children }: { children: ReactNode }) {
   const [scanError, setScanError] = useState<string | null>(null);
 
   const lastPostedAt = useRef<Map<string, number>>(new Map());
+  const lastPostedClose = useRef<Map<string, boolean>>(new Map());
   const ownClipId = profile?.deviceId ?? null;
   const scanHandleRef = useRef<ClipScanHandle | null>(null);
   const lastReportsRef = useRef<ClipSightingView[]>([]);
@@ -122,13 +127,19 @@ export function ClipScanProvider({ children }: { children: ReactNode }) {
 
           const now = Date.now();
           for (const sighting of filtered) {
+            // A fresh strong packet should count even while the average is still weak.
+            const signalRssi = Math.max(sighting.rssi, sighting.smoothedRssi);
+            const closeNow = isClipCloseEnough(signalRssi);
             const last = lastPostedAt.current.get(sighting.clipId) ?? 0;
-            if (now - last < POST_MIN_INTERVAL_MS) continue;
+            const wasClose = lastPostedClose.current.get(sighting.clipId) ?? false;
+            const crossedIntoClose = closeNow && !wasClose;
+            if (now - last < POST_MIN_INTERVAL_MS && !crossedIntoClose) continue;
             lastPostedAt.current.set(sighting.clipId, now);
+            lastPostedClose.current.set(sighting.clipId, closeNow);
 
             void postClipSighting({
               remoteClipId: sighting.clipId,
-              rssi: Math.round(sighting.smoothedRssi),
+              rssi: Math.round(signalRssi),
               timestamp: sighting.lastSeenAtMs,
             })
               .then((report) => {

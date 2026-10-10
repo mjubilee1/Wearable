@@ -6,6 +6,8 @@ type DeviceStripProps = {
   score: number;
   /** Linked wearable short id, e.g. A1B2 */
   deviceId?: string | null;
+  /** Same green / close decision as the website BLE reports. */
+  ble?: "green" | "close" | null;
 };
 
 function lightFromScore(score: number): { label: string; color: string } {
@@ -14,10 +16,15 @@ function lightFromScore(score: number): { label: string; color: string } {
   return { label: "Bright green", color: "#22c55e" };
 }
 
-export function DeviceStrip({ score, deviceId }: DeviceStripProps) {
+function lightFromBle(ble: "green" | "close"): { label: string; color: string } {
+  if (ble === "green") return { label: "Bright green", color: "#22c55e" };
+  return { label: "Warm amber", color: "#f59e0b" };
+}
+
+export function DeviceStrip({ score, deviceId, ble = null }: DeviceStripProps) {
   const router = useRouter();
   const linked = Boolean(deviceId);
-  const light = lightFromScore(score);
+  const light = ble ? lightFromBle(ble) : lightFromScore(score);
 
   return (
     <Pressable

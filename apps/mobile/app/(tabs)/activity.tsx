@@ -1,10 +1,19 @@
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
-import { CLIP_RSSI_CLOSE_DBM, isClipCloseEnough } from "@nearby/shared";
+import {
+  CLIP_RSSI_CLOSE_DBM,
+  clipsMatch,
+  isClipCloseEnough,
+} from "@nearby/shared";
 import { useClipScan } from "@/lib/clip-scan-context";
 import { colors } from "@/lib/theme";
 
-function statusLabel(close: boolean, green: boolean): string {
+function statusLabel(
+  close: boolean,
+  green: boolean,
+  pending: boolean,
+): string {
   if (green) return "Green · close + similar";
+  if (pending) return close ? "Close · checking match" : "Not close";
   if (close) return "Close · not similar yet";
   return "Not close";
 }
@@ -24,22 +33,32 @@ export default function ActivityScreen() {
     scanError,
   } = useClipScan();
 
+  const liveRows = liveSightings.map((sighting) => {
+    const report = lastReports.find((item) =>
+      clipsMatch(item.remoteClipId, sighting.clipId),
+    );
+    const signalRssi = Math.max(sighting.rssi, sighting.smoothedRssi);
+    const liveClose = isClipCloseEnough(signalRssi);
+    const close = liveClose || Boolean(report?.close);
+    return {
+      remoteClipId: sighting.clipId,
+      rssi: Math.round(signalRssi),
+      timestamp: sighting.lastSeenAtMs,
+      close,
+      green: Boolean(report?.green) && close,
+      pending: !report || (liveClose && !report.close),
+    };
+  });
   const rows =
-    lastReports.length > 0
-      ? lastReports
-      : liveSightings.map((s) => ({
-          remoteClipId: s.clipId,
-          rssi: Math.round(s.smoothedRssi),
-          timestamp: s.lastSeenAtMs,
-          close: isClipCloseEnough(s.smoothedRssi),
-          green: false,
-        }));
+    liveRows.length > 0
+      ? liveRows
+      : lastReports.map((report) => ({ ...report, pending: false }));
 
   return (
     <View style={styles.screen}>
       <FlatList
         data={rows}
-        keyExtractor={(item) => `${item.remoteClipId}-${item.timestamp}`}
+        keyExtractor={(item) => item.remoteClipId}
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.header}>
@@ -90,7 +109,7 @@ export default function ActivityScreen() {
             <View style={styles.rowCopy}>
               <Text style={styles.clipId}>{item.remoteClipId}</Text>
               <Text style={styles.meta}>
-                {item.rssi} dBm · {statusLabel(item.close, item.green)}
+                {item.rssi} dBm · {statusLabel(item.close, item.green, item.pending)}
               </Text>
             </View>
           </View>

@@ -56,7 +56,7 @@ type BleManagerLike = {
   ) => { remove: () => void };
   startDeviceScan: (
     uuids: string[] | null,
-    options: { allowDuplicates?: boolean } | null,
+    options: { allowDuplicates?: boolean; scanMode?: number } | null,
     listener: (
       error: { message?: string } | null,
       device: ScannedDevice | null,
@@ -336,17 +336,30 @@ export function startNearbyClipScan(
   let lastError: string | null = null;
   let stopped = false;
   let writeChain: Promise<void> = Promise.resolve();
+  let refreshTimer: ReturnType<typeof setInterval> | null = null;
+  let restartTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Last accepted advert. iOS often delivers a device once; restart if it goes quiet. */
+  let lastAdvertAtMs = 0;
   /**
-   * Firmware clears the ring 3s after the last write. Refresh faster than that,
+   * Firmware stale-clears the ring 3s after the last write. Refresh faster than that,
    * but don't queue a write on every duplicate advert.
    */
   const LED_REFRESH_MS = 1000;
+  /** If no new advert arrives, stop/start so iOS emits a fresh RSSI. */
+  const RSSI_REFRESH_MS = 2000;
+  /** react-native-ble-plx ScanMode.LowLatency. The default (LowPower) batches RSSI. */
+  const ANDROID_SCAN_MODE_LOW_LATENCY = 2;
+  let publishTimer: ReturnType<typeof setTimeout> | null = null;
 
   const publish = () => {
-    const list = Array.from(byId.values()).sort(
-      (a, b) => b.smoothedRssi - a.smoothedRssi,
-    );
-    onUpdate(list);
+    if (publishTimer) return;
+    publishTimer = setTimeout(() => {
+      publishTimer = null;
+      const list = Array.from(byId.values()).sort(
+        (a, b) => b.smoothedRssi - a.smoothedRssi,
+      );
+      onUpdate(list);
+    }, 200);
   };
 
   const reportError = (message: string) => {
@@ -361,21 +374,18 @@ export function startNearbyClipScan(
     onError?.("");
   };
 
-  const startScan = () => {
-    if (stopped || paused) return;
-    if (scanning) {
-      try {
-        manager.stopDeviceScan();
-      } catch {
-        // ignore — may not be scanning yet
-      }
-      scanning = false;
-    }
+  const beginScan = () => {
+    if (stopped || paused || scanning) return;
     scanning = true;
     manager.startDeviceScan(
       null,
-      // iOS drops background scans when duplicates are allowed.
-      { allowDuplicates: false },
+      {
+        // Foreground proximity needs every advert. One-shot scans freeze the
+        // first (often weak) RSSI, so the phone stays "Not close" while that
+        // single post still shows up on the web.
+        allowDuplicates: true,
+        scanMode: ANDROID_SCAN_MODE_LOW_LATENCY,
+      },
       (error, device) => {
         if (error) {
           // Ignore cancel noise when we stop to GATT-write.
@@ -393,7 +403,11 @@ export function startNearbyClipScan(
         peripheralByClipId.set(clipId, device.id);
 
         const rssi = device.rssi;
-        if (rssi === null || rssi === undefined) return;
+        // 127 is iOS "no reading". Positive values are not dBm.
+        if (rssi === null || rssi === undefined || rssi > 0 || rssi < -120) {
+          return;
+        }
+        lastAdvertAtMs = Date.now();
 
         const prev = byId.get(clipId);
         const smoothedRssi = prev
@@ -411,6 +425,25 @@ export function startNearbyClipScan(
         publish();
       },
     );
+  };
+
+  const startScan = () => {
+    if (stopped || paused || restartTimer) return;
+    if (!scanning) {
+      beginScan();
+      return;
+    }
+    // iOS drops a scan that starts in the same turn as stopDeviceScan.
+    try {
+      manager.stopDeviceScan();
+    } catch {
+      // ignore — may not be scanning yet
+    }
+    scanning = false;
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      beginScan();
+    }, 250);
   };
 
   const stopScanOnly = () => {
@@ -590,6 +623,12 @@ export function startNearbyClipScan(
         return;
       }
       startScan();
+      if (stopped) return;
+      refreshTimer = setInterval(() => {
+        if (stopped || paused) return;
+        if (Date.now() - lastAdvertAtMs < RSSI_REFRESH_MS) return;
+        startScan();
+      }, RSSI_REFRESH_MS);
     } catch (error) {
       if (stopped) return;
       onError?.(
@@ -602,6 +641,18 @@ export function startNearbyClipScan(
     stop: () => {
       stopped = true;
       paused = false;
+      if (refreshTimer) {
+        clearInterval(refreshTimer);
+        refreshTimer = null;
+      }
+      if (restartTimer) {
+        clearTimeout(restartTimer);
+        restartTimer = null;
+      }
+      if (publishTimer) {
+        clearTimeout(publishTimer);
+        publishTimer = null;
+      }
       stopScanOnly();
       const pending = connectingId;
       connectingId = null;
