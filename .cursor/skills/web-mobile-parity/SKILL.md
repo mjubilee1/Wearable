@@ -9,7 +9,9 @@ description: >-
 
 # Web ↔ Mobile Parity
 
-Nearby’s **web app is the product source of truth**. Mobile should mirror the same screens, flows, copy, CTAs, and data rules — with platform-native chrome only where required (navigation bars, safe areas, BLE/Scan).
+Nearby’s **web app is the UX reference** for shared screens. Mobile should mirror the same screens, flows, copy, CTAs, and data rules — with platform-native chrome only where required (navigation bars, safe areas, BLE/Scan).
+
+Product locks in `nearby-product-and-icp.md` win when web still shows a name, photo, bio, or walk-by profile before both people choose to say hello. Do not copy that. The clip shows a color only.
 
 ## When this skill applies
 
@@ -28,7 +30,7 @@ Nearby’s **web app is the product source of truth**. Mobile should mirror the 
    - coral `#f97066`, coral-soft `#fee4e2`
    - ink `#111827`, muted `#6b7280`
    - surface `#f3f4f6`, card `#ffffff`, amber-glow `#f59e0b`
-6. **Same card hierarchy** — photo → name/age/role/bio → interest/vibe chips → compatibility score → primary actions.
+6. **Same card hierarchy, after a mutual hello** — until both people choose to say hello, show color only (no name, photo, or bio). After that, match web: photo → name/age/role/bio → interest/vibe chips → compatibility score → primary actions.
 
 ## Canonical references (web)
 

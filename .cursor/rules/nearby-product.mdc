@@ -1,0 +1,34 @@
+---
+description: Nearby product locks and ICP. Color-only hello, a repeating room, organizer-paid SaaS. Overrides name-first or walk-by profile UX.
+alwaysApply: true
+---
+
+# Nearby product decision
+
+Source of truth: `nearby-product-and-icp.md` (Fri Oct 9, 2026). Follow it when the live site, README, or web card layouts still show names or walk-by profiles.
+
+Nearby is a clip that helps two strangers who opted in say hello in a room they already share. The clip shows a color, never a name. A name is shared only after both people choose to say hello.
+
+## Locks
+
+- Color is permission to speak. It is not a name, a profile, or a biography.
+- No walk-by name and no place history.
+- The wearer picks dating or networking before leaving. Both clips go green only if the people are close and on the same mode. If one forgot, both stay dark. The phone may remind. The clip never guesses a mode.
+- One room at a time. The phone compares interests in the background. The other person still only sees the color.
+- If it lights up for everyone, the clip is broken.
+- Rejected: walk-by profiles, name-first hellos, a camera, mood or health sensing, an on-clip chatbot, a press-to-talk AI pin, a personal log, and solo features that only fake daily use.
+- Firmware stays locked until the desk demo works (flash both boards; LED bar changes as they get closer). Do not change `firmware/` for product work.
+- The phone is the only BLE scanner. No Web Bluetooth. POST the clip id, smoothed RSSI, and a timestamp. No name and no interests.
+- Debug UI shows clip id and RSSI only. Do not copy the signed-in match list at https://ascend-platform-fawn.vercel.app/ — it still shows names.
+
+## ICP and business
+
+The ICP is a tight group that already meets in the same place on a repeating schedule. A city is not density.
+
+Top rooms (Oct 9, 2026): BlaBla DC (Tue 7pm, Sudhouse), DC LGBT Board Gamers (Mon 6–9pm, Western Market), Escala DC (third Friday 7–9pm, DC Bouldering Project Eckington).
+
+Organizers pay for the room. Clips are handed out and reused. The wearer app is free on day one.
+
+## Still open
+
+Do not invent: the #1 room ICP paragraph, what an organizer loses when a newcomer never returns, the 10-second one-liner, or the three-sentence why-now.

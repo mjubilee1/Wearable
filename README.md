@@ -1,12 +1,14 @@
 # Nearby
 
-Monorepo for a social proximity product. People nearby (~40–50 ft) show up as matches with a wearable score light — **no mic, no voice, just proximity.**
+A wearable that helps two strangers who opted in say hello in a room they already share. The clip shows a color, never a name. A name is shared only after both people choose to say hello.
+
+Product locks and ICP: [`nearby-product-and-icp.md`](nearby-product-and-icp.md).
 
 ## Layers
 
-1. **Apps** — rich voluntary profiles (photo, bio, prompts) + “Help me say hi” facilitator
-2. **API** — compatibility score + optional LLM icebreakers
-3. **Hardware** — BLE walk-by ring (Stage 1 RSSI bar → Stage 2/3 real score)
+1. **Apps** — phone compares interests in the background; the other person still only sees the color. A name appears only after both people say hello.
+2. **API** — close enough and similar enough, then green. Optional LLM icebreakers only after that hello.
+3. **Hardware** — BLE clip (Stage 1 RSSI bar → later a real score). Firmware stays locked until the desk demo works.
 
 ## Stage 1 firmware
 
