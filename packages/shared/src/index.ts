@@ -324,6 +324,22 @@ export const CLIP_RSSI_CLOSE_DBM = -60;
 /** Phone-side EMA for RSSI before POST. */
 export const CLIP_RSSI_EMA_ALPHA = 0.25;
 
+/**
+ * GATT LED service on clip-phone-led firmware.
+ * Phone writes color to the wearer's own linked clip only.
+ */
+export const NEARBY_LED_SERVICE_UUID =
+  "4e420001-0000-1000-8000-00805f9b34fb";
+export const NEARBY_LED_COLOR_CHAR_UUID =
+  "4e420002-0000-1000-8000-00805f9b34fb";
+
+/** Color characteristic payload (1 byte). */
+export const CLIP_LED_OFF = 0;
+export const CLIP_LED_GREEN = 1;
+
+/** Min gap between GATT connect/write cycles to own clip. */
+export const CLIP_LED_WRITE_MIN_INTERVAL_MS = 2000;
+
 /** Minimum shared interests (after close) to mark similar/green. */
 export const CLIP_MIN_SHARED_INTERESTS = 1;
 

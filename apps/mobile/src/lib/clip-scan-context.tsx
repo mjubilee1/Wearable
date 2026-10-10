@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   getBleAvailability,
   startNearbyClipScan,
+  type ClipScanHandle,
   type NearbyClipSighting,
 } from "@/lib/ble";
 import { postClipSighting } from "@/lib/sightings";
@@ -29,6 +30,8 @@ type ClipScanContextValue = {
 const ClipScanContext = createContext<ClipScanContextValue | null>(null);
 
 const POST_MIN_INTERVAL_MS = 1500;
+/** Refresh own-clip LED while green so firmware stale timeout does not clear. */
+const LED_KEEPALIVE_MS = 2000;
 
 export function ClipScanProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
@@ -43,30 +46,63 @@ export function ClipScanProvider({ children }: { children: ReactNode }) {
 
   const lastPostedAt = useRef<Map<string, number>>(new Map());
   const ownClipId = profile?.deviceId ?? null;
+  const scanHandleRef = useRef<ClipScanHandle | null>(null);
+  const lastReportsRef = useRef<ClipSightingView[]>([]);
+  const desiredGreenRef = useRef(false);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", setAppState);
     return () => sub.remove();
   }, []);
 
-  const mergeReport = useCallback((report: ClipSightingView) => {
-    setLastReports((prev) => {
-      const without = prev.filter(
-        (r) => r.remoteClipId !== report.remoteClipId,
-      );
-      return [report, ...without].slice(0, 40);
-    });
-  }, []);
+  const pushOwnLed = useCallback(async (green: boolean) => {
+    desiredGreenRef.current = green;
+    const handle = scanHandleRef.current;
+    const clipId = ownClipId;
+    if (!handle || !clipId) return;
+    try {
+      await handle.writeClipLed(clipId, green);
+    } catch {
+      // Errors surface via scan onError when relevant.
+    }
+  }, [ownClipId]);
+
+  const mergeReport = useCallback(
+    (report: ClipSightingView) => {
+      setLastReports((prev) => {
+        const without = prev.filter(
+          (r) => r.remoteClipId !== report.remoteClipId,
+        );
+        const next = [report, ...without].slice(0, 40);
+        lastReportsRef.current = next;
+        const anyGreen = next.some((r) => r.green);
+        if (anyGreen !== desiredGreenRef.current) {
+          void pushOwnLed(anyGreen);
+        } else if (anyGreen) {
+          // Keepalive while green (firmware stale ~3s).
+          void pushOwnLed(true);
+        }
+        return next;
+      });
+    },
+    [pushOwnLed],
+  );
 
   useEffect(() => {
     if (!user || appState !== "active") {
       setScanning(false);
       setLiveSightings([]);
+      const handle = scanHandleRef.current;
+      if (handle && ownClipId && desiredGreenRef.current) {
+        void handle.writeClipLed(ownClipId, false);
+        desiredGreenRef.current = false;
+      }
       return;
     }
 
     let cancelled = false;
-    let handle: { stop: () => void } | null = null;
+    let handle: ClipScanHandle | null = null;
+    let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
     async function begin() {
       const availability = await getBleAvailability();
@@ -115,15 +151,31 @@ export function ClipScanProvider({ children }: { children: ReactNode }) {
                 }
               });
           }
+
+          // No remotes left → ensure LED off.
+          if (filtered.length === 0 && desiredGreenRef.current) {
+            void pushOwnLed(false);
+            lastReportsRef.current = [];
+            setLastReports([]);
+          }
         },
         (message) => {
-          if (!cancelled) setScanError(message);
+          if (!cancelled) setScanError(message || null);
         },
       );
+
+      scanHandleRef.current = handle;
+
+      keepaliveTimer = setInterval(() => {
+        if (cancelled) return;
+        if (!desiredGreenRef.current) return;
+        void pushOwnLed(true);
+      }, LED_KEEPALIVE_MS);
 
       if (cancelled) {
         handle.stop();
         handle = null;
+        scanHandleRef.current = null;
       }
     }
 
@@ -131,10 +183,13 @@ export function ClipScanProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      if (keepaliveTimer) clearInterval(keepaliveTimer);
       handle?.stop();
+      scanHandleRef.current = null;
+      desiredGreenRef.current = false;
       setScanning(false);
     };
-  }, [user, appState, ownClipId, mergeReport]);
+  }, [user, appState, ownClipId, mergeReport, pushOwnLed]);
 
   const value = useMemo(
     () => ({

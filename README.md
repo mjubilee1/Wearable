@@ -31,15 +31,17 @@ pio device monitor -e xiaoble -b 115200
 | `@nearby/api` | `apps/api` | Hono API |
 | `@nearby/shared` | `packages/shared` | Types, scoring, mock facilitator |
 
-### Phone BLE bridge (Stage 2)
+### Phone BLE bridge (Stage 2 → phone-driven LED)
 
 - **Phone only** scans BLE (Expo dev build + `react-native-ble-plx`). Website never uses Web Bluetooth.
 - Foreground scan matches manufacturer `FF FF | N B | id[4]`, EMA-smooths RSSI, `POST /v1/ble/sightings` (clip id + RSSI + timestamp — no names).
 - Backend marks **close** / **green** (close + shared interests). Other person only sees color, not your name.
+- When API returns **green**, the phone GATT-writes the wearer’s **own** linked clip (`clip-phone-led` firmware). Rings do not green from peer RSSI.
 - Web debug: [`/debug/ble`](apps/web) — last reports for your account (clip id, RSSI, close/green).
 
 ```bash
-cd apps/mobile && npx expo run:ios   # or run:android — not Expo Go
+pnpm fw:clip                 # flash phone-driven LED firmware (both boards)
+cd apps/mobile && pnpm ios --device   # physical phone; not Expo Go
 ```
 
 ## Setup

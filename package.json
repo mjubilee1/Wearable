@@ -18,7 +18,9 @@
     "fw:peer": "cd firmware/ble-peer-beacon-test && pio run -e xiaoblesense -t upload",
     "fw:peer:monitor": "cd firmware/ble-peer-beacon-test && pio device monitor -e xiaoblesense -b 115200",
     "fw:spin": "cd firmware/led-ring-spin-test && pio run -e xiaoblesense -t upload",
-    "fw:stage1": "cd firmware/stage1-ble-ring && pio run -e xiaoblesense -t upload"
+    "fw:stage1": "cd firmware/stage1-ble-ring && pio run -e xiaoblesense -t upload",
+    "fw:clip": "cd firmware/clip-phone-led && pio run -e xiaoblesense -t upload",
+    "fw:clip:monitor": "cd firmware/clip-phone-led && pio device monitor -e xiaoblesense -b 115200"
   },
 
   "pnpm": {
