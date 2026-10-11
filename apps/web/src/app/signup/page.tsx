@@ -50,7 +50,7 @@ export default function SignupPage() {
         role,
         interests,
       });
-      router.replace("/");
+      router.replace("/nearby");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create account");
     } finally {

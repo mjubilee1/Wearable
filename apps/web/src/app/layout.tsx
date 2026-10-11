@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { AuthGate } from "@/components/AuthGate";
+import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 import { Providers } from "@/components/Providers";
 import "./globals.css";
 
@@ -11,8 +12,9 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Nearby — Proximity Matches",
-  description: "People around you (~40–50 ft).",
+  title: "Nearby — Speak, and it answers",
+  description:
+    "A voice assistant for the day. Speak, it handles the task, and it answers out loud.",
 };
 
 export default function RootLayout({
@@ -23,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${plusJakarta.variable} antialiased`}>
+        <GoogleAnalytics />
         <Providers>
           <AuthGate>{children}</AuthGate>
         </Providers>

@@ -4,13 +4,15 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
-const PUBLIC_PATHS = new Set(["/login", "/signup", "/forgot-password"]);
+const AUTH_PATHS = new Set(["/login", "/signup", "/forgot-password"]);
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const isPublic = PUBLIC_PATHS.has(pathname);
+  const isMarketing = pathname === "/";
+  const isAuthScreen = AUTH_PATHS.has(pathname);
+  const isPublic = isMarketing || isAuthScreen;
 
   useEffect(() => {
     if (loading) return;
@@ -18,12 +20,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
-    if (user && isPublic) {
-      router.replace("/");
+    if (user && isAuthScreen) {
+      router.replace("/nearby");
     }
-  }, [user, loading, isPublic, router]);
+  }, [user, loading, isPublic, isAuthScreen, router]);
 
-  if (loading) {
+  if (loading && !isPublic) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
         <div className="text-center">
@@ -35,7 +37,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!user && !isPublic) return null;
-  if (user && isPublic) return null;
+  if (user && isAuthScreen) return null;
 
   return <>{children}</>;
 }

@@ -11,7 +11,7 @@ description: >-
 
 Nearby’s **web app is the UX reference** for shared screens. Mobile should mirror the same screens, flows, copy, CTAs, and data rules — with platform-native chrome only where required (navigation bars, safe areas, BLE/Scan).
 
-Product locks in `nearby-product-and-icp.md` win when web still shows a name, photo, bio, or walk-by profile before both people choose to say hello. Do not copy that. The clip shows a color only.
+Product decisions in `nearby-product-and-icp.md` win. The Oct 9 color-clip locks are retired. The social hello layer is out of scope until that file says otherwise.
 
 ## When this skill applies
 

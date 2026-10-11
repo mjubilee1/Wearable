@@ -1,14 +1,14 @@
 # Nearby
 
-A wearable that helps two strangers who opted in say hello in a room they already share. The clip shows a color, never a name. A name is shared only after both people choose to say hello.
+A voice-first wearable AI assistant. You speak, it uses tools, and it answers out loud. Current target is a laptop or AirPods voice loop (`POST /v1/agent`). Domain: [nearbyhello.com](https://www.nearbyhello.com).
 
-Product locks and ICP: [`nearby-product-and-icp.md`](nearby-product-and-icp.md).
+Product: [`nearby-product-and-icp.md`](nearby-product-and-icp.md) (Sun Oct 11, 2026). The Oct 9 color-clip brief is retired. The social hello layer is later.
 
 ## Layers
 
-1. **Apps** — phone compares interests in the background; the other person still only sees the color. A name appears only after both people say hello.
-2. **API** — close enough and similar enough, then green. Optional LLM icebreakers only after that hello.
-3. **Hardware** — BLE clip (Stage 1 RSSI bar → later a real score). Firmware stays locked until the desk demo works.
+1. **Input** — laptop mic or AirPods now. ESP32-S3 I²S mic when the parts arrive. AirPods do not pair to the board.
+2. **Agent** — `apps/api`, one endpoint every input calls. Tools only with permission.
+3. **Device** — new ESP32-S3 firmware later. The Seeed XIAO color-ring tree under `firmware/` stays in place and is not extended.
 
 ## Stage 1 firmware
 

@@ -1,90 +1,95 @@
-# Nearby: product decisions and ICP
+# Nearby (nearbyhello.com): current product
 
-Last updated Fri Oct 9, 2026. Paste this into Cursor as context. It covers decisions only, not instructions to change firmware.
+Last updated Sun Oct 11, 2026. Paste into Cursor as context. This replaces the Oct 9 color-clip brief. Those color-clip locks no longer apply.
 
-## What Nearby is
+## What Nearby is now
 
-A wearable that helps two strangers who opted in say hello in a room they already share. The clip shows a color, never a name. A name is shared only after both people choose to say hello.
+A voice-first wearable AI assistant: hands-free access to an agent through the day without pulling out your phone. You speak, and it understands, uses tools, does the task, and answers out loud.
 
-## Product locks
+Immediate goal: a working proof of concept Montrell uses every day. Practical function over polished hardware.
 
-- **Color is permission to speak.** It is not a name, a profile, or a biography.
-- **No walk-by name.** A name can be searched and used to dox someone. Nothing stores a walk-by or a place history.
-- **The wearer picks a mode before leaving: dating or networking.** Both clips go green only if the people are close **and** set to the same mode. If one person forgot, both stay dark.
-- **The phone may remind** (for example, "you're at a networking event, switch?"). The clip never guesses a fallback mode.
-- **One room at a time.** A dating color and a networking color in the same crowd is the wrong hello.
-- **The phone compares interests in the background.** The other person still only sees the color.
-- **If it lights up for everyone, the clip is broken.**
-- **Rejected:** walk-by profiles (the Highlight model), name-first hellos, a camera, mood or health sensing, an on-clip chatbot, a press-to-talk AI pin, a personal log, and solo features that only fake daily use.
+Domain: [nearbyhello.com](https://www.nearbyhello.com) (bought Oct 11 2026 on Namecheap, pointed at Vercel). The name was chosen so the product can start as a personal assistant and grow into a social, "say hello to people nearby" product later. The social layer is not in scope for this phase.
 
-## Architecture
+## Hardware
 
-- BLE clip → phone → cloud. The clip doesn't need Wi-Fi.
-- Board: Seeed XIAO nRF52840 with pins already soldered (part 102010631), not the Sense. 2 units. PlatformIO env `xiaoble`.
-- Firmware is locked. Don't change it until the desk demo works.
-  - Advertisement: manufacturer data `FF FF | N B | 4-byte FICR id`
-  - Smoothed RSSI, LED bar, idle blue heartbeat
-- Stage 1: the boards only know distance (RSSI). Comparing interests happens later, on the phone.
-- Phone BLE: `react-native-ble-plx` in an Expo dev build, not Expo Go.
-- The phone is the only BLE scanner. The website doesn't scan radios and must not use Web Bluetooth.
-- The phone matches prefix `FF FF | N B | 4-byte id`. It doesn't connect or read GATT.
-- The phone POSTs the clip id, smoothed RSSI, and a timestamp. No name and no interests.
-- Green only when close enough **and** similar enough.
-- The debug page shows clip id and RSSI only, never names.
-- Live site: https://ascend-platform-fawn.vercel.app/ The signed-in match list still shows names, which breaks the privacy lock. Don't copy it.
-- Won't fit on the clip: an LLM (about 1 MB flash, 256 KB RAM), a mic, a speaker, an IMU.
+- Board: Adafruit QT Py ESP32-S3 with 8MB PSRAM (Wi-Fi + BLE).
+- On order (Amazon): I²S MEMS microphone module, 1.28" round GC9A01 SPI display, plus parts for assembly. Confirm the exact models and pinouts before writing wiring.
+- Have: laptop, AirPods / Bluetooth headphones, breadboard.
+- Constraint: the ESP32-S3 cannot connect to AirPods as a Bluetooth Classic audio headset. Design around it: AirPods go through the laptop or phone, not the board.
+- Retired: the Seeed XIAO nRF52840 color-ring firmware under `firmware/`. Leave it in place; don't extend it.
 
-## Business model
+## Architecture (modular, loosely coupled)
 
-- **The SaaS is the room, not the board.** Organizers pay. The clips are the light they hand out and get back to reuse.
-- Organizer value: newcomers come back because they actually talked to someone. Send a report the morning after each event with how many people opted in, how many pairs went green, and how many said hello.
-- Per-device sales don't work for groups. 20 to 200 people at $25 to $100 a clip is $500 to $20,000. Price it closer to a monthly or per-event fee with reused clips.
-- Wearer value: a hello with someone you'll see again next week, without a stranger getting your name first. A friendship comes from repeat meetings, and a weekly room gives you those.
-- The app is free for wearers on day one. A premium tier is optional later.
-- Pricing (initial): retail $49 to $79 if a small-batch build costs about $12 to $25 per clip, and $89 to $129 for a pair pack. Montrell said he wouldn't pay $49 for the light alone, so don't treat $49 as validated. Don't go under $30 until manufacturing is real.
+| Layer | What it is | Phase 1 |
+|---|---|---|
+| Input | laptop mic / AirPods via laptop or phone / ESP32-S3 I²S mic | laptop mic or AirPods |
+| Voice | wake word, speech-to-text, text-to-speech | laptop |
+| Agent | reasoning, tool selection, orchestration, context and memory | API |
+| Integrations | calendar, reminders, notes, search, other approved tools | API |
+| Device | ESP32-S3 firmware: Wi-Fi, auth, backend calls, BLE, display | mock mic, serial output |
+| Companion | future phone app for connectivity, audio routing, background | later |
 
-## Why others failed (and what Nearby does differently)
+Key design choice: the agent lives in the API behind one endpoint (for example `POST /v1/agent`). Every input calls the same endpoint: the laptop now, the ESP32 later, the phone after that. Swapping inputs never means rewriting the agent.
 
-1. **The app showed the person** (Highlight at SXSW 2012). Nearby shows color only.
-2. **Dating took over the friend use** (Grindr and Happn survived; Glancee, Highlight, aka-aki, and Sonar shut down or sold). Nearby uses a preset mode and both people have to match.
-3. **The room was empty** (Lovegety shipped 350,000 units in 1998 and still beeped twice in three hours). Nearby starts with one group that meets every week.
-- **CommonTies** (CSCW 2014/2016, "One LED is Enough") is the only case that worked: a whole conference wore one LED with no profile, and 74% of the interactions it started were called novel and useful. It never became a company. The untested part is a second event and a price.
+## Existing repo (github.com/mjubilee1/Wearable)
 
-## ICP
+Reuse what works. Don't rebuild it.
 
-**Not** "100 people across DC." A city is not density. A place and a time is.
+- `apps/api`: Hono API with Firebase auth (`Bearer <firebase-id-token>`, `Bearer dev` in mock mode). Already calls OpenAI (`OPENAI_API_KEY`). Home for the agent.
+- `packages/shared`: shared types. Put the device and agent API contract here.
+- `apps/mobile`: Expo app (dev build). Future companion.
+- `apps/web`: Next.js. Can become a simple status and settings page.
+- Set aside: BLE color matching, `/v1/matches`, `/v1/ble/sightings`, ring firmware. Leave them alone; don't delete them in this pass.
 
-**The ICP is a tight group that already meets in the same place on a repeating schedule.**
+## Rules
 
-Density observation (Mon Oct 5, about 7:30am, Arlington VA): quiet streets with dog walkers around 40 to 45, runners around 25 to 35, and a few young people walking to work with headphones in. Not enough people for a walk-by hello.
+- Don't put permanent API secrets in firmware. Devices authenticate to the backend; the backend holds the model keys.
+- Short, useful spoken replies.
+- Tools only run with the user's permission. Memory only keeps what the user approved.
+- Log errors and handle them clearly at every layer.
+- Don't optimize the enclosure, industrial design, manufacturing, or battery yet.
 
-Role-play failure: a 24-year-old woman, one of 100 DC wearers who aren't a group. She met one other woman at a coffee shop two months after buying it, then left the device on her dresser.
+## Priorities (in order)
 
-### Top 3 rooms (Montrell's picks, Oct 9 2026)
+1. End-to-end function
+2. Low latency
+3. Reliable voice in and out
+4. Useful tool execution
+5. Modular architecture
+6. Low-cost hardware
+7. Battery and portability
 
-1. **BlaBla DC**: language exchange, every Tuesday 7pm, Sudhouse, 1340 U St NW, walk-in. https://www.blablacommunity.com/events/blabla-dc
-   - Why: match on purpose with someone practicing the same language and go deeper. Score: ok.
-   - Fix: name the pain. You walk in, sit with whoever is near the door, and end up speaking English.
-2. **DC LGBT Board Gamers**: Mondays 6 to 9pm, Western Market, 2000 Pennsylvania Ave NW. https://www.meetup.com/dc-lgbt-board-gamers/
-   - Why: a newcomer doesn't have their name shown and meets another gamer naturally through the green light. Score: ok.
-   - Fix: add who they meet, like a gamer who wants the same game tonight.
-3. **Escala DC**: climbing, third Friday 7 to 9pm, DC Bouldering Project Eckington, 1611 Eckington Pl NE #150. https://www.escalaclimbing.org/washington-dc
-   - Why: people already move around and change partners every session. Score: strong on fit.
-   - Fix: add the moment. What does a first-timer do today when they don't know who to ask to climb with?
+## Milestones
 
-### Other candidates
+- **M1, working voice agent:** speak through the laptop or AirPods and get a spoken answer. Current target.
+- **M2, useful actions:** at least 3 tasks work, such as checking the calendar, capturing a note, and setting a reminder.
+- **M3, ESP32 talks to the backend:** Wi-Fi, a request to the backend, a valid response.
+- **M4, physical voice prototype:** audio from the I²S mic reaches Nearby and gets a response.
+- **M5, wearable interaction:** the round display shows status and output. Evaluate size, power, and portability.
+- **M6, daily-use pilot (7 to 14 days):** track useful interactions per day, tasks completed, voice accuracy, latency, connectivity failures, times you still reached for the phone, and which features you kept coming back to.
 
-| Group | Where and when | Note | Source |
-|---|---|---|---|
-| NoMa Run Club | Mon 6:45pm and Sat 8:30am at REI, 201 M St NE. Wed and Thu 6:45pm at Lost Generation Brewing, Metropolitan Branch Trail | Drop-in, open to anyone, so a stranger could leave with your name | https://nomarunclub.com/faq/ |
-| DC Central Kitchen volunteers | Weekdays from 9am and 6 to 8pm, 2121 First St SW | Weakest fit, because people are there to work | https://dccentralkitchen.org/volunteer/ |
-| ARK young adults (21 to 39), St. Ann | Sunday 7pm, 4001 Yuma St NW | The third-Sunday social moves to a restaurant | https://www.stanndc.org/young-adults |
+## Build order now
 
-Excluded: Lucky Bar's language exchange (it uses name tags) and alumni mixers (the bar changes every time).
+1. Audit the repo and list what's implemented and reusable.
+2. Propose the minimum viable architecture.
+3. Build the fastest path to the laptop/AirPods voice loop: listen, speech-to-text, `/v1/agent`, text-to-speech.
+4. Create a new ESP32-S3 firmware project with Wi-Fi provisioning and backend calls, using a mock mic and serial output.
+5. Define a clean device-to-backend API contract in `packages/shared`.
+6. Stub the mic and display modules so they're ready when the parts arrive.
+7. Write an implementation order with a testable acceptance check for each step.
+8. Ship M1 end to end.
 
-## Still open
+## Daily-use scenarios to design for
 
-- ICP paragraph for the #1 room: who they are, where they are, and the moment they feel the problem.
-- What an organizer loses today when a newcomer comes once and never returns.
-- A 10-second one-liner and a three-sentence "why now."
-- Desk demo: flash both boards and confirm the LED bar changes as they get closer.
+- **Morning:** today's agenda, meetings and reminders, a short task summary, follow-ups without repeating context.
+- **At work:** capture ideas or notes by voice, create tasks and reminders, ask technical questions, pull info from approved integrations.
+- **Commute or walk:** hands-free through headphones, capture thoughts without opening an app, spoken answers, calendar and reminders.
+- **All day:** remembers the conversation and approved preferences, runs supported tools with permission, keeps answers short.
+
+## Market context (scenarios only, Oct 11 2026)
+
+The space is crowded, and several products have failed. Humane's Pin was disabled Feb 28 2025 after returns outpaced sales, and HP bought the platform, patents, and staff. Rabbit is no longer made. Limitless stopped selling after Meta bought it. Bee is now inside Amazon. Still shipping or upcoming: Plaud (about 2M devices), Omi, Friend, Button ($179 preorder, ships Dec 2026), Sandbar Stream ring, Flic Cue, and an OpenAI device. Market size estimates swing widely with assumed adoption, so they aren't a plan yet.
+
+## Still to decide
+
+Do not invent: who buys it, device only or a subscription, the price, press-to-talk vs. always listening, or the one job it does better than a phone plus AirPods plus ChatGPT voice. The M6 pilot is the real test.
