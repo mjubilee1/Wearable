@@ -11,15 +11,16 @@ Nearby is a voice-first wearable AI assistant. You speak, it uses tools, and it 
 
 ## Current target
 
-M1: speak through the laptop or AirPods and get a spoken answer. One agent endpoint (`POST /v1/agent`) that every input calls. The agent lives in `apps/api`. The device and agent contract lives in `packages/shared`.
+M1: speak through the laptop, the phone, or AirPods and get a spoken answer. One agent endpoint (`POST /v1/agent`) that every input calls. The Talk screen is the Activity route on web and Expo. The agent lives in `apps/api`. The device and agent contract lives in `packages/shared`.
 
 ## Rules
 
 - Don't put permanent API secrets in firmware. Devices authenticate; the backend holds model keys.
 - Short spoken replies. Tools only with permission. Memory only what the user approved.
-- Leave `firmware/` (Seeed XIAO color ring) in place. Don't extend it. New hardware is a separate ESP32-S3 project. AirPods go through the laptop or phone, not the board.
-- Leave BLE color matching, `/v1/matches`, and `/v1/ble/sightings` alone. Don't delete them in this pass.
-- Don't optimize enclosure, industrial design, manufacturing, or battery yet.
+- Design against recent failures: not a phone-in-a-box (Rabbit), not an always-on recorder (Omi), not a chatty companion (Friend). Prove the daily job on laptop/AirPods before selling a gadget.
+- Leave the color-ring sketches under `firmware/` in place. Don't extend them. The new device project is `firmware/voice-esp32`: Wi-Fi, a serial stand-in for the mic, and `POST /v1/agent`. The chip on the desk has no BLE. `NEARBY_HAS_BLE` stays 0 until the BLE board arrives. AirPods go through the laptop or phone, not the board.
+- The color-clip BLE scan is removed from the phone and the website. Leave `/v1/matches` and `/v1/ble/sightings` in the API. Don't put the scan UI back.
+- First physical form is a necklace / pendant prototype, not a watch. Don't polish enclosure, industrial design, manufacturing, or battery yet.
 
 ## Still open
 

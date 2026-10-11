@@ -12,9 +12,9 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Nearby — Speak, and it answers",
+  title: "Nearby — Speak, and it answers out loud",
   description:
-    "A voice assistant for the day. Speak, it handles the task, and it answers out loud.",
+    "A voice assistant for the day. Speak, it handles the task, and it answers out loud. Useful first. Hardware later.",
 };
 
 export default function RootLayout({

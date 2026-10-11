@@ -18,6 +18,7 @@ import {
   type MatchProfile,
   type UserProfile,
 } from "@nearby/shared";
+import { deleteAgentMemory, listAgentMemories, runAgentTurn } from "./agent.js";
 import { verifyAuth } from "./auth.js";
 import {
   createCheckoutSession,
@@ -229,6 +230,35 @@ app.post("/v1/billing/portal", async (c) => {
       500,
     );
   }
+});
+
+app.post("/v1/agent", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = await c.req.json().catch(() => null);
+  try {
+    return c.json(await runAgentTurn(auth.uid, body));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed";
+    console.error("[agent]", message);
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.get("/v1/agent/memories", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const memories = await listAgentMemories(auth.uid);
+  return c.json({ memories });
+});
+
+app.delete("/v1/agent/memories/:id", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const id = c.req.param("id").trim();
+  if (!id) return c.json({ error: "Missing memory id" }, 400);
+  await deleteAgentMemory(auth.uid, id);
+  return c.json({ ok: true });
 });
 
 app.get("/v1/matches", async (c) => {

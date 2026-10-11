@@ -57,7 +57,7 @@ export function WaitlistForm() {
 
   if (status === "done") {
     return (
-      <p className="rounded-2xl bg-teal-soft px-4 py-3 text-sm font-medium text-teal">
+      <p className="rounded-2xl bg-teal-soft px-4 py-3 text-center text-sm font-medium text-teal">
         You&apos;re on the list. We&apos;ll email when there&apos;s something
         to try.
       </p>
@@ -65,32 +65,32 @@ export function WaitlistForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex w-full max-w-md flex-col gap-3">
+    <form onSubmit={onSubmit} className="flex w-full flex-col gap-3 text-left">
       <label className="sr-only" htmlFor="waitlist-email">
         Email
       </label>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          id="waitlist-email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="you@email.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="min-w-0 flex-1 rounded-full border border-black/10 bg-card px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
-        />
-        <button
-          type="submit"
-          disabled={status === "saving"}
-          className="rounded-full bg-teal px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
-        >
-          {status === "saving" ? "Joining…" : "Get updates"}
-        </button>
-      </div>
-      {error ? <p className="text-sm text-coral">{error}</p> : null}
-      <p className="text-xs text-muted">
-        No spam. Just a note when Nearby is ready to try.
+      <input
+        id="waitlist-email"
+        type="email"
+        required
+        autoComplete="email"
+        placeholder="Email address"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="w-full rounded-full border border-teal/20 bg-white px-5 py-3.5 text-sm text-ink outline-none ring-teal/30 placeholder:text-muted focus:ring-2"
+      />
+      <button
+        type="submit"
+        disabled={status === "saving"}
+        className="w-full rounded-full bg-teal px-5 py-3.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+      >
+        {status === "saving" ? "Joining…" : "Get updates"}
+      </button>
+      {error ? (
+        <p className="text-center text-sm text-coral">{error}</p>
+      ) : null}
+      <p className="text-center text-xs text-muted">
+        No spam. A note when there’s something to try.
       </p>
     </form>
   );

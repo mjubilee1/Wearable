@@ -1,0 +1,7 @@
+source: https://github.com/BasedHardware/omi
+commit: 61d26a1d1e6f25d8d9fd7339e2a0ccf163358f26
+subject: Retrieve bounded Dream neighbourhoods with target and context roles (#21237)
+date: 2026-10-11 15:00:38 -0700
+author: David Zhang
+cloned: 2026-10-11
+note: Read-only reference under third_party/omi. Do not edit files in that tree.

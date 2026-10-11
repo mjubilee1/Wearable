@@ -26,7 +26,6 @@ export default function ProfilePage() {
   const [vibes, setVibes] = useState<string[]>([]);
   const [prompts, setPrompts] = useState<ProfilePrompt[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [deviceId, setDeviceId] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -43,7 +42,6 @@ export default function ProfilePage() {
     setVibes(profile.vibes ?? []);
     setPrompts(profile.prompts ?? []);
     setPhotoUrl(profile.photoUrl ?? null);
-    setDeviceId(profile.deviceId ?? "");
   }, [profile]);
 
   if (!profile) {
@@ -138,7 +136,6 @@ export default function ProfilePage() {
         vibes,
         prompts: cleanedPrompts,
         photoUrl,
-        deviceId: deviceId.trim().toUpperCase() || null,
       });
       await refreshProfile();
       setMessage("Profile saved.");
@@ -396,22 +393,6 @@ export default function ProfilePage() {
               </div>
             ))}
           </fieldset>
-
-          <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-ink">
-              Clip ID{" "}
-              <span className="font-normal text-muted">
-                (optional, 8-char manufacturer id or NB-XXXX short)
-              </span>
-            </span>
-            <input
-              value={deviceId}
-              onChange={(e) => setDeviceId(e.target.value.toUpperCase())}
-              maxLength={8}
-              placeholder="AABBCCDD"
-              className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 font-mono text-sm uppercase outline-none ring-teal/30 focus:ring-2"
-            />
-          </label>
 
           {error && (
             <p className="rounded-2xl bg-coral-soft px-3 py-2 text-sm text-coral">

@@ -10,7 +10,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import {
   INTEREST_OPTIONS,
@@ -25,7 +24,6 @@ import { updateUserProfile } from "@/lib/users";
 import { colors } from "@/lib/theme";
 
 export default function ProfileScreen() {
-  const router = useRouter();
   const { profile, signOut, refreshProfile } = useAuth();
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -36,7 +34,6 @@ export default function ProfileScreen() {
   const [vibes, setVibes] = useState<string[]>([]);
   const [prompts, setPrompts] = useState<ProfilePrompt[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [deviceId, setDeviceId] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -53,7 +50,6 @@ export default function ProfileScreen() {
     setVibes(profile.vibes ?? []);
     setPrompts(profile.prompts ?? []);
     setPhotoUrl(profile.photoUrl ?? null);
-    setDeviceId(profile.deviceId ?? "");
   }, [profile]);
 
   if (!profile) {
@@ -154,7 +150,6 @@ export default function ProfileScreen() {
         vibes,
         prompts: cleanedPrompts,
         photoUrl,
-        deviceId: deviceId.trim().toUpperCase() || null,
       });
       await refreshProfile();
       setMessage("Profile saved.");
@@ -396,31 +391,6 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>
-            Clip ID (optional, 8-char manufacturer id or NB-XXXX short)
-          </Text>
-          <TextInput
-            value={deviceId}
-            onChangeText={(v) => setDeviceId(v.toUpperCase())}
-            maxLength={8}
-            placeholder="AABBCCDD"
-            placeholderTextColor={colors.muted}
-            autoCapitalize="characters"
-            style={[styles.input, styles.mono]}
-          />
-          <Pressable
-            onPress={() => router.push("/link-ring?from=profile")}
-            style={styles.linkRingBtn}
-          >
-            <Text style={styles.linkRingBtnText}>
-              {deviceId.trim()
-                ? "Find ring again over Bluetooth"
-                : "Find my ring over Bluetooth"}
-            </Text>
-          </Pressable>
-        </View>
-
         {error ? (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{error}</Text>
@@ -520,21 +490,6 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   textarea: { minHeight: 80, textAlignVertical: "top" },
-  mono: { fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
-  linkRingBtn: {
-    marginTop: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(13,148,136,0.25)",
-    backgroundColor: colors.tealSoft,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  linkRingBtnText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.teal,
-  },
   hint: { fontSize: 11, color: colors.muted },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {

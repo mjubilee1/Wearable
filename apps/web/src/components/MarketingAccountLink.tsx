@@ -13,7 +13,7 @@ export function MarketingAccountLink({
   signedOutLabel?: string;
 }) {
   const { user, loading } = useAuth();
-  const href = !loading && user ? "/nearby" : "/login";
+  const href = !loading && user ? "/activity" : "/login";
   const label = !loading && user ? signedInLabel : signedOutLabel;
 
   return (

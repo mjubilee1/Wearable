@@ -9,11 +9,9 @@ import {
 } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FacilitateResponse } from "@nearby/shared";
-import { DeviceStrip } from "@/components/DeviceStrip";
 import { HelloComposer } from "@/components/HelloComposer";
 import { ProfileCard } from "@/components/ProfileCard";
 import { useAuth } from "@/lib/auth-context";
-import { useClipScan } from "@/lib/clip-scan-context";
 import {
   blockedUserIds,
   connectionStatusMap,
@@ -27,12 +25,6 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export default function NearbyScreen() {
   const { profile, user } = useAuth();
-  const { lastReports } = useClipScan();
-  const bleSignal = lastReports.some((report) => report.green)
-    ? "green"
-    : lastReports.some((report) => report.close)
-      ? "close"
-      : null;
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [demoOn, setDemoOn] = useState(false);
@@ -195,12 +187,6 @@ export default function NearbyScreen() {
                 />
               </Pressable>
             </View>
-
-            <DeviceStrip
-              score={displayScore}
-              deviceId={profile?.deviceId ?? null}
-              ble={demoOn ? null : bleSignal}
-            />
 
             {facilitate || facilitateError ? (
               <View style={styles.facilitator}>

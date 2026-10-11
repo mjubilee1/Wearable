@@ -25,6 +25,7 @@ function TabLabel({
 export default function TabsLayout() {
   return (
     <Tabs
+      initialRouteName="activity"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.teal,
@@ -56,9 +57,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="activity"
         options={{
-          title: "Activity",
+          title: "Talk",
           tabBarLabel: ({ focused }) => (
-            <TabLabel label="Activity" focused={focused} />
+            <TabLabel label="Talk" focused={focused} />
           ),
         }}
       />

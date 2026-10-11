@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FacilitateResponse } from "@nearby/shared";
-import { DeviceStrip } from "@/components/DeviceStrip";
 import { HelloComposer } from "@/components/HelloComposer";
 import { ProfileCard } from "@/components/ProfileCard";
 import { TabBar } from "@/components/TabBar";
@@ -193,13 +192,6 @@ export function NearbyMatches() {
           </button>
         </div>
       </header>
-
-      <div className="mb-6 max-w-md">
-        <DeviceStrip
-          score={displayScore}
-          deviceId={profile?.deviceId ?? null}
-        />
-      </div>
 
       {facilitate || facilitateError ? (
         <aside className="mb-6 max-w-2xl rounded-3xl border border-teal/20 bg-white/80 p-5 shadow-sm">

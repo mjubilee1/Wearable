@@ -21,7 +21,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
     if (user && isAuthScreen) {
-      router.replace("/nearby");
+      router.replace("/activity");
     }
   }, [user, loading, isPublic, isAuthScreen, router]);
 

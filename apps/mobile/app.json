@@ -11,8 +11,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.nearby.app",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Nearby uses Bluetooth to find and link your wearable ring, and to notice other Nearby rings when you walk by.",
-        "NSBluetoothPeripheralUsageDescription": "Nearby uses Bluetooth to find and link your wearable ring."
+        "NSBluetoothAlwaysUsageDescription": "Nearby uses Bluetooth to connect a wearable when that radio is available.",
+        "NSBluetoothPeripheralUsageDescription": "Nearby uses Bluetooth to connect a wearable.",
+        "NSMicrophoneUsageDescription": "Nearby uses the microphone when you talk to it."
       }
     },
     "android": {
@@ -52,7 +53,7 @@
           "modes": [
             "central"
           ],
-          "bluetoothAlwaysPermission": "Nearby uses Bluetooth to find and link your wearable ring, and to notice other Nearby rings when you walk by."
+          "bluetoothAlwaysPermission": "Nearby uses Bluetooth to connect a wearable when that radio is available."
         }
       ]
     ],

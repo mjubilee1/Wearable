@@ -12,10 +12,11 @@ Domain: [nearbyhello.com](https://www.nearbyhello.com) (bought Oct 11 2026 on Na
 
 ## Hardware
 
-- Board: Adafruit QT Py ESP32-S3 with 8MB PSRAM (Wi-Fi + BLE).
+- Chip on the desk: Wi-Fi only, no BLE. A BLE board is expected next. Until then, firmware is `firmware/voice-esp32` with `NEARBY_HAS_BLE` left at 0.
 - On order (Amazon): I²S MEMS microphone module, 1.28" round GC9A01 SPI display, plus parts for assembly. Confirm the exact models and pinouts before writing wiring.
 - Have: laptop, AirPods / Bluetooth headphones, breadboard.
 - Constraint: the ESP32-S3 cannot connect to AirPods as a Bluetooth Classic audio headset. Design around it: AirPods go through the laptop or phone, not the board.
+- **Wearable form (Oct 11 2026):** necklace / pendant for the first physical prototype — cheaper and easier than a watch (looser enclosure, bigger battery, mic can face up). Not a polished consumer shell yet. Watch is not the V1 target.
 - Retired: the Seeed XIAO nRF52840 color-ring firmware under `firmware/`. Leave it in place; don't extend it.
 
 ## Architecture (modular, loosely coupled)
@@ -27,7 +28,7 @@ Domain: [nearbyhello.com](https://www.nearbyhello.com) (bought Oct 11 2026 on Na
 | Agent | reasoning, tool selection, orchestration, context and memory | API |
 | Integrations | calendar, reminders, notes, search, other approved tools | API |
 | Device | ESP32-S3 firmware: Wi-Fi, auth, backend calls, BLE, display | mock mic, serial output |
-| Companion | future phone app for connectivity, audio routing, background | later |
+| Companion | phone and web Talk screen: one turn, spoken reply, permission before a tool | now |
 
 Key design choice: the agent lives in the API behind one endpoint (for example `POST /v1/agent`). Every input calls the same endpoint: the laptop now, the ESP32 later, the phone after that. Swapping inputs never means rewriting the agent.
 
@@ -48,6 +49,8 @@ Reuse what works. Don't rebuild it.
 - Tools only run with the user's permission. Memory only keeps what the user approved.
 - Log errors and handle them clearly at every layer.
 - Don't optimize the enclosure, industrial design, manufacturing, or battery yet.
+- The color-clip BLE scan is off in the phone and the website. Leave `/v1/matches` and `/v1/ble/sightings` in the API. Don't put the scan UI back.
+- New device code is `firmware/voice-esp32` only. Leave the color-ring sketches alone. BLE audio stays off until the BLE board is here.
 
 ## Priorities (in order)
 
@@ -61,7 +64,7 @@ Reuse what works. Don't rebuild it.
 
 ## Milestones
 
-- **M1, working voice agent:** speak through the laptop or AirPods and get a spoken answer. Current target.
+- **M1, working voice agent:** speak through the laptop, the phone, or AirPods and get a spoken answer. Current target. The phone types the turn until the next dev build grows a microphone button. The website can use the laptop microphone.
 - **M2, useful actions:** at least 3 tasks work, such as checking the calendar, capturing a note, and setting a reminder.
 - **M3, ESP32 talks to the backend:** Wi-Fi, a request to the backend, a valid response.
 - **M4, physical voice prototype:** audio from the I²S mic reaches Nearby and gets a response.
@@ -89,6 +92,15 @@ Reuse what works. Don't rebuild it.
 ## Market context (scenarios only, Oct 11 2026)
 
 The space is crowded, and several products have failed. Humane's Pin was disabled Feb 28 2025 after returns outpaced sales, and HP bought the platform, patents, and staff. Rabbit is no longer made. Limitless stopped selling after Meta bought it. Bee is now inside Amazon. Still shipping or upcoming: Plaud (about 2M devices), Omi, Friend, Button ($179 preorder, ships Dec 2026), Sandbar Stream ring, Flic Cue, and an OpenAI device. Market size estimates swing widely with assumed adoption, so they aren't a plan yet.
+
+### Lessons from recent failures (design against these)
+
+- **Rabbit R1:** Sold a new shell around a phone job. Demo wow, daily shrug. Slow cloud gimmicks and a worse app in a box. Nearby does not ship hardware until the laptop/AirPods loop is something Montrell actually uses.
+- **Omi:** Wearable as always-on recorder / meeting capture. Privacy creep and "is that thing listening?" in a room. Nearby is not a recorder. Tools and memory only with explicit permission.
+- **Friend:** Companion necklace — chat for its own sake, emotional product, unclear task. Nearby is not a friend in your ear. Short spoken answers for real tasks, then silence.
+- **Shared failure mode:** Marketing a vibe and a form factor before a daily job. Nearby's order is function → voice reliability → useful tools → then a device people might wear.
+
+Public marketing should say what we refuse (phone-in-a-box, companion, recorder) without trash-talking competitors by name on the homepage.
 
 ## Still to decide
 

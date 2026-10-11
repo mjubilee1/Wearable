@@ -438,6 +438,49 @@ export function walkBySignal(input: {
   return { close, green };
 }
 
+export const AGENT_TOOL_NAMES = [
+  "calendar",
+  "note",
+  "reminder",
+  "remember",
+] as const;
+
+export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
+
+export function isAgentToolName(value: string): value is AgentToolName {
+  return (AGENT_TOOL_NAMES as readonly string[]).includes(value);
+}
+
+/** One spoken turn. A tool is proposed here and only runs after `decision`. */
+export type AgentTurnRequest = {
+  text?: string;
+  decision?: {
+    tool: AgentToolName;
+    approved: boolean;
+    summary: string;
+    payload: Record<string, string>;
+  };
+};
+
+export type AgentPendingTool = {
+  tool: AgentToolName;
+  summary: string;
+  payload: Record<string, string>;
+};
+
+export type AgentTurnResponse = {
+  reply: string;
+  pendingTool: AgentPendingTool | null;
+  mode: "openai" | "mock";
+};
+
+/** A fact the user explicitly agreed to keep. */
+export type AgentMemoryItem = {
+  id: string;
+  text: string;
+  createdAt: number;
+};
+
 export function mockFacilitate(
   self: UserProfile,
   other: UserProfile,
