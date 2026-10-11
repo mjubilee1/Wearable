@@ -29,6 +29,7 @@ import {
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 import { listClipSightingsForUser, recordClipSighting } from "./sightings.js";
+import { joinWaitlist } from "./waitlist.js";
 
 // Load apps/api/.env whether started from repo root or apps/api
 const apiDir = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -105,6 +106,8 @@ app.use(
         origin.startsWith("http://localhost:") ||
         origin.startsWith("http://127.0.0.1:") ||
         origin.endsWith(".vercel.app") ||
+        origin === "https://nearbyhello.com" ||
+        origin === "https://www.nearbyhello.com" ||
         origin === process.env.WEB_ORIGIN
       ) {
         return origin;
@@ -125,6 +128,30 @@ app.get("/health", (c) =>
     stripeWebhook: isStripeWebhookConfigured(),
   }),
 );
+
+/** Public marketing waitlist. Body: { email, source? } */
+app.post("/v1/waitlist", async (c) => {
+  const body = (await c.req.json().catch(() => null)) as {
+    email?: string;
+    source?: string;
+  } | null;
+
+  try {
+    const record = await joinWaitlist({
+      email: String(body?.email ?? ""),
+      source: body?.source,
+    });
+    return c.json({
+      ok: true,
+      email: record.email,
+      alreadyJoined: record.alreadyJoined,
+      mode: isFirebaseConfigured() ? "firebase" : "mock",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed";
+    return c.json({ error: message }, 400);
+  }
+});
 
 /** Stripe webhook — raw body required for signature verification. */
 app.post("/v1/billing/webhook", async (c) => {

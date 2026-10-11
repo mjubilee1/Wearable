@@ -115,5 +115,25 @@ service cloud.firestore {
     match /clipSightings/{sightingId} {
       allow read, write: if false;
     }
+
+    // Public marketing waitlist. Create/merge only; nobody reads from clients.
+    match /waitlist/{entryId} {
+      allow create: if request.resource.data.keys().hasAll(['email', 'createdAt', 'source'])
+        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'updatedAt', 'source'])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 3
+        && request.resource.data.email.size() <= 320
+        && request.resource.data.source is string
+        && request.resource.data.source.size() > 0
+        && request.resource.data.source.size() <= 64
+        && request.resource.data.createdAt is number;
+
+      allow update: if request.resource.data.email == resource.data.email
+        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'updatedAt', 'source'])
+        && request.resource.data.email is string
+        && request.resource.data.source is string;
+
+      allow read, delete: if false;
+    }
   }
 }
