@@ -13,6 +13,8 @@
     "start": "pnpm --filter @nearby/api start",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
+    "stripe:setup": "pnpm --filter @nearby/api exec tsx ../../scripts/stripe-setup.ts",
+    "stripe:test": "pnpm --filter @nearby/api exec tsx ../../scripts/stripe-test-mode.ts",
     "fw:green": "cd firmware/ble-ring-green-test && pio run -e xiaoblesense -t upload",
     "fw:green:monitor": "cd firmware/ble-ring-green-test && pio device monitor -e xiaoblesense -b 115200",
     "fw:peer": "cd firmware/ble-peer-beacon-test && pio run -e xiaoblesense -t upload",

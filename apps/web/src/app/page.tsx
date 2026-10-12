@@ -29,6 +29,14 @@ const TASKS = [
     title: "Draft the reply",
     body: "Draft a reply to the lender asking for the updated pre-approval.",
   },
+  {
+    title: "Follow up",
+    body: "Remind me to follow up with the Johnsons Friday",
+  },
+  {
+    title: "Add a task",
+    body: "Add pick up dry cleaning to my tasks",
+  },
 ] as const;
 
 export default function HomePage() {
@@ -63,7 +71,7 @@ export default function HomePage() {
         </section>
 
         <section className="px-5 pb-16">
-          <div className="mx-auto grid max-w-4xl gap-3 sm:grid-cols-3">
+          <div className="mx-auto grid max-w-4xl gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {TASKS.map((task) => (
               <div
                 key={task.title}

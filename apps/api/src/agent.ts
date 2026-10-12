@@ -334,7 +334,15 @@ async function readPlan(uid: string): Promise<"free" | "pro"> {
       .collection("users")
       .doc(uid)
       .get();
-    return hasProAccess(snap.data() ?? {}) ? "pro" : "free";
+    const data = snap.data() ?? {};
+    if (!hasProAccess(data)) {
+      const email = typeof data.email === "string" ? data.email : null;
+      const { syncTeamMembershipForUser } = await import("./billing.js");
+      const granted = await syncTeamMembershipForUser({ uid, email });
+      if (granted) return "pro";
+      return "free";
+    }
+    return "pro";
   } catch (error) {
     console.error("[agent] plan", error);
     return "free";

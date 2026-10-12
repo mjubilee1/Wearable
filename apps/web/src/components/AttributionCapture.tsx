@@ -3,14 +3,17 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { captureAttribution } from "@/lib/attribution";
+import { capturePromo } from "@/lib/promo";
 
-/** Remember first-touch utm params so a later signup still has them. */
+/** Remember first-touch utm params and ?promo= for checkout. */
 export function AttributionCapture() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
     const query = searchParams.toString();
-    captureAttribution(query ? `?${query}` : "");
+    const search = query ? `?${query}` : "";
+    captureAttribution(search);
+    capturePromo(search);
   }, [searchParams]);
 
   return null;

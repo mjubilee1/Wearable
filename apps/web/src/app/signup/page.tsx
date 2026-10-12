@@ -7,6 +7,8 @@ import { isEmailLikeName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { captureAttribution } from "@/lib/attribution";
 import { trackFunnel } from "@/lib/funnel";
+import { capturePromo } from "@/lib/promo";
+import { readReferral } from "@/lib/referral";
 
 const ONBOARDING_FLAG = "nearby_onboarding";
 
@@ -20,6 +22,7 @@ export default function SignupPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    capturePromo();
     trackFunnel("signup_start", { plan: "free" }, {
       scope: "session",
       key: "signup_start",
@@ -58,6 +61,7 @@ export default function SignupPage() {
         utmSource: touch.utm_source,
         utmMedium: touch.utm_medium,
         utmCampaign: touch.utm_campaign,
+        referredBy: readReferral(),
       });
       trackFunnel("signup_complete", { plan: "free" }, {
         scope: "session",

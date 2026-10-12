@@ -43,6 +43,12 @@ services:
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
+      - key: STRIPE_PRICE_ID_PRO_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_ID_PRO_YEARLY
+        sync: false
+      - key: STRIPE_PRICE_ID_TEAM_MONTHLY
+        sync: false
       - key: STRIPE_PRICE_ID_NEARBY_PLUS
         sync: false
       - key: STRIPE_WEBHOOK_SECRET

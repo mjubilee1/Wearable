@@ -40,7 +40,19 @@ service cloud.firestore {
         && !('stripeCustomerIdLive' in request.resource.data
             && request.resource.data.stripeCustomerIdLive != null)
         && !('stripeSubscriptionId' in request.resource.data
-            && request.resource.data.stripeSubscriptionId != null);
+            && request.resource.data.stripeSubscriptionId != null)
+        && !('promoCode' in request.resource.data
+            && request.resource.data.promoCode != null)
+        && !('seats' in request.resource.data
+            && request.resource.data.seats != null)
+        && !('teamOwnerId' in request.resource.data
+            && request.resource.data.teamOwnerId != null)
+        && !('referralCode' in request.resource.data
+            && request.resource.data.referralCode != null)
+        && (!('referralCount' in request.resource.data)
+            || request.resource.data.referralCount == 0)
+        && (!('teamMemberEmails' in request.resource.data)
+            || request.resource.data.teamMemberEmails.size() == 0);
     }
 
     match /users/{userId} {
@@ -126,6 +138,11 @@ service cloud.firestore {
     }
 
     match /agentState/{uid} {
+      allow read, write: if false;
+    }
+
+    // Team seat invites — API (Admin SDK) only.
+    match /teamInvites/{email} {
       allow read, write: if false;
     }
 

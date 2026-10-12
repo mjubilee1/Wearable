@@ -4,13 +4,26 @@ export type ProfilePrompt = {
   answer: string;
 };
 
-/** Paid plan tier. Hardware is separate; this is the recurring SaaS layer. */
-export type PlanTier = "free" | "pro";
+/**
+ * Paid plan tier. Hardware is separate; this is the recurring SaaS layer.
+ * `pro` / `plus` are legacy. Checkout writes pro_monthly, pro_annual, or team.
+ * `team_member` is seat access through a team owner's subscription.
+ */
+export type PlanTier =
+  | "free"
+  | "pro"
+  | "pro_monthly"
+  | "pro_annual"
+  | "team"
+  | "team_member";
 
 /** Legacy Firestore value from the Nearby+ spike. Read as Pro. */
 export type StoredPlanTier = PlanTier | "plus";
 
 export type BillingInterval = "month" | "year";
+
+/** Checkout plan picker keys (map to Stripe price lookup_keys). */
+export type CheckoutPlan = "pro_monthly" | "pro_annual" | "team";
 
 export type SubscriptionStatus =
   | "none"
@@ -22,11 +35,24 @@ export type SubscriptionStatus =
   | "incomplete";
 
 export const PRO_MONTHLY_USD = 29;
-export const PRO_YEARLY_USD = 290;
+export const PRO_YEARLY_USD = 249;
+/** @deprecated Use PRO_YEARLY_USD. Old Stripe yearly price was $290. */
+export const PRO_YEARLY_USD_LEGACY = 290;
+export const TEAM_MONTHLY_USD = 199;
+export const TEAM_SEATS = 10;
+/** Owner takes one seat; up to 9 invitees. */
+export const TEAM_INVITE_LIMIT = 9;
 export const PRO_TRIAL_DAYS = 7;
+/** Rough savings vs 12 × monthly. */
+export const PRO_ANNUAL_SAVE_PERCENT = 28;
 export const FREE_DAILY_REQUESTS = 20;
 export const FREE_DAILY_RESCHEDULES = 3;
 export const FREE_DAILY_DRAFTS = 3;
+
+export const STRIPE_LOOKUP_PRO_MONTHLY = "pro_monthly";
+export const STRIPE_LOOKUP_PRO_ANNUAL = "pro_annual";
+export const STRIPE_LOOKUP_TEAM_MONTHLY = "team_monthly";
+export const FOUNDING_PROMO_CODE = "FOUNDING19";
 
 export type LimitFeature = "requests" | "reschedule" | "draft_email";
 
@@ -37,10 +63,36 @@ export type LimitReachedBody = {
 };
 
 export function normalizePlan(plan: unknown): PlanTier {
-  return plan === "pro" || plan === "plus" ? "pro" : "free";
+  if (
+    plan === "pro_monthly" ||
+    plan === "pro_annual" ||
+    plan === "team" ||
+    plan === "team_member"
+  ) {
+    return plan;
+  }
+  if (plan === "pro" || plan === "plus") return "pro";
+  return "free";
 }
 
-/** Pro, trial, or a failed payment still inside the paid period. */
+export function isPaidPlan(plan: unknown): boolean {
+  return normalizePlan(plan) !== "free";
+}
+
+/** Checkout plan → Stripe price lookup_key. */
+export function lookupKeyForCheckoutPlan(plan: CheckoutPlan): string {
+  if (plan === "pro_annual") return STRIPE_LOOKUP_PRO_ANNUAL;
+  if (plan === "team") return STRIPE_LOOKUP_TEAM_MONTHLY;
+  return STRIPE_LOOKUP_PRO_MONTHLY;
+}
+
+export function checkoutPlanFromInterval(
+  interval: BillingInterval,
+): CheckoutPlan {
+  return interval === "year" ? "pro_annual" : "pro_monthly";
+}
+
+/** Pro, trial, team seat, or a failed payment still inside the paid period. */
 export function hasProAccess(profile: {
   plan?: string | null;
   subscriptionStatus?: string | null;
@@ -49,7 +101,7 @@ export function hasProAccess(profile: {
   if (status !== "active" && status !== "trialing" && status !== "past_due") {
     return false;
   }
-  return normalizePlan(profile.plan) === "pro";
+  return isPaidPlan(profile.plan);
 }
 
 export function isLimitReachedBody(value: unknown): value is LimitReachedBody {
@@ -113,6 +165,20 @@ export type UserProfile = {
   billingInterval?: BillingInterval | null;
   /** Unix ms of the last failed invoice. Cleared when payment succeeds. */
   paymentFailedAt?: number | null;
+  /** Promotion code applied at checkout (e.g. FOUNDING19). */
+  promoCode?: string | null;
+  /** Team seat count when plan is team (owner). */
+  seats?: number | null;
+  /** Invited member emails (owner). Lowercased. */
+  teamMemberEmails?: string[];
+  /** Team owner uid when this user is on a seat. */
+  teamOwnerId?: string | null;
+  /** Short code for /r/<code> referral links. */
+  referralCode?: string | null;
+  /** Successful referral conversions (trial → paid). */
+  referralCount?: number;
+  /** Referrer's referralCode captured at signup. */
+  referredBy?: string | null;
   /** First-touch campaign params saved at signup. */
   utmSource?: string | null;
   utmMedium?: string | null;

@@ -32,11 +32,17 @@ import { verifyAuth } from "./auth.js";
 import {
   createCheckoutSession,
   createPortalSession,
+  getReferralInfo,
   handleStripeWebhook,
+  inviteTeamMember,
   isStripeConfigured,
   isStripeWebhookConfigured,
+  listTeamState,
+  removeTeamMember,
   stripeCustomerIdForProfile,
+  syncTeamMembershipForUser,
 } from "./billing.js";
+import type { CheckoutPlan } from "@nearby/shared";
 import { LimitReachedError } from "./limits.js";
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
@@ -196,6 +202,22 @@ app.post("/v1/billing/webhook", async (c) => {
   }
 });
 
+function parseCheckoutPlan(body: {
+  plan?: string;
+  interval?: string;
+} | null): CheckoutPlan {
+  if (
+    body?.plan === "pro_monthly" ||
+    body?.plan === "pro_annual" ||
+    body?.plan === "team"
+  ) {
+    return body.plan;
+  }
+  if (body?.interval === "year") return "pro_annual";
+  if (body?.interval === "team") return "team";
+  return "pro_monthly";
+}
+
 app.post("/v1/billing/checkout", async (c) => {
   if (!isStripeConfigured()) {
     return c.json({ error: "Billing not configured" }, 503);
@@ -205,14 +227,26 @@ app.post("/v1/billing/checkout", async (c) => {
 
   const profile =
     (await loadProfile(auth.uid)) ?? demoSelf(auth.uid, auth.email);
-  if (hasProAccess(profile)) {
+  await syncTeamMembershipForUser({
+    uid: auth.uid,
+    email: auth.email ?? profile.email,
+  });
+  const fresh =
+    (await loadProfile(auth.uid)) ?? demoSelf(auth.uid, auth.email);
+  if (hasProAccess(fresh)) {
     return c.json({ error: "Already on Pro" }, 409);
   }
 
   const body = (await c.req.json().catch(() => null)) as {
+    plan?: string;
     interval?: string;
+    promo?: string;
+    promoCode?: string;
+    referredBy?: string;
   } | null;
-  const interval = body?.interval === "year" ? "year" : "month";
+  const plan = parseCheckoutPlan(body);
+  const promoCode = (body?.promoCode || body?.promo || "").trim() || null;
+  const referredBy = (body?.referredBy || "").trim() || null;
 
   try {
     const session = await createCheckoutSession({
@@ -221,13 +255,81 @@ app.post("/v1/billing/checkout", async (c) => {
       stripeCustomerId: profile.stripeCustomerId,
       stripeCustomerIdTest: profile.stripeCustomerIdTest,
       stripeCustomerIdLive: profile.stripeCustomerIdLive,
-      interval,
+      plan,
+      promoCode,
+      referredBy: referredBy || (typeof profile.referredBy === "string" ? profile.referredBy : null),
     });
     return c.json(session);
   } catch (err) {
     console.error("[billing] checkout error", err);
     return c.json({ error: "Couldn't start checkout, try again." }, 500);
   }
+});
+
+app.get("/v1/billing/team", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json(await listTeamState(auth.uid));
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "Team failed" },
+      400,
+    );
+  }
+});
+
+app.post("/v1/billing/team/invite", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as { email?: string } | null;
+  if (!body?.email) return c.json({ error: "email required" }, 400);
+  try {
+    return c.json(await inviteTeamMember(auth.uid, body.email));
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "Invite failed" },
+      400,
+    );
+  }
+});
+
+app.post("/v1/billing/team/remove", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as { email?: string } | null;
+  if (!body?.email) return c.json({ error: "email required" }, 400);
+  try {
+    return c.json(await removeTeamMember(auth.uid, body.email));
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "Remove failed" },
+      400,
+    );
+  }
+});
+
+app.get("/v1/billing/referral", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json(await getReferralInfo(auth.uid));
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "Referral failed" },
+      400,
+    );
+  }
+});
+
+app.post("/v1/billing/team/sync", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const granted = await syncTeamMembershipForUser({
+    uid: auth.uid,
+    email: auth.email,
+  });
+  return c.json({ granted });
 });
 
 app.post("/v1/billing/portal", async (c) => {

@@ -5,7 +5,9 @@ import Link from "next/link";
 import { isEmailLikeName } from "@nearby/shared";
 import { PlansCard } from "@/components/PlansCard";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
+import { ReferralCard } from "@/components/ReferralCard";
 import { TabBar } from "@/components/TabBar";
+import { TeamSeatsCard } from "@/components/TeamSeatsCard";
 import { useAuth } from "@/lib/auth-context";
 import { updateUserProfile } from "@/lib/users";
 
@@ -75,6 +77,8 @@ export default function ProfilePage() {
         <Suspense fallback={null}>
           <PlansCard />
         </Suspense>
+        <TeamSeatsCard />
+        <ReferralCard />
 
         <Link
           href="/connectors"

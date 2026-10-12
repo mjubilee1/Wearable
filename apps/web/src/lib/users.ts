@@ -109,6 +109,20 @@ function mapUser(id: string, data: DocumentData): UserProfile {
         : null,
     paymentFailedAt:
       typeof data.paymentFailedAt === "number" ? data.paymentFailedAt : null,
+    promoCode: typeof data.promoCode === "string" ? data.promoCode : null,
+    seats: typeof data.seats === "number" ? data.seats : null,
+    teamMemberEmails: Array.isArray(data.teamMemberEmails)
+      ? data.teamMemberEmails.map(String)
+      : [],
+    teamOwnerId:
+      data.teamOwnerId === undefined || data.teamOwnerId === null
+        ? null
+        : String(data.teamOwnerId),
+    referralCode:
+      typeof data.referralCode === "string" ? data.referralCode : null,
+    referralCount:
+      typeof data.referralCount === "number" ? data.referralCount : 0,
+    referredBy: typeof data.referredBy === "string" ? data.referredBy : null,
     utmSource: typeof data.utmSource === "string" ? data.utmSource : null,
     utmMedium: typeof data.utmMedium === "string" ? data.utmMedium : null,
     utmCampaign: typeof data.utmCampaign === "string" ? data.utmCampaign : null,
@@ -142,11 +156,12 @@ export async function createUserProfile(input: {
   utmSource?: string | null;
   utmMedium?: string | null;
   utmCampaign?: string | null;
+  referredBy?: string | null;
 }): Promise<UserProfile> {
   const now = Date.now();
   const profile: UserProfile = {
     id: input.uid,
-    email: input.email,
+    email: input.email.trim().toLowerCase(),
     name: input.name.trim(),
     age: input.age,
     role: input.role.trim(),
@@ -170,6 +185,13 @@ export async function createUserProfile(input: {
     cancelAtPeriodEnd: false,
     billingInterval: null,
     paymentFailedAt: null,
+    promoCode: null,
+    seats: null,
+    teamMemberEmails: [],
+    teamOwnerId: null,
+    referralCode: null,
+    referralCount: 0,
+    referredBy: input.referredBy ?? null,
     utmSource: input.utmSource ?? null,
     utmMedium: input.utmMedium ?? null,
     utmCampaign: input.utmCampaign ?? null,
