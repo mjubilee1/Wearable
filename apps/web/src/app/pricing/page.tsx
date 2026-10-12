@@ -6,7 +6,7 @@ import { PricingSection } from "@/components/PricingSection";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Nearby Free and Pro. 20 requests a day on Free. Unlimited on Pro for $29 a month or $290 a year, with a 7-day trial.",
+    "Nearby Free and Pro. 20 requests a day on Free. Unlimited on Pro for $29 a month or $249 a year, with a 7-day trial.",
   alternates: { canonical: "/pricing" },
 };
 

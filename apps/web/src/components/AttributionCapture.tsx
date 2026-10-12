@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { captureAttribution } from "@/lib/attribution";
+import { captureOfferParams } from "@/lib/offers";
 
 /** Remember first-touch utm params so a later signup still has them. */
 export function AttributionCapture() {
@@ -11,6 +12,7 @@ export function AttributionCapture() {
   useEffect(() => {
     const query = searchParams.toString();
     captureAttribution(query ? `?${query}` : "");
+    captureOfferParams(new URLSearchParams(query));
   }, [searchParams]);
 
   return null;

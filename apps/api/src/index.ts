@@ -35,6 +35,7 @@ import {
   handleStripeWebhook,
   isStripeConfigured,
   isStripeWebhookConfigured,
+  referralSummary,
   stripeCustomerIdForProfile,
 } from "./billing.js";
 import { LimitReachedError } from "./limits.js";
@@ -211,6 +212,8 @@ app.post("/v1/billing/checkout", async (c) => {
 
   const body = (await c.req.json().catch(() => null)) as {
     interval?: string;
+    promoCode?: string | null;
+    referralCode?: string | null;
   } | null;
   const interval = body?.interval === "year" ? "year" : "month";
 
@@ -222,12 +225,28 @@ app.post("/v1/billing/checkout", async (c) => {
       stripeCustomerIdTest: profile.stripeCustomerIdTest,
       stripeCustomerIdLive: profile.stripeCustomerIdLive,
       interval,
+      promoCode:
+        typeof body?.promoCode === "string" ? body.promoCode : null,
+      referralCode:
+        (typeof body?.referralCode === "string"
+          ? body.referralCode
+          : profile.referredByCode) ?? null,
     });
     return c.json(session);
   } catch (err) {
     console.error("[billing] checkout error", err);
     return c.json({ error: "Couldn't start checkout, try again." }, 500);
   }
+});
+
+app.get("/v1/referrals", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const summary = await referralSummary(auth.uid);
+  if (!summary) {
+    return c.json({ error: "Referrals are available on Pro" }, 403);
+  }
+  return c.json(summary);
 });
 
 app.post("/v1/billing/portal", async (c) => {

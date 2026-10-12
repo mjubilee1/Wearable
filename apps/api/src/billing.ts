@@ -1,4 +1,6 @@
 import Stripe from "stripe";
+import { randomBytes } from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
 import {
   hasProAccess,
   PRO_TRIAL_DAYS,
@@ -10,33 +12,70 @@ import { notifyPaymentFailed } from "./emails.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 
 let stripeClient: Stripe | null = null;
+const priceCache = new Map<BillingInterval, Promise<string>>();
 
-export function monthlyPriceId(): string | null {
-  return (
-    process.env.STRIPE_PRICE_ID_PRO_MONTHLY?.trim() ||
-    process.env.STRIPE_PRICE_ID_NEARBY_PLUS?.trim() ||
-    null
+const PRICE_LOOKUP_KEYS: Record<BillingInterval, string> = {
+  month: "pro_monthly",
+  year: "pro_annual",
+};
+const FOUNDING_PROMO_CODE = "FOUNDING19";
+
+async function findProProduct(stripe: Stripe): Promise<Stripe.Product> {
+  const products = await stripe.products.list({ active: true, limit: 100 });
+  const product = products.data.find(
+    (item) => item.name.trim().toLowerCase() === "pro",
   );
+  if (!product) throw new Error("No active Stripe product named Pro");
+  return product;
 }
 
-export function yearlyPriceId(): string | null {
-  return process.env.STRIPE_PRICE_ID_PRO_YEARLY?.trim() || null;
-}
+async function discoverPriceId(interval: BillingInterval): Promise<string> {
+  const stripe = getStripe();
+  const byKey = await stripe.prices.list({
+    active: true,
+    lookup_keys: [PRICE_LOOKUP_KEYS[interval]],
+    type: "recurring",
+    limit: 10,
+  });
+  const keyed = byKey.data.find(
+    (price) => price.recurring?.interval === interval,
+  );
+  if (keyed) return keyed.id;
 
-export function priceIdFor(interval: BillingInterval): string {
-  const id = interval === "year" ? yearlyPriceId() : monthlyPriceId();
-  if (!id) {
-    throw new Error(
-      interval === "year"
-        ? "STRIPE_PRICE_ID_PRO_YEARLY is not set"
-        : "STRIPE_PRICE_ID_PRO_MONTHLY is not set",
-    );
+  const product = await findProProduct(stripe);
+  const prices = await stripe.prices.list({
+    active: true,
+    product: product.id,
+    type: "recurring",
+    limit: 100,
+  });
+  const expectedAmount = interval === "month" ? 2900 : 24900;
+  const candidates = prices.data.filter(
+    (price) => price.recurring?.interval === interval,
+  );
+  const fallback =
+    candidates.find(
+      (price) => price.currency === "usd" && price.unit_amount === expectedAmount,
+    ) ?? candidates[0];
+  if (!fallback) {
+    throw new Error(`No active ${interval} recurring price on the Pro product`);
   }
-  return id;
+  return fallback.id;
+}
+
+export function priceIdFor(interval: BillingInterval): Promise<string> {
+  const cached = priceCache.get(interval);
+  if (cached) return cached;
+  const request = discoverPriceId(interval).catch((error) => {
+    priceCache.delete(interval);
+    throw error;
+  });
+  priceCache.set(interval, request);
+  return request;
 }
 
 export function isStripeConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY && monthlyPriceId());
+  return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
 export function isStripeWebhookConfigured(): boolean {
@@ -49,6 +88,12 @@ export function getStripe(): Stripe {
   if (!key) throw new Error("STRIPE_SECRET_KEY is not set");
   stripeClient = new Stripe(key);
   return stripeClient;
+}
+
+/** Only used by the local billing contract test. */
+export function setStripeClientForTest(client: Stripe | null): void {
+  stripeClient = client;
+  priceCache.clear();
 }
 
 export function appBaseUrl(): string {
@@ -69,6 +114,12 @@ export type BillingPatch = {
   cancelAtPeriodEnd?: boolean;
   billingInterval?: BillingInterval | null;
   paymentFailedAt?: number | null;
+  promoCode?: string | null;
+  referralCode?: string | null;
+  referredByCode?: string | null;
+  referredByUid?: string | null;
+  referralCount?: number;
+  referralRewardedAt?: number | null;
 };
 
 function statusFromStripe(status: Stripe.Subscription.Status): SubscriptionStatus {
@@ -133,6 +184,73 @@ export async function upsertBillingOnUser(
     if (value !== undefined) fields[key] = value;
   }
   await ref.set(fields, { merge: true });
+}
+
+function newReferralCode(): string {
+  return randomBytes(5)
+    .toString("base64url")
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(0, 8)
+    .toUpperCase();
+}
+
+async function userByReferralCode(
+  code: string,
+): Promise<{ uid: string; data: Record<string, unknown> } | null> {
+  if (!isFirebaseConfigured()) return null;
+  const snap = await getFirebaseAdmin()
+    .firestore()
+    .collection("users")
+    .where("referralCode", "==", code.trim().toUpperCase())
+    .limit(1)
+    .get();
+  const doc = snap.docs[0];
+  return doc ? { uid: doc.id, data: doc.data() ?? {} } : null;
+}
+
+export async function ensureReferralCode(uid: string): Promise<string | null> {
+  if (!isFirebaseConfigured()) return null;
+  const db = getFirebaseAdmin().firestore();
+  const ref = db.collection("users").doc(uid);
+  const user = await ref.get();
+  const current = user.data()?.referralCode;
+  if (typeof current === "string" && current) return current;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = newReferralCode();
+    if (await userByReferralCode(code)) continue;
+    await ref.set({ referralCode: code, referralCount: 0 }, { merge: true });
+    return code;
+  }
+  throw new Error("Could not allocate a referral code");
+}
+
+export async function referralSummary(uid: string): Promise<{
+  code: string;
+  count: number;
+} | null> {
+  if (!isFirebaseConfigured()) return null;
+  const ref = getFirebaseAdmin().firestore().collection("users").doc(uid);
+  const snap = await ref.get();
+  const data = snap.data();
+  if (
+    !data ||
+    !hasProAccess({
+      plan: typeof data.plan === "string" ? data.plan : null,
+      subscriptionStatus:
+        typeof data.subscriptionStatus === "string"
+          ? data.subscriptionStatus
+          : null,
+    })
+  ) {
+    return null;
+  }
+  const code = await ensureReferralCode(uid);
+  if (!code) return null;
+  return {
+    code,
+    count: typeof data.referralCount === "number" ? data.referralCount : 0,
+  };
 }
 
 /** Test keys contain `_test_`. Live secret and restricted keys do not. */
@@ -246,6 +364,35 @@ export async function ensureStripeCustomer(opts: {
   return customer.id;
 }
 
+async function findPromotionCode(code: string): Promise<Stripe.PromotionCode | null> {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return null;
+  const result = await getStripe().promotionCodes.list({
+    active: true,
+    code: normalized,
+    limit: 10,
+  });
+  return (
+    result.data.find(
+      (promotion) => promotion.code.toUpperCase() === normalized,
+    ) ?? null
+  );
+}
+
+async function attachReferral(opts: {
+  uid: string;
+  referralCode?: string | null;
+}): Promise<void> {
+  const code = opts.referralCode?.trim().toUpperCase();
+  if (!code || !isFirebaseConfigured()) return;
+  const referrer = await userByReferralCode(code);
+  if (!referrer || referrer.uid === opts.uid) return;
+  await upsertBillingOnUser(opts.uid, {
+    referredByCode: code,
+    referredByUid: referrer.uid,
+  });
+}
+
 export async function createCheckoutSession(opts: {
   uid: string;
   email?: string;
@@ -253,8 +400,14 @@ export async function createCheckoutSession(opts: {
   stripeCustomerIdTest?: string | null;
   stripeCustomerIdLive?: string | null;
   interval: BillingInterval;
+  promoCode?: string | null;
+  referralCode?: string | null;
 }): Promise<{ url: string }> {
   const stripe = getStripe();
+  await attachReferral({
+    uid: opts.uid,
+    referralCode: opts.referralCode,
+  });
   const customerId = await ensureStripeCustomer({
     uid: opts.uid,
     email: opts.email,
@@ -262,15 +415,32 @@ export async function createCheckoutSession(opts: {
     stripeCustomerIdTest: opts.stripeCustomerIdTest,
     stripeCustomerIdLive: opts.stripeCustomerIdLive,
   });
+  const promotion =
+    opts.interval === "month" &&
+    opts.promoCode?.trim().toUpperCase() === FOUNDING_PROMO_CODE
+      ? await findPromotionCode(FOUNDING_PROMO_CODE)
+      : null;
+  if (
+    opts.interval === "month" &&
+    opts.promoCode?.trim().toUpperCase() === FOUNDING_PROMO_CODE &&
+    !promotion
+  ) {
+    throw new Error("Promotion code is not active");
+  }
+
+  const promoCode = promotion?.code.toUpperCase() ?? null;
+  const discountOptions = promotion
+    ? { discounts: [{ promotion_code: promotion.id }] }
+    : { allow_promotion_codes: true };
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
     client_reference_id: opts.uid,
-    line_items: [{ price: priceIdFor(opts.interval), quantity: 1 }],
+    line_items: [{ price: await priceIdFor(opts.interval), quantity: 1 }],
     success_url: `${appBaseUrl()}/activity?billing=success`,
     cancel_url: `${appBaseUrl()}/profile?billing=canceled`,
-    allow_promotion_codes: true,
+    ...discountOptions,
     payment_method_collection: "always",
     subscription_data: {
       trial_period_days: PRO_TRIAL_DAYS,
@@ -278,12 +448,14 @@ export async function createCheckoutSession(opts: {
         firebaseUid: opts.uid,
         plan: "pro",
         interval: opts.interval,
+        ...(promoCode ? { promoCode } : {}),
       },
     },
     metadata: {
       firebaseUid: opts.uid,
       plan: "pro",
       interval: opts.interval,
+      ...(promoCode ? { promoCode } : {}),
     },
   });
 
@@ -318,6 +490,37 @@ async function resolveUidFromSubscription(
   return undefined;
 }
 
+function promotionCodeName(
+  promotion: string | Stripe.PromotionCode | null,
+): string | null {
+  return promotion && typeof promotion !== "string"
+    ? promotion.code.toUpperCase()
+    : null;
+}
+
+function promoCodeFromSubscription(
+  subscription: Stripe.Subscription,
+): string | null {
+  const metadataCode = subscription.metadata?.promoCode;
+  if (metadataCode) return metadataCode.toUpperCase();
+  for (const discount of subscription.discounts) {
+    if (typeof discount === "string") continue;
+    const code = promotionCodeName(discount.promotion_code);
+    if (code) return code;
+  }
+  return null;
+}
+
+function promoCodeFromSession(session: Stripe.Checkout.Session): string | null {
+  const metadataCode = session.metadata?.promoCode;
+  if (metadataCode) return metadataCode.toUpperCase();
+  for (const discount of session.discounts ?? []) {
+    const code = promotionCodeName(discount.promotion_code);
+    if (code) return code;
+  }
+  return null;
+}
+
 function customerIdOf(subscription: Stripe.Subscription): string | null {
   if (typeof subscription.customer === "string") return subscription.customer;
   return subscription.customer?.id ?? null;
@@ -326,6 +529,7 @@ function customerIdOf(subscription: Stripe.Subscription): string | null {
 async function applySubscription(
   subscription: Stripe.Subscription,
   fallbackUid?: string,
+  fallbackPromoCode?: string | null,
 ): Promise<void> {
   const uid = await resolveUidFromSubscription(subscription, fallbackUid);
   if (!uid) {
@@ -336,6 +540,7 @@ async function applySubscription(
   const status = statusFromStripe(subscription.status);
   const paid = status === "active" || status === "trialing" || status === "past_due";
   const customerId = customerIdOf(subscription);
+  const promoCode = promoCodeFromSubscription(subscription) ?? fallbackPromoCode;
   await upsertBillingOnUser(uid, {
     plan: planFromStatus(status),
     subscriptionStatus: status,
@@ -348,8 +553,12 @@ async function applySubscription(
     currentPeriodEnd: periodEndMs(subscription),
     cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
     billingInterval: intervalOf(subscription),
+    ...(promoCode
+      ? { promoCode: promoCode.toUpperCase() }
+      : {}),
     ...(paid && status !== "past_due" ? { paymentFailedAt: null } : {}),
   });
+  if (paid) await ensureReferralCode(uid);
 }
 
 function subscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
@@ -357,6 +566,143 @@ function subscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
   if (!details) return null;
   const sub = details.subscription;
   return typeof sub === "string" ? sub : sub?.id ?? null;
+}
+
+async function findReferralCoupon(): Promise<Stripe.Coupon> {
+  const coupons = await getStripe().coupons.list({ limit: 100 });
+  const eligible = coupons.data.filter(
+    (item) =>
+      item.valid && item.duration === "once" && item.percent_off === 100,
+  );
+  const coupon =
+    eligible.find((item) => /referr/i.test(item.name ?? "")) ??
+    (eligible.length === 1 ? eligible[0] : null);
+  if (!coupon) {
+    throw new Error("Could not uniquely identify the 100%-off-once referral coupon");
+  }
+  return coupon;
+}
+
+function existingDiscountParams(
+  subscription: Stripe.Subscription,
+): Array<{ coupon?: string; promotion_code?: string }> {
+  const params: Array<{ coupon?: string; promotion_code?: string }> = [];
+  for (const discount of subscription.discounts) {
+    if (typeof discount === "string") continue;
+    if (discount.promotion_code) {
+      params.push({
+        promotion_code:
+          typeof discount.promotion_code === "string"
+            ? discount.promotion_code
+            : discount.promotion_code.id,
+      });
+      continue;
+    }
+    const coupon = discount.source.coupon;
+    const couponId = typeof coupon === "string" ? coupon : coupon?.id;
+    if (couponId) params.push({ coupon: couponId });
+  }
+  return params;
+}
+
+async function rewardReferrerForPaidConversion(
+  referredSubscription: Stripe.Subscription,
+): Promise<void> {
+  if (!isFirebaseConfigured()) return;
+  const referredUid = await resolveUidFromSubscription(referredSubscription);
+  if (!referredUid) return;
+
+  const db = getFirebaseAdmin().firestore();
+  const referredRef = db.collection("users").doc(referredUid);
+  const rewardRef = db.collection("referralRewards").doc(referredUid);
+  const referred = (await referredRef.get()).data();
+  const referrerUid =
+    typeof referred?.referredByUid === "string"
+      ? referred.referredByUid
+      : null;
+  if (!referrerUid || referrerUid === referredUid) return;
+
+  const shouldProcess = await db.runTransaction(async (transaction) => {
+    const reward = await transaction.get(rewardRef);
+    const data = reward.data();
+    if (data?.status === "completed") return false;
+    if (
+      data?.status === "processing" &&
+      typeof data.startedAt === "number" &&
+      Date.now() - data.startedAt < 5 * 60 * 1000
+    ) {
+      return false;
+    }
+    transaction.set(rewardRef, {
+      referredUid,
+      referrerUid,
+      status: "processing",
+      startedAt: Date.now(),
+    });
+    return true;
+  });
+  if (!shouldProcess) return;
+
+  try {
+    const referrerRef = db.collection("users").doc(referrerUid);
+    const referrer = (await referrerRef.get()).data();
+    const referrerSubscriptionId =
+      typeof referrer?.stripeSubscriptionId === "string"
+        ? referrer.stripeSubscriptionId
+        : null;
+    if (!referrerSubscriptionId) {
+      throw new Error("Referrer has no active subscription");
+    }
+
+    const stripe = getStripe();
+    const [subscription, coupon] = await Promise.all([
+      stripe.subscriptions.retrieve(referrerSubscriptionId, {
+        expand: ["discounts", "discounts.promotion_code"],
+      }),
+      findReferralCoupon(),
+    ]);
+    const discounts = existingDiscountParams(subscription);
+    if (!discounts.some((item) => item.coupon === coupon.id)) {
+      discounts.push({ coupon: coupon.id });
+      await stripe.subscriptions.update(referrerSubscriptionId, { discounts });
+    }
+
+    await db.runTransaction(async (transaction) => {
+      transaction.set(
+        rewardRef,
+        {
+          status: "completed",
+          completedAt: Date.now(),
+          couponId: coupon.id,
+          referrerSubscriptionId,
+        },
+        { merge: true },
+      );
+      transaction.set(
+        referredRef,
+        { referralRewardedAt: Date.now() },
+        { merge: true },
+      );
+      transaction.set(
+        referrerRef,
+        {
+          referralCount:
+            FieldValue.increment(1),
+        },
+        { merge: true },
+      );
+    });
+  } catch (error) {
+    await rewardRef.set(
+      {
+        status: "failed",
+        failedAt: Date.now(),
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { merge: true },
+    );
+    throw error;
+  }
 }
 
 export async function handleStripeWebhook(
@@ -371,7 +717,10 @@ export async function handleStripeWebhook(
 
   switch (event.type) {
     case "checkout.session.completed": {
-      const session = event.data.object as Stripe.Checkout.Session;
+      const eventSession = event.data.object as Stripe.Checkout.Session;
+      const session = await stripe.checkout.sessions.retrieve(eventSession.id, {
+        expand: ["discounts.promotion_code"],
+      });
       const uid = session.client_reference_id || session.metadata?.firebaseUid;
       if (!uid || session.mode !== "subscription") break;
 
@@ -381,8 +730,10 @@ export async function handleStripeWebhook(
           : session.subscription?.id;
       if (!subId) break;
 
-      const subscription = await stripe.subscriptions.retrieve(subId);
-      await applySubscription(subscription, uid);
+      const subscription = await stripe.subscriptions.retrieve(subId, {
+        expand: ["discounts", "discounts.promotion_code"],
+      });
+      await applySubscription(subscription, uid, promoCodeFromSession(session));
       break;
     }
     case "customer.subscription.updated":
@@ -407,7 +758,7 @@ export async function handleStripeWebhook(
         trialEndsAt: null,
         currentPeriodEnd: periodEndMs(subscription),
         cancelAtPeriodEnd: false,
-        billingInterval: null,
+        billingInterval: intervalOf(subscription),
       });
       break;
     }
@@ -430,6 +781,23 @@ export async function handleStripeWebhook(
         paymentFailedAt: Date.now(),
       });
       notifyPaymentFailed(uid);
+      break;
+    }
+    case "invoice.paid": {
+      const invoice = event.data.object as Stripe.Invoice;
+      if (
+        invoice.amount_paid <= 0 ||
+        invoice.billing_reason !== "subscription_cycle"
+      ) {
+        break;
+      }
+      const subId = subscriptionIdFromInvoice(invoice);
+      if (!subId) break;
+      const subscription = await stripe.subscriptions.retrieve(subId, {
+        expand: ["discounts", "discounts.promotion_code"],
+      });
+      await applySubscription(subscription);
+      await rewardReferrerForPaidConversion(subscription);
       break;
     }
     default:

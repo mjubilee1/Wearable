@@ -119,7 +119,9 @@ export function PlansCard() {
             onClick={() => void onUpgrade("month")}
             className="w-full rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {busy === "month" ? "Opening checkout…" : "Start 7-day free trial"}
+            {busy === "month"
+              ? "Opening checkout…"
+              : `Monthly · $${PRO_MONTHLY_USD}`}
           </button>
           <button
             type="button"
@@ -127,7 +129,9 @@ export function PlansCard() {
             onClick={() => void onUpgrade("year")}
             className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm font-semibold text-ink disabled:opacity-60"
           >
-            {busy === "year" ? "Opening checkout…" : `Yearly · $${PRO_YEARLY_USD}`}
+            {busy === "year"
+              ? "Opening checkout…"
+              : `Annual · $${PRO_YEARLY_USD} · save ~28%`}
           </button>
         </div>
       ) : null}

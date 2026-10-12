@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { isEmailLikeName } from "@nearby/shared";
 import { PlansCard } from "@/components/PlansCard";
+import { ReferralCard } from "@/components/ReferralCard";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
@@ -75,6 +76,7 @@ export default function ProfilePage() {
         <Suspense fallback={null}>
           <PlansCard />
         </Suspense>
+        <ReferralCard />
 
         <Link
           href="/connectors"

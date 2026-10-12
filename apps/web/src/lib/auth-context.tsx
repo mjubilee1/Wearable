@@ -32,6 +32,7 @@ type SignUpInput = {
   utmSource?: string | null;
   utmMedium?: string | null;
   utmCampaign?: string | null;
+  referredByCode?: string | null;
 };
 
 type AuthContextValue = {
@@ -101,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           utmSource: input.utmSource,
           utmMedium: input.utmMedium,
           utmCampaign: input.utmCampaign,
+          referredByCode: input.referredByCode,
         });
         setProfile(created);
       },

@@ -1,6 +1,7 @@
 import type { BillingInterval } from "@nearby/shared";
 import { auth } from "@/lib/firebase";
 import { trackFunnel } from "@/lib/funnel";
+import { storedPromoCode, storedReferralCode } from "@/lib/offers";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -60,7 +61,11 @@ export async function startProCheckout(
 ): Promise<string> {
   trackFunnel("checkout_started", { plan: interval === "year" ? "pro_yearly" : "pro_monthly" });
   try {
-    return await postBilling("/v1/billing/checkout", { interval });
+    return await postBilling("/v1/billing/checkout", {
+      interval,
+      promoCode: interval === "month" ? storedPromoCode() : null,
+      referralCode: storedReferralCode(),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
     if (/no such customer|resource_missing|\bstripe\b/i.test(message)) {
