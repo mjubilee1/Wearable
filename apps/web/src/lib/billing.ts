@@ -53,11 +53,21 @@ async function postBilling(path: string, body?: unknown): Promise<string> {
   }
 }
 
+const CHECKOUT_ERROR = "Couldn't start checkout, try again.";
+
 export async function startProCheckout(
   interval: BillingInterval = "month",
 ): Promise<string> {
   trackFunnel("checkout_started", { plan: interval === "year" ? "pro_yearly" : "pro_monthly" });
-  return postBilling("/v1/billing/checkout", { interval });
+  try {
+    return await postBilling("/v1/billing/checkout", { interval });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (/no such customer|resource_missing|\bstripe\b/i.test(message)) {
+      throw new Error(CHECKOUT_ERROR);
+    }
+    throw err;
+  }
 }
 
 export async function startNearbyPlusCheckout(): Promise<string> {

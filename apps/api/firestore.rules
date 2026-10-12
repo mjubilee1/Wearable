@@ -35,6 +35,10 @@ service cloud.firestore {
             || request.resource.data.subscriptionStatus == 'none')
         && !('stripeCustomerId' in request.resource.data
             && request.resource.data.stripeCustomerId != null)
+        && !('stripeCustomerIdTest' in request.resource.data
+            && request.resource.data.stripeCustomerIdTest != null)
+        && !('stripeCustomerIdLive' in request.resource.data
+            && request.resource.data.stripeCustomerIdLive != null)
         && !('stripeSubscriptionId' in request.resource.data
             && request.resource.data.stripeSubscriptionId != null);
     }

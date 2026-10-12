@@ -79,6 +79,16 @@ function mapUser(id: string, data: DocumentData): UserProfile {
       data.stripeCustomerId === undefined || data.stripeCustomerId === null
         ? null
         : String(data.stripeCustomerId),
+    stripeCustomerIdTest:
+      data.stripeCustomerIdTest === undefined ||
+      data.stripeCustomerIdTest === null
+        ? null
+        : String(data.stripeCustomerIdTest),
+    stripeCustomerIdLive:
+      data.stripeCustomerIdLive === undefined ||
+      data.stripeCustomerIdLive === null
+        ? null
+        : String(data.stripeCustomerIdLive),
     stripeSubscriptionId:
       data.stripeSubscriptionId === undefined ||
       data.stripeSubscriptionId === null
@@ -152,6 +162,8 @@ export async function createUserProfile(input: {
     plan: "free",
     subscriptionStatus: "none",
     stripeCustomerId: null,
+    stripeCustomerIdTest: null,
+    stripeCustomerIdLive: null,
     stripeSubscriptionId: null,
     trialEndsAt: null,
     currentPeriodEnd: null,

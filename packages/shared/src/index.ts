@@ -99,6 +99,10 @@ export type UserProfile = {
   plan?: PlanTier;
   subscriptionStatus?: SubscriptionStatus;
   stripeCustomerId?: string | null;
+  /** Stripe customer for test mode. Kept apart from live so a mode switch cannot 404. */
+  stripeCustomerIdTest?: string | null;
+  /** Stripe customer for live mode. */
+  stripeCustomerIdLive?: string | null;
   stripeSubscriptionId?: string | null;
   planUpdatedAt?: number;
   /** Unix ms. Set while the Stripe subscription is trialing. */

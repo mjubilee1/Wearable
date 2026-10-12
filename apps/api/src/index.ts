@@ -35,6 +35,7 @@ import {
   handleStripeWebhook,
   isStripeConfigured,
   isStripeWebhookConfigured,
+  stripeCustomerIdForProfile,
 } from "./billing.js";
 import { LimitReachedError } from "./limits.js";
 import { facilitateMatch } from "./facilitate.js";
@@ -218,15 +219,14 @@ app.post("/v1/billing/checkout", async (c) => {
       uid: auth.uid,
       email: auth.email ?? profile.email,
       stripeCustomerId: profile.stripeCustomerId,
+      stripeCustomerIdTest: profile.stripeCustomerIdTest,
+      stripeCustomerIdLive: profile.stripeCustomerIdLive,
       interval,
     });
     return c.json(session);
   } catch (err) {
     console.error("[billing] checkout error", err);
-    return c.json(
-      { error: err instanceof Error ? err.message : "Checkout failed" },
-      500,
-    );
+    return c.json({ error: "Couldn't start checkout, try again." }, 500);
   }
 });
 
@@ -238,13 +238,14 @@ app.post("/v1/billing/portal", async (c) => {
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
 
   const profile = await loadProfile(auth.uid);
-  if (!profile?.stripeCustomerId) {
+  const customerId = profile ? stripeCustomerIdForProfile(profile) : null;
+  if (!customerId) {
     return c.json({ error: "No billing account yet" }, 404);
   }
 
   try {
     const session = await createPortalSession({
-      stripeCustomerId: profile.stripeCustomerId,
+      stripeCustomerId: customerId,
     });
     return c.json(session);
   } catch (err) {

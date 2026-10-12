@@ -7,6 +7,7 @@ import type {
 } from "@nearby/shared";
 import { getFirebaseAdmin, isFirebaseConfigured } from "../firebase.js";
 import {
+  addZonedCalendarDays,
   dayBoundsInZone,
   dayOffsetFromToken,
   formatClockAmPm,
@@ -765,58 +766,288 @@ export function parseClockHint(raw: string): ClockParse {
   return { ok: true, hour, minute };
 }
 
+const DAY_TOKEN =
+  "today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday";
+
+const TITLE_STOP = new Set([
+  "move",
+  "reschedule",
+  "shift",
+  "push",
+  "my",
+  "the",
+  "a",
+  "an",
+  "our",
+  "your",
+  "it",
+  "that",
+  "this",
+  "please",
+  "can",
+  "you",
+  "could",
+  "would",
+  "just",
+  "to",
+  "for",
+  "at",
+  "on",
+  "from",
+  "of",
+  "event",
+  "meeting",
+  "appointment",
+  "call",
+  "today",
+  "tomorrow",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+  "am",
+  "pm",
+]);
+
 export type RescheduleParse =
   | {
       ok: true;
-      fromDayOffset: number;
-      fromClock: { hour: number; minute: number };
+      /** Null when the user named a time or title but no day — search the next 7 days. */
+      fromDayOffset: number | null;
+      fromClock: { hour: number; minute: number } | null;
+      titleWords: string[];
       toDayOffset: number;
       toClock: { hour: number; minute: number };
     }
   | { ok: false; ask: string };
 
-/** Parse "Move my 3 PM to tomorrow at 10" style requests. */
+export type TimedCalendarEvent = {
+  id: string;
+  title: string;
+  htmlLink: string | null;
+  startAt: Date;
+  endAt: Date;
+};
+
+/** Parse "Move my 3 PM to tomorrow at 10" and "move the Robinson meeting". */
 export function parseRescheduleRequest(
   text: string,
   timeZone: string,
+  now: Date = new Date(),
 ): RescheduleParse | null {
-  const lower = text.toLowerCase();
+  const lower = text.toLowerCase().replace(/[’']/g, "'");
   if (!/\b(move|reschedule|shift|push)\b/.test(lower)) return null;
-  const fromMatch = lower.match(
-    /\b(?:my|the)?\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/,
-  );
-  if (!fromMatch?.[1]) return null;
-  const toMatch = lower.match(
-    /\b(?:to|for)\s+(tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)?\s*(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/,
-  );
-  if (!toMatch?.[2]) return null;
 
-  const fromClock = parseClockHint(fromMatch[1]);
-  if (!fromClock.ok) return { ok: false, ask: fromClock.ask };
-  const toClock = parseClockHint(toMatch[2]);
+  const destRe = new RegExp(
+    `\\b(?:to|for)\\s+((?:${DAY_TOKEN})\\s+)?(?:at\\s+)?(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?)\\b`,
+    "g",
+  );
+  let dest: RegExpExecArray | null = null;
+  for (let match = destRe.exec(lower); match; match = destRe.exec(lower)) {
+    dest = match;
+  }
+  if (!dest?.[2] || dest.index === undefined) return null;
+
+  const toClock = parseClockHint(dest[2]);
   if (!toClock.ok) return { ok: false, ask: toClock.ask };
 
-  const beforeTo = lower.slice(0, Math.max(0, lower.indexOf(" to ")));
-  const fromDayToken = beforeTo.match(
-    /\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/,
-  )?.[1];
-  const fromDayOffset = fromDayToken
-    ? (dayOffsetFromToken(fromDayToken, timeZone) ?? 0)
-    : 0;
-
   let toDayOffset = 1;
-  if (toMatch[1]) {
-    const resolved = dayOffsetFromToken(toMatch[1], timeZone);
+  if (dest[1]) {
+    const resolved = dayOffsetFromToken(dest[1].trim(), timeZone, now);
     if (resolved === null) return null;
     toDayOffset = resolved;
+  }
+
+  const source = lower.slice(0, dest.index);
+  const fromDayToken = source.match(new RegExp(`\\b(${DAY_TOKEN})\\b`))?.[1];
+  let fromDayOffset: number | null = null;
+  if (fromDayToken) {
+    const resolved = dayOffsetFromToken(fromDayToken, timeZone, now);
+    if (resolved === null) return null;
+    fromDayOffset = resolved;
+  }
+
+  const clockRe = /\b(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/g;
+  let fromClockRaw: string | null = null;
+  for (let match = clockRe.exec(source); match; match = clockRe.exec(source)) {
+    fromClockRaw = match[1] ?? null;
+  }
+  let fromClock: { hour: number; minute: number } | null = null;
+  if (fromClockRaw) {
+    const parsed = parseClockHint(fromClockRaw);
+    if (!parsed.ok) return { ok: false, ask: parsed.ask };
+    fromClock = { hour: parsed.hour, minute: parsed.minute };
+  }
+
+  let titleSource = source;
+  if (fromClockRaw) titleSource = titleSource.replace(fromClockRaw, " ");
+  const titleWords = titleSource
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 1 && !TITLE_STOP.has(word));
+
+  if (!fromClock && titleWords.length === 0) {
+    return { ok: false, ask: "Which event should I move?" };
   }
 
   return {
     ok: true,
     fromDayOffset,
-    fromClock: { hour: fromClock.hour, minute: fromClock.minute },
+    fromClock,
+    titleWords,
     toDayOffset,
     toClock: { hour: toClock.hour, minute: toClock.minute },
+  };
+}
+
+export function rescheduleWindow(
+  timeZone: string,
+  fromDayOffset: number | null,
+  now: Date,
+): { start: Date; end: Date } {
+  if (fromDayOffset !== null) return dayBoundsInZone(timeZone, fromDayOffset, now);
+  const parts = getZonedParts(timeZone, now);
+  const endDay = addZonedCalendarDays(
+    timeZone,
+    parts.year,
+    parts.month,
+    parts.day,
+    7,
+  );
+  return {
+    start: now,
+    end: zonedTimeToUtc(
+      timeZone,
+      endDay.year,
+      endDay.month,
+      endDay.day,
+      parts.hour,
+      parts.minute,
+    ),
+  };
+}
+
+function clockMatches(
+  startAt: Date,
+  timeZone: string,
+  clock: { hour: number; minute: number },
+): boolean {
+  const local = getZonedParts(timeZone, startAt);
+  return local.hour === clock.hour && local.minute === clock.minute;
+}
+
+function titleMatches(title: string, words: string[]): boolean {
+  if (words.length === 0) return true;
+  const hay = title.toLowerCase();
+  return words.every((word) => hay.includes(word));
+}
+
+function whenPhrase(fromDayOffset: number | null): string {
+  if (fromDayOffset === null) return "in the next 7 days";
+  if (fromDayOffset === 0) return "today";
+  if (fromDayOffset === 1) return "tomorrow";
+  return "that day";
+}
+
+export function resolveRescheduleChoice(
+  events: TimedCalendarEvent[],
+  parsed: Extract<RescheduleParse, { ok: true }>,
+  timeZone: string,
+  now: Date = new Date(),
+):
+  | {
+      ok: true;
+      event: TimedCalendarEvent;
+      newStart: Date;
+      newEnd: Date;
+      oldWhen: string;
+      newWhen: string;
+    }
+  | { ok: false; spoken: string } {
+  const window = rescheduleWindow(timeZone, parsed.fromDayOffset, now);
+  const matches = events
+    .filter((event) => {
+      if (event.startAt.getTime() < window.start.getTime()) return false;
+      if (event.startAt.getTime() >= window.end.getTime()) return false;
+      if (
+        parsed.fromClock &&
+        !clockMatches(event.startAt, timeZone, parsed.fromClock)
+      ) {
+        return false;
+      }
+      return titleMatches(event.title, parsed.titleWords);
+    })
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+
+  const when = whenPhrase(parsed.fromDayOffset);
+  if (matches.length === 0) {
+    if (parsed.fromClock && parsed.titleWords.length > 0) {
+      const clock = formatClockAmPm(parsed.fromClock.hour, parsed.fromClock.minute);
+      return {
+        ok: false,
+        spoken: `I couldn't find a ${clock} ${parsed.titleWords.join(" ")} event ${when}. Which one?`,
+      };
+    }
+    if (parsed.fromClock) {
+      const clock = formatClockAmPm(parsed.fromClock.hour, parsed.fromClock.minute);
+      return {
+        ok: false,
+        spoken: `I couldn't find a ${clock} event ${when}. Which one?`,
+      };
+    }
+    return {
+      ok: false,
+      spoken: `I couldn't find ${parsed.titleWords.join(" ")} ${when}. Which one?`,
+    };
+  }
+
+  const earliest = matches[0].startAt.getTime();
+  const sameSlot = matches.filter(
+    (event) => Math.abs(event.startAt.getTime() - earliest) < 60_000,
+  );
+  // A bare clock means the next upcoming event. Title words stay ambiguous
+  // across the week, and two events in the same minute need a choice.
+  const ambiguous =
+    parsed.titleWords.length > 0 ? matches : sameSlot;
+  if (ambiguous.length > 1) {
+    const listed = ambiguous
+      .slice(0, 5)
+      .map((event) => `${event.title}, ${formatWhenInZone(event.startAt, timeZone)}`)
+      .join("; ");
+    const more =
+      ambiguous.length > 5 ? `; and ${ambiguous.length - 5} more` : "";
+    return {
+      ok: false,
+      spoken: `I found a few: ${listed}${more}. Which one?`,
+    };
+  }
+
+  const hit = ambiguous[0];
+  const durationMs = Math.max(
+    15 * 60 * 1000,
+    hit.endAt.getTime() - hit.startAt.getTime(),
+  );
+  const toDay = dayBoundsInZone(timeZone, parsed.toDayOffset, now);
+  const toParts = getZonedParts(timeZone, toDay.start);
+  const newStart = zonedTimeToUtc(
+    timeZone,
+    toParts.year,
+    toParts.month,
+    toParts.day,
+    parsed.toClock.hour,
+    parsed.toClock.minute,
+  );
+  const newEnd = new Date(newStart.getTime() + durationMs);
+  return {
+    ok: true,
+    event: hit,
+    newStart,
+    newEnd,
+    oldWhen: formatWhenInZone(hit.startAt, timeZone),
+    newWhen: formatWhenInZone(newStart, timeZone),
   };
 }
 
@@ -845,7 +1076,8 @@ export async function previewReschedule(
     };
   }
 
-  const { start, end } = dayBoundsInZone(timeZone, parsed.fromDayOffset);
+  const now = new Date();
+  const { start, end } = rescheduleWindow(timeZone, parsed.fromDayOffset, now);
   const url = new URL(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
   );
@@ -853,7 +1085,7 @@ export async function previewReschedule(
   url.searchParams.set("timeMax", end.toISOString());
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
-  url.searchParams.set("maxResults", "20");
+  url.searchParams.set("maxResults", "100");
   url.searchParams.set("timeZone", timeZone);
 
   const res = await fetch(url, {
@@ -875,75 +1107,35 @@ export async function previewReschedule(
     }>;
   };
 
-  const targetMinutes = parsed.fromClock.hour * 60 + parsed.fromClock.minute;
-  const candidates = (data.items ?? [])
+  const events: TimedCalendarEvent[] = (data.items ?? [])
     .filter((item) => item.status !== "cancelled" && item.id && item.start?.dateTime)
     .map((item) => {
       const startAt = new Date(item.start!.dateTime!);
       const endAt = item.end?.dateTime
         ? new Date(item.end.dateTime)
         : new Date(startAt.getTime() + 60 * 60 * 1000);
-      const local = getZonedParts(timeZone, startAt);
-      const minutes = local.hour * 60 + local.minute;
       return {
         id: item.id!,
         title: (item.summary || "Busy").trim(),
         htmlLink: httpsHref(item.htmlLink),
         startAt,
         endAt,
-        delta: Math.abs(minutes - targetMinutes),
       };
-    })
-    .filter((item) => item.delta <= 45)
-    .sort((a, b) => a.delta - b.delta);
+    });
 
-  const fromLabel =
-    parsed.fromDayOffset === 1
-      ? "tomorrow"
-      : parsed.fromDayOffset === 0
-        ? "today"
-        : "that day";
-  const clockLabel = formatClockAmPm(
-    parsed.fromClock.hour,
-    parsed.fromClock.minute,
-  );
-
-  if (candidates.length === 0) {
-    return {
-      ok: false,
-      spoken: withName(
-        name,
-        `I couldn't find a ${clockLabel} event ${fromLabel}. Which one?`,
-      ),
-    };
+  const choice = resolveRescheduleChoice(events, parsed, timeZone, now);
+  if (!choice.ok) {
+    return { ok: false, spoken: withName(name, choice.spoken) };
   }
 
-  const hit = candidates[0];
-  const durationMs = Math.max(
-    15 * 60 * 1000,
-    hit.endAt.getTime() - hit.startAt.getTime(),
-  );
-  const toDay = dayBoundsInZone(timeZone, parsed.toDayOffset);
-  const toParts = getZonedParts(timeZone, toDay.start);
-  const newStart = zonedTimeToUtc(
-    timeZone,
-    toParts.year,
-    toParts.month,
-    toParts.day,
-    parsed.toClock.hour,
-    parsed.toClock.minute,
-  );
-  const newEnd = new Date(newStart.getTime() + durationMs);
-
-  const oldWhen = formatWhenInZone(hit.startAt, timeZone);
-  const newWhen = formatWhenInZone(newStart, timeZone);
+  const hit = choice.event;
   const preview: AgentReschedulePreview = {
     kind: "reschedule",
     eventId: hit.id,
     calendarId: "primary",
     title: hit.title,
-    oldWhen,
-    newWhen,
+    oldWhen: choice.oldWhen,
+    newWhen: choice.newWhen,
     htmlLink: hit.htmlLink,
   };
 
@@ -951,17 +1143,17 @@ export async function previewReschedule(
     ok: true,
     spoken: withName(
       name,
-      `Move '${hit.title}' from ${oldWhen} to ${newWhen}?`,
+      `Move '${hit.title}' from ${choice.oldWhen} to ${choice.newWhen}?`,
     ),
     preview,
     payload: {
       eventId: hit.id,
       calendarId: "primary",
       title: hit.title,
-      oldWhen,
-      newWhen,
-      newStartIso: newStart.toISOString(),
-      newEndIso: newEnd.toISOString(),
+      oldWhen: choice.oldWhen,
+      newWhen: choice.newWhen,
+      newStartIso: choice.newStart.toISOString(),
+      newEndIso: choice.newEnd.toISOString(),
     },
   };
 }

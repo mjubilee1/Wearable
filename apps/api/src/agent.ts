@@ -378,7 +378,8 @@ async function appendHistory(
     createdAt: Date.now(),
   };
   state.history = [item, ...state.history].slice(0, HISTORY_LIMIT);
-  if (consumeQuota) {
+  const countsTowardLimit = consumeQuota && !/\bi couldn't find\b/i.test(entry.reply);
+  if (countsTowardLimit) {
     const day = zonedDayKey(timeZone);
     const same = state.usage && state.usage.day === day ? state.usage : null;
     state.usage = {

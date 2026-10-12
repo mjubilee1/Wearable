@@ -58,9 +58,11 @@ export function appBaseUrl(): string {
 }
 
 export type BillingPatch = {
-  plan: PlanTier;
-  subscriptionStatus: SubscriptionStatus;
+  plan?: PlanTier;
+  subscriptionStatus?: SubscriptionStatus;
   stripeCustomerId?: string | null;
+  stripeCustomerIdTest?: string | null;
+  stripeCustomerIdLive?: string | null;
   stripeSubscriptionId?: string | null;
   trialEndsAt?: number | null;
   currentPeriodEnd?: number | null;
@@ -133,29 +135,114 @@ export async function upsertBillingOnUser(
   await ref.set(fields, { merge: true });
 }
 
+/** Test keys contain `_test_`. Live secret and restricted keys do not. */
+export function stripeMode(): "test" | "live" {
+  const key = process.env.STRIPE_SECRET_KEY?.trim() ?? "";
+  return key.includes("_test_") ? "test" : "live";
+}
+
+export function stripeCustomerIdForProfile(profile: {
+  stripeCustomerId?: string | null;
+  stripeCustomerIdTest?: string | null;
+  stripeCustomerIdLive?: string | null;
+}): string | null {
+  const specific =
+    stripeMode() === "test"
+      ? profile.stripeCustomerIdTest
+      : profile.stripeCustomerIdLive;
+  if (typeof specific === "string" && specific.trim()) return specific.trim();
+  if (typeof profile.stripeCustomerId === "string" && profile.stripeCustomerId.trim()) {
+    return profile.stripeCustomerId.trim();
+  }
+  return null;
+}
+
+function customerIdPatch(customerId: string): BillingPatch {
+  if (stripeMode() === "test") {
+    return {
+      stripeCustomerId: customerId,
+      stripeCustomerIdTest: customerId,
+    };
+  }
+  return {
+    stripeCustomerId: customerId,
+    stripeCustomerIdLive: customerId,
+  };
+}
+
+function isMissingCustomer(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const row = err as { code?: string; message?: string };
+  if (row.code === "resource_missing") return true;
+  return typeof row.message === "string" && /no such customer/i.test(row.message);
+}
+
+async function lookupCustomer(
+  stripe: Stripe,
+  id: string,
+): Promise<"ok" | "missing" | "foreign"> {
+  try {
+    const customer = await stripe.customers.retrieve(id);
+    if ("deleted" in customer && customer.deleted) return "missing";
+    return "ok";
+  } catch (err) {
+    if (isMissingCustomer(err)) return "foreign";
+    throw err;
+  }
+}
+
 export async function ensureStripeCustomer(opts: {
   uid: string;
   email?: string;
-  existingCustomerId?: string | null;
+  stripeCustomerId?: string | null;
+  stripeCustomerIdTest?: string | null;
+  stripeCustomerIdLive?: string | null;
 }): Promise<string> {
   const stripe = getStripe();
-
-  if (opts.existingCustomerId) {
-    return opts.existingCustomerId;
+  const mode = stripeMode();
+  const specific =
+    mode === "test" ? opts.stripeCustomerIdTest : opts.stripeCustomerIdLive;
+  const ordered = [specific, opts.stripeCustomerId].filter(
+    (id): id is string => typeof id === "string" && id.trim().length > 0,
+  );
+  const seen = new Set<string>();
+  const foreignIds: string[] = [];
+  for (const raw of ordered) {
+    const id = raw.trim();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const found = await lookupCustomer(stripe, id);
+    if (found === "foreign") foreignIds.push(id);
+    if (found !== "ok") continue;
+    const alreadySaved =
+      opts.stripeCustomerId === id &&
+      (mode === "test"
+        ? opts.stripeCustomerIdTest === id
+        : opts.stripeCustomerIdLive === id);
+    if (!alreadySaved) {
+      await upsertBillingOnUser(opts.uid, customerIdPatch(id));
+    }
+    return id;
   }
 
   const customer = await stripe.customers.create({
     email: opts.email || undefined,
     metadata: { firebaseUid: opts.uid },
   });
-
-  await upsertBillingOnUser(opts.uid, {
-    plan: "free",
-    subscriptionStatus: "none",
-    stripeCustomerId: customer.id,
-    stripeSubscriptionId: null,
-  });
-
+  const patch = customerIdPatch(customer.id);
+  const otherValue =
+    mode === "test" ? opts.stripeCustomerIdLive : opts.stripeCustomerIdTest;
+  const legacy = opts.stripeCustomerId?.trim();
+  if (
+    !otherValue &&
+    legacy &&
+    foreignIds.includes(legacy) &&
+    legacy !== customer.id
+  ) {
+    if (mode === "test") patch.stripeCustomerIdLive = legacy;
+    else patch.stripeCustomerIdTest = legacy;
+  }
+  await upsertBillingOnUser(opts.uid, patch);
   return customer.id;
 }
 
@@ -163,13 +250,17 @@ export async function createCheckoutSession(opts: {
   uid: string;
   email?: string;
   stripeCustomerId?: string | null;
+  stripeCustomerIdTest?: string | null;
+  stripeCustomerIdLive?: string | null;
   interval: BillingInterval;
 }): Promise<{ url: string }> {
   const stripe = getStripe();
   const customerId = await ensureStripeCustomer({
     uid: opts.uid,
     email: opts.email,
-    existingCustomerId: opts.stripeCustomerId,
+    stripeCustomerId: opts.stripeCustomerId,
+    stripeCustomerIdTest: opts.stripeCustomerIdTest,
+    stripeCustomerIdLive: opts.stripeCustomerIdLive,
   });
 
   const session = await stripe.checkout.sessions.create({
@@ -244,10 +335,11 @@ async function applySubscription(
 
   const status = statusFromStripe(subscription.status);
   const paid = status === "active" || status === "trialing" || status === "past_due";
+  const customerId = customerIdOf(subscription);
   await upsertBillingOnUser(uid, {
     plan: planFromStatus(status),
     subscriptionStatus: status,
-    stripeCustomerId: customerIdOf(subscription),
+    ...(customerId ? customerIdPatch(customerId) : { stripeCustomerId: null }),
     stripeSubscriptionId: paid ? subscription.id : null,
     trialEndsAt:
       typeof subscription.trial_end === "number"
@@ -306,10 +398,11 @@ export async function handleStripeWebhook(
         if (!customer.deleted) uid = customer.metadata?.firebaseUid;
       }
       if (!uid) break;
+      const customerId = customerIdOf(subscription);
       await upsertBillingOnUser(uid, {
         plan: "free",
         subscriptionStatus: "canceled",
-        stripeCustomerId: customerIdOf(subscription),
+        ...(customerId ? customerIdPatch(customerId) : { stripeCustomerId: null }),
         stripeSubscriptionId: null,
         trialEndsAt: null,
         currentPeriodEnd: periodEndMs(subscription),

@@ -52,7 +52,8 @@ export function PlansCard() {
     try {
       window.location.href = await startProCheckout(interval);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Checkout failed");
+      const message = err instanceof Error ? err.message : "";
+      setError(message || "Couldn't start checkout, try again.");
       setBusy(null);
     }
   }
@@ -98,7 +99,8 @@ export function PlansCard() {
         </p>
       ) : null}
 
-      {pro || profile.stripeCustomerId ? (
+      {profile.subscriptionStatus === "active" ||
+      profile.subscriptionStatus === "trialing" ? (
         <button
           type="button"
           disabled={busy !== null}
@@ -117,7 +119,7 @@ export function PlansCard() {
             onClick={() => void onUpgrade("month")}
             className="w-full rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {busy === "month" ? "Opening checkout…" : `Upgrade · $${PRO_MONTHLY_USD}/mo`}
+            {busy === "month" ? "Opening checkout…" : "Start 7-day free trial"}
           </button>
           <button
             type="button"
