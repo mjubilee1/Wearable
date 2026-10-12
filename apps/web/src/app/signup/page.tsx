@@ -7,12 +7,14 @@ import { isEmailLikeName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { captureAttribution } from "@/lib/attribution";
 import { trackFunnel } from "@/lib/funnel";
+import { hasFoundingOffer, storedReferralCode } from "@/lib/offers";
 
 const ONBOARDING_FLAG = "nearby_onboarding";
 
 export default function SignupPage() {
   const { signUp } = useAuth();
   const router = useRouter();
+  const [foundingOffer, setFoundingOffer] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,6 +22,7 @@ export default function SignupPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    setFoundingOffer(hasFoundingOffer(new URLSearchParams(window.location.search)));
     trackFunnel("signup_start", { plan: "free" }, {
       scope: "session",
       key: "signup_start",
@@ -58,6 +61,7 @@ export default function SignupPage() {
         utmSource: touch.utm_source,
         utmMedium: touch.utm_medium,
         utmCampaign: touch.utm_campaign,
+        referredByCode: storedReferralCode(),
       });
       trackFunnel("signup_complete", { plan: "free" }, {
         scope: "session",
@@ -85,6 +89,11 @@ export default function SignupPage() {
         Create your account
       </h1>
       <p className="mt-2 text-sm text-muted">Then you can talk.</p>
+      {foundingOffer ? (
+        <p className="mt-3 rounded-2xl bg-teal-soft px-3 py-2 text-sm font-semibold text-teal">
+          Founding offer saved: Pro is $19/month after your 7-day trial.
+        </p>
+      ) : null}
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <label className="block space-y-1.5">

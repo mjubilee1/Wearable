@@ -22,7 +22,7 @@ export type SubscriptionStatus =
   | "incomplete";
 
 export const PRO_MONTHLY_USD = 29;
-export const PRO_YEARLY_USD = 290;
+export const PRO_YEARLY_USD = 249;
 export const PRO_TRIAL_DAYS = 7;
 export const FREE_DAILY_REQUESTS = 20;
 export const FREE_DAILY_RESCHEDULES = 3;
@@ -113,6 +113,14 @@ export type UserProfile = {
   billingInterval?: BillingInterval | null;
   /** Unix ms of the last failed invoice. Cleared when payment succeeds. */
   paymentFailedAt?: number | null;
+  /** Promotion code applied to the current subscription, when any. */
+  promoCode?: string | null;
+  /** Shareable code for Pro referrals. Assigned by the API. */
+  referralCode?: string | null;
+  /** Referral code captured before this user checked out. */
+  referredByCode?: string | null;
+  /** Number of referred trials that have converted to paid. */
+  referralCount?: number;
   /** First-touch campaign params saved at signup. */
   utmSource?: string | null;
   utmMedium?: string | null;

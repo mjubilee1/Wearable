@@ -17,6 +17,15 @@ type FirestoreDocRef = {
   delete: () => Promise<void>;
 };
 
+type FirestoreTransaction = {
+  get: (ref: FirestoreDocRef) => Promise<FirestoreDoc>;
+  set: (
+    ref: FirestoreDocRef,
+    data: Record<string, unknown>,
+    options?: { merge?: boolean },
+  ) => FirestoreTransaction;
+};
+
 type FirestoreQuery = {
   where: (field: string, op: string, value: unknown) => FirestoreQuery;
   orderBy: (field: string, direction?: "asc" | "desc") => FirestoreQuery;
@@ -36,6 +45,9 @@ type AdminApp = {
   };
   firestore: () => {
     collection: (name: string) => FirestoreCollection;
+    runTransaction: <T>(
+      update: (transaction: FirestoreTransaction) => Promise<T>,
+    ) => Promise<T>;
   };
 };
 

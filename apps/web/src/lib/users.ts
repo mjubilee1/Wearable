@@ -109,6 +109,13 @@ function mapUser(id: string, data: DocumentData): UserProfile {
         : null,
     paymentFailedAt:
       typeof data.paymentFailedAt === "number" ? data.paymentFailedAt : null,
+    promoCode: typeof data.promoCode === "string" ? data.promoCode : null,
+    referralCode:
+      typeof data.referralCode === "string" ? data.referralCode : null,
+    referredByCode:
+      typeof data.referredByCode === "string" ? data.referredByCode : null,
+    referralCount:
+      typeof data.referralCount === "number" ? data.referralCount : 0,
     utmSource: typeof data.utmSource === "string" ? data.utmSource : null,
     utmMedium: typeof data.utmMedium === "string" ? data.utmMedium : null,
     utmCampaign: typeof data.utmCampaign === "string" ? data.utmCampaign : null,
@@ -142,6 +149,7 @@ export async function createUserProfile(input: {
   utmSource?: string | null;
   utmMedium?: string | null;
   utmCampaign?: string | null;
+  referredByCode?: string | null;
 }): Promise<UserProfile> {
   const now = Date.now();
   const profile: UserProfile = {
@@ -170,6 +178,10 @@ export async function createUserProfile(input: {
     cancelAtPeriodEnd: false,
     billingInterval: null,
     paymentFailedAt: null,
+    promoCode: null,
+    referralCode: null,
+    referredByCode: input.referredByCode ?? null,
+    referralCount: 0,
     utmSource: input.utmSource ?? null,
     utmMedium: input.utmMedium ?? null,
     utmCampaign: input.utmCampaign ?? null,
