@@ -132,6 +132,9 @@ export async function updateUserProfile(
   if (patch.prompts !== undefined) updates.prompts = patch.prompts;
   if (patch.vibes !== undefined) updates.vibes = patch.vibes;
   if (patch.deviceId !== undefined) updates.deviceId = patch.deviceId;
+  if (patch.connectorSetupDismissedAt !== undefined) {
+    updates.connectorSetupDismissedAt = patch.connectorSetupDismissedAt;
+  }
 
   await updateDoc(doc(db, USERS, uid), updates);
 }

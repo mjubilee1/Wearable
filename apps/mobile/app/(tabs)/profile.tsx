@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { isEmailLikeName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { updateUserProfile } from "@/lib/users";
 import { colors } from "@/lib/theme";
@@ -22,7 +23,7 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (!profile) return;
-    setName(profile.name);
+    setName(isEmailLikeName(profile.name, profile.email) ? "" : profile.name);
   }, [profile]);
 
   if (!profile) {
@@ -39,8 +40,8 @@ export default function ProfileScreen() {
     setMessage(null);
 
     const trimmed = name.trim();
-    if (!trimmed) {
-      setError("Enter your name.");
+    if (!trimmed || isEmailLikeName(trimmed, profile.email)) {
+      setError("Enter your first name, not your email.");
       return;
     }
 
@@ -72,8 +73,15 @@ export default function ProfileScreen() {
         </Text>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Name</Text>
-          <TextInput value={name} onChangeText={setName} style={styles.input} />
+          <Text style={styles.label}>First name</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Your first name"
+            placeholderTextColor={colors.muted}
+            autoComplete="given-name"
+            style={styles.input}
+          />
         </View>
 
         <View style={styles.field}>

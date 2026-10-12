@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Link, useRouter } from "expo-router";
+import { isEmailLikeName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
 
@@ -25,8 +26,8 @@ export default function SignupScreen() {
   async function onSubmit() {
     setError(null);
     const trimmed = name.trim();
-    if (!trimmed) {
-      setError("Enter your name.");
+    if (!trimmed || isEmailLikeName(trimmed, email)) {
+      setError("Enter your first name, not your email.");
       return;
     }
 
@@ -59,8 +60,14 @@ export default function SignupScreen() {
         <Text style={styles.subtitle}>Then you can talk.</Text>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Name</Text>
-          <TextInput value={name} onChangeText={setName} style={styles.input} />
+          <Text style={styles.label}>First name</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Your first name"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+          />
         </View>
 
         <View style={styles.field}>

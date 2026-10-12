@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -9,6 +11,7 @@ import {
   type ConnectorId,
   disconnectGoogleCalendar,
   fetchGoogleCalendarStatus,
+  peekPendingAsk,
   readConnectorSetup,
   startGoogleCalendarConnect,
   writeConnectorSetup,
@@ -16,6 +19,7 @@ import {
 
 export function ConnectorsPanel() {
   const { user } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +61,10 @@ export function ConnectorsPanel() {
       );
     }
     window.history.replaceState({}, "", "/connectors");
-  }, [queryClient, user]);
+    if (calendar === "connected" && peekPendingAsk()) {
+      router.replace("/activity");
+    }
+  }, [queryClient, router, user]);
 
   const googleQuery = useQuery({
     queryKey: ["google-calendar", user?.uid],
@@ -138,6 +145,22 @@ export function ConnectorsPanel() {
           </p>
         ) : null}
 
+        {googleQuery.isLoading && !google ? (
+          <section
+            className="rounded-3xl border border-black/5 bg-card px-5 py-5 shadow-sm"
+            aria-busy="true"
+            aria-label="Loading connectors"
+          >
+            <div className="h-5 w-28 animate-pulse rounded bg-surface" />
+            <div className="mt-3 h-4 w-full animate-pulse rounded bg-surface" />
+            <div className="mt-2 h-4 w-2/3 animate-pulse rounded bg-surface" />
+            <div className="mt-4 space-y-3">
+              <div className="h-14 animate-pulse rounded-2xl bg-surface" />
+              <div className="h-14 animate-pulse rounded-2xl bg-surface" />
+              <div className="h-14 animate-pulse rounded-2xl bg-surface" />
+            </div>
+          </section>
+        ) : (
         <section className="rounded-3xl border border-black/5 bg-card px-5 py-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -174,7 +197,7 @@ export function ConnectorsPanel() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-ink">{item.name}</p>
-                    <p className="mt-0.5 text-xs text-muted">{item.blurb}</p>
+                    <p className="mt-0.5 text-xs text-muted">{item.canDo}</p>
                   </div>
                   <button
                     type="button"
@@ -215,42 +238,38 @@ export function ConnectorsPanel() {
             )}
           </div>
         </section>
+        )}
 
-        {otherItems.map((item) => {
-          const isFavorite = favorites.includes(item.id);
-          return (
-            <section
-              key={item.id}
-              className="rounded-3xl border border-black/5 bg-card px-5 py-5 shadow-sm"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-base font-bold text-ink">{item.name}</h2>
-                    <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
-                      Built in
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-muted">{item.blurb}</p>
+        {otherItems.map((item) => (
+          <section
+            key={item.id}
+            className="rounded-3xl border border-black/5 bg-card px-5 py-5 shadow-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-bold text-ink">{item.name}</h2>
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+                    Built in
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => toggleFavorite(item.id)}
-                  className={[
-                    "rounded-full px-3 py-1.5 text-xs font-semibold",
-                    isFavorite
-                      ? "bg-teal-soft text-teal"
-                      : "bg-surface text-muted",
-                  ].join(" ")}
-                >
-                  {isFavorite ? "Favorite" : "Add favorite"}
-                </button>
+                <p className="mt-1 text-sm text-muted">{item.canDo}</p>
               </div>
-            </section>
-          );
-        })}
+              <div
+                role="checkbox"
+                aria-checked="true"
+                aria-disabled="true"
+                className="flex items-center gap-2 rounded-full bg-teal-soft px-3 py-1.5 text-xs font-semibold text-teal"
+              >
+                <span aria-hidden>✓</span>
+                On
+              </div>
+            </div>
+          </section>
+        ))}
       </main>
 
+      <PrivacyFooter />
       <TabBar active="connectors" />
     </div>
   );

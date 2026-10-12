@@ -10,9 +10,13 @@ export type ConnectorCatalogItem = {
   id: ConnectorId;
   name: string;
   blurb: string;
+  /** One line under the connector: what Nearby can do with it. */
+  canDo: string;
   kind: "oauth" | "built_in";
   /** Same Google OAuth session as Calendar / Tasks / Gmail. */
   googleBundle?: boolean;
+  /** Built in and always on. Not a checkbox the user can clear. */
+  locked?: boolean;
 };
 
 export const CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
@@ -20,6 +24,7 @@ export const CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
     id: "google_calendar",
     name: "Google Calendar",
     blurb: "Read today's events when you ask in Talk.",
+    canDo: "Calendar: read your day and tomorrow's meetings.",
     kind: "oauth",
     googleBundle: true,
   },
@@ -27,6 +32,7 @@ export const CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
     id: "google_tasks",
     name: "Google Tasks",
     blurb: "Reminders you speak get added to your default Tasks list.",
+    canDo: "Tasks: add a task when you ask.",
     kind: "oauth",
     googleBundle: true,
   },
@@ -34,6 +40,7 @@ export const CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
     id: "gmail",
     name: "Gmail",
     blurb: "Hear a short unread digest when you ask.",
+    canDo: "Gmail: summarize unread email.",
     kind: "oauth",
     googleBundle: true,
   },
@@ -41,7 +48,9 @@ export const CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
     id: "notes",
     name: "Notes",
     blurb: "Save a short note in Nearby when you ask.",
+    canDo: "Notes: save a note when you ask.",
     kind: "built_in",
+    locked: true,
   },
 ];
 
@@ -91,12 +100,32 @@ export function readConnectorSetup(uid: string): SetupPrefs {
 
 export function writeConnectorSetup(uid: string, prefs: SetupPrefs) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(storageKey(uid), JSON.stringify(prefs));
+  try {
+    window.localStorage.setItem(storageKey(uid), JSON.stringify(prefs));
+  } catch {
+    // Private browsing can block storage. The profile field is the other copy.
+  }
 }
 
 export function shouldPromptConnectorSetup(uid: string): boolean {
-  const prefs = readConnectorSetup(uid);
-  return prefs.dismissedAt == null && prefs.favorites.length === 0;
+  return readConnectorSetup(uid).dismissedAt == null;
+}
+
+const PENDING_ASK_KEY = "nearby-pending-ask";
+
+export function stashPendingAsk(text: string) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(PENDING_ASK_KEY, text);
+}
+
+export function peekPendingAsk(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(PENDING_ASK_KEY);
+}
+
+export function clearPendingAsk() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(PENDING_ASK_KEY);
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";

@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import type { AgentActionReceipt } from "@nearby/shared";
 import { getFirebaseAdmin, isFirebaseConfigured } from "../firebase.js";
 
 /** One Google connect unlocks Calendar, Tasks, and Gmail read. */
@@ -299,7 +300,50 @@ export async function disconnectGoogleCalendar(uid: string): Promise<void> {
 type CalendarEvent = {
   summary: string;
   startLabel: string;
+  htmlLink: string | null;
 };
+
+export type GoogleToolResult = {
+  spoken: string;
+  receipt: AgentActionReceipt | null;
+};
+
+function httpsHref(value: string | undefined | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function dayWindow(when: "today" | "tomorrow"): { start: Date; end: Date } {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  if (when === "tomorrow") start.setDate(start.getDate() + 1);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+function calendarDayHref(start: Date): string {
+  const year = start.getFullYear();
+  const month = start.getMonth() + 1;
+  const day = start.getDate();
+  return `https://calendar.google.com/calendar/u/0/r/day/${year}/${month}/${day}`;
+}
+
+function withName(name: string | null, sentence: string): string {
+  if (!name) return sentence;
+  const keep =
+    sentence.startsWith("I ") || sentence.startsWith("I'");
+  const spoken = keep
+    ? sentence
+    : `${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
+  return `${name}, ${spoken}`;
+}
 
 function formatEventTime(raw: string | undefined, allDay: boolean): string {
   if (!raw) return "";
@@ -312,20 +356,29 @@ function formatEventTime(raw: string | undefined, allDay: boolean): string {
   });
 }
 
-export async function speakTodaysCalendar(uid: string): Promise<string> {
+function eventPhrase(event: CalendarEvent): string {
+  if (!event.startLabel) return event.summary;
+  if (event.startLabel === "all day") return `${event.summary}, all day`;
+  return `${event.summary} at ${event.startLabel}`;
+}
+
+export async function readCalendar(
+  uid: string,
+  options: { when: "today" | "tomorrow"; firstOnly: boolean; name: string | null },
+): Promise<GoogleToolResult> {
+  const whenWord = options.when === "tomorrow" ? "tomorrow" : "today";
   if (!isGoogleCalendarConfigured()) {
-    return "Calendar isn't set up on the server yet.";
+    return { spoken: "Calendar isn't set up on the server yet.", receipt: null };
   }
   const accessToken = await getValidAccessToken(uid);
   if (!accessToken) {
-    return "Connect Google in Connectors first, then ask again.";
+    return {
+      spoken: "Connect Google in Connectors first, then ask again.",
+      receipt: null,
+    };
   }
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-
+  const { start, end } = dayWindow(options.when);
   const url = new URL(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
   );
@@ -339,43 +392,84 @@ export async function speakTodaysCalendar(uid: string): Promise<string> {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (res.status === 401) {
-    return "Google access expired. Connect it again in Connectors.";
+    return {
+      spoken: "Google access expired. Connect it again in Connectors.",
+      receipt: null,
+    };
   }
   if (!res.ok) {
     console.error("[calendar] list failed", await res.text());
-    return "I couldn't read your calendar just now.";
+    return { spoken: "I couldn't read your calendar just now.", receipt: null };
   }
 
   const data = (await res.json()) as {
     items?: Array<{
       summary?: string;
+      status?: string;
+      htmlLink?: string;
       start?: { dateTime?: string; date?: string };
     }>;
   };
   const events: CalendarEvent[] = (data.items ?? [])
+    .filter((item) => item.status !== "cancelled")
     .map((item) => {
       const allDay = Boolean(item.start?.date && !item.start?.dateTime);
       const startRaw = item.start?.dateTime ?? item.start?.date;
       return {
         summary: (item.summary || "Busy").trim(),
         startLabel: formatEventTime(startRaw, allDay),
+        htmlLink: httpsHref(item.htmlLink),
       };
     })
     .filter((item) => item.summary);
 
+  const dayHref = calendarDayHref(start);
   if (events.length === 0) {
-    return "You're free today. Nothing on the calendar.";
+    const spoken = options.firstOnly
+      ? withName(options.name, `You don't have a meeting ${whenWord}.`)
+      : withName(options.name, `You're free ${whenWord}. Nothing on the calendar.`);
+    return {
+      spoken,
+      receipt: {
+        action: `Checked ${whenWord}'s calendar`,
+        href: dayHref,
+        linkLabel: "Open calendar",
+      },
+    };
   }
 
-  const spoken = events
-    .slice(0, 5)
-    .map((event) =>
-      event.startLabel ? `${event.summary} at ${event.startLabel}` : event.summary,
-    )
-    .join(". ");
+  const primary = events[0];
+  const href = primary.htmlLink ?? dayHref;
+  if (options.firstOnly) {
+    return {
+      spoken: withName(
+        options.name,
+        `Your first meeting ${whenWord} is ${eventPhrase(primary)}.`,
+      ),
+      receipt: {
+        action: `Checked ${whenWord}'s first meeting`,
+        href,
+        linkLabel: primary.htmlLink ? "Open event" : "Open calendar",
+      },
+    };
+  }
 
-  if (events.length === 1) return `Today: ${spoken}.`;
-  return `Today you have ${events.length} events. ${spoken}.`;
+  const listed = events.slice(0, 5).map(eventPhrase).join(". ");
+  const spoken =
+    events.length === 1
+      ? withName(options.name, `${whenWord === "today" ? "Today" : "Tomorrow"}: ${listed}.`)
+      : withName(
+          options.name,
+          `${whenWord === "today" ? "Today" : "Tomorrow"} you have ${events.length} events. ${listed}.`,
+        );
+  return {
+    spoken,
+    receipt: {
+      action: `Checked ${whenWord}'s calendar`,
+      href,
+      linkLabel: primary.htmlLink ? "Open event" : "Open calendar",
+    },
+  };
 }
 
 function taskDueRfc3339(when: string | undefined): string | undefined {
@@ -405,20 +499,26 @@ export async function createGoogleTask(
   uid: string,
   title: string,
   when?: string,
-): Promise<{ ok: true; spoken: string } | { ok: false; spoken: string }> {
+  name?: string | null,
+): Promise<
+  | { ok: true; spoken: string; receipt: AgentActionReceipt }
+  | { ok: false; spoken: string; receipt: null }
+> {
+  const label = title.trim() || "that";
   if (!isGoogleCalendarConfigured()) {
-    return { ok: false, spoken: "Google isn't set up on the server yet." };
+    return { ok: false, spoken: "Google isn't set up on the server yet.", receipt: null };
   }
   const accessToken = await getValidAccessToken(uid);
   if (!accessToken) {
     return {
       ok: false,
       spoken: "Connect Google in Connectors to save tasks there.",
+      receipt: null,
     };
   }
 
   const body: { title: string; due?: string; notes?: string } = {
-    title: title.slice(0, 200),
+    title: label.slice(0, 200),
   };
   const due = taskDueRfc3339(when);
   if (due) body.due = due;
@@ -439,19 +539,30 @@ export async function createGoogleTask(
     return {
       ok: false,
       spoken: "Google access expired. Connect it again in Connectors.",
+      receipt: null,
     };
   }
   if (!res.ok) {
     console.error("[tasks] create failed", await res.text());
-    return { ok: false, spoken: "I couldn't add that to Google Tasks." };
+    return { ok: false, spoken: "I couldn't add that to Google Tasks.", receipt: null };
   }
-  if (when) {
-    return {
-      ok: true,
-      spoken: `Added to Google Tasks for ${when}.`,
-    };
-  }
-  return { ok: true, spoken: "Added to Google Tasks." };
+  const created = (await res.json().catch(() => ({}))) as { id?: string };
+  const href =
+    typeof created.id === "string" && created.id
+      ? `https://tasks.google.com/task/${encodeURIComponent(created.id)}`
+      : "https://tasks.google.com/";
+  const spoken = when
+    ? withName(name ?? null, `I added ${label} to your tasks for ${when}.`)
+    : withName(name ?? null, `I added ${label} to your tasks.`);
+  return {
+    ok: true,
+    spoken,
+    receipt: {
+      action: `Added ${label} to tasks`,
+      href,
+      linkLabel: "Open task",
+    },
+  };
 }
 
 function headerValue(
@@ -465,30 +576,40 @@ function headerValue(
 }
 
 /** Speak a short digest of recent unread mail. */
-export async function speakUnreadGmail(uid: string): Promise<string> {
+export async function readUnreadGmail(
+  uid: string,
+  options: { limit: number; name: string | null },
+): Promise<GoogleToolResult> {
+  const limit = Math.min(5, Math.max(1, options.limit || 3));
   if (!isGoogleCalendarConfigured()) {
-    return "Gmail isn't set up on the server yet.";
+    return { spoken: "Gmail isn't set up on the server yet.", receipt: null };
   }
   const accessToken = await getValidAccessToken(uid);
   if (!accessToken) {
-    return "Connect Google in Connectors first, then ask again.";
+    return {
+      spoken: "Connect Google in Connectors first, then ask again.",
+      receipt: null,
+    };
   }
 
   const listUrl = new URL(
     "https://gmail.googleapis.com/gmail/v1/users/me/messages",
   );
-  listUrl.searchParams.set("q", "is:unread newer_than:7d");
-  listUrl.searchParams.set("maxResults", "5");
+  listUrl.searchParams.set("q", "is:unread newer_than:14d");
+  listUrl.searchParams.set("maxResults", String(limit));
 
   const listRes = await fetch(listUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (listRes.status === 401) {
-    return "Google access expired. Connect it again in Connectors.";
+    return {
+      spoken: "Google access expired. Connect it again in Connectors.",
+      receipt: null,
+    };
   }
   if (!listRes.ok) {
     console.error("[gmail] list failed", await listRes.text());
-    return "I couldn't read Gmail just now.";
+    return { spoken: "I couldn't read Gmail just now.", receipt: null };
   }
 
   const listData = (await listRes.json()) as {
@@ -498,14 +619,22 @@ export async function speakUnreadGmail(uid: string): Promise<string> {
   const ids = (listData.messages ?? [])
     .map((m) => m.id)
     .filter((id): id is string => Boolean(id))
-    .slice(0, 5);
+    .slice(0, limit);
 
+  const inbox = "https://mail.google.com/mail/u/0/#inbox";
   if (ids.length === 0) {
-    return "No unread mail in the last week.";
+    return {
+      spoken: withName(options.name, "No unread mail in the last two weeks."),
+      receipt: {
+        action: "Checked unread email",
+        href: inbox,
+        linkLabel: "Open inbox",
+      },
+    };
   }
 
   const snippets: string[] = [];
-  for (const id of ids.slice(0, 3)) {
+  for (const id of ids) {
     const msgRes = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
@@ -513,24 +642,33 @@ export async function speakUnreadGmail(uid: string): Promise<string> {
     if (!msgRes.ok) continue;
     const msg = (await msgRes.json()) as {
       payload?: { headers?: Array<{ name?: string; value?: string }> };
-      snippet?: string;
     };
     const from = headerValue(msg.payload?.headers, "From")
       .replace(/<.*>/, "")
       .trim();
     const subject = headerValue(msg.payload?.headers, "Subject") || "No subject";
-    const who = from || "someone";
-    snippets.push(`${who}: ${subject}`);
+    snippets.push(`${from || "someone"}: ${subject}`);
   }
 
   if (snippets.length === 0) {
-    return "You have unread mail, but I couldn't read the subjects.";
+    return {
+      spoken: "You have unread mail, but I couldn't read the subjects.",
+      receipt: null,
+    };
   }
 
   const estimate = listData.resultSizeEstimate ?? ids.length;
   const head =
     estimate > snippets.length
-      ? `You have about ${estimate} unread messages. Top ones:`
-      : `You have ${snippets.length} unread.`;
-  return `${head} ${snippets.join(". ")}.`;
+      ? `You have about ${estimate} unread messages. The latest ${snippets.length}:`
+      : `Your last ${snippets.length} unread:`;
+  const latest = ids[0];
+  return {
+    spoken: withName(options.name, `${head} ${snippets.join(". ")}.`),
+    receipt: {
+      action: `Summarized your last ${snippets.length} unread emails`,
+      href: latest ? `https://mail.google.com/mail/u/0/#inbox/${latest}` : inbox,
+      linkLabel: "Open email",
+    },
+  };
 }

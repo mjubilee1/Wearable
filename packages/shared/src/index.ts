@@ -43,6 +43,8 @@ export type UserProfile = {
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
   planUpdatedAt?: number;
+  /** Set when the connector welcome modal is dismissed. */
+  connectorSetupDismissedAt?: number | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -83,8 +85,36 @@ export type UpdateUserInput = Partial<
     | "prompts"
     | "vibes"
     | "deviceId"
+    | "connectorSetupDismissedAt"
   >
 >;
+
+/** True when a profile name is missing or is an email address. */
+export function isEmailLikeName(name: string, email?: string | null): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return true;
+  if (trimmed.includes("@")) return true;
+  const mail = email?.trim().toLowerCase();
+  if (mail && trimmed.toLowerCase() === mail) return true;
+  return false;
+}
+
+/** First token of a real name, or null when the stored name is an email. */
+export function firstNameFrom(name: string, email?: string | null): string | null {
+  if (isEmailLikeName(name, email)) return null;
+  const first = name.trim().split(/\s+/)[0];
+  return first || null;
+}
+
+/** Seed copy that should never appear in the notes list. */
+export function isPlaceholderNote(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .replace(/[.!?]+$/g, "");
+  return normalized === "add a note" || normalized === "add a new doctor's note";
+}
 
 export type FacilitateRequest = {
   selfId: string;
@@ -469,10 +499,20 @@ export type AgentPendingTool = {
   payload: Record<string, string>;
 };
 
+/** A completed tool action the client can show and link. */
+export type AgentActionReceipt = {
+  /** Short past-tense phrase shown after "Done:". */
+  action: string;
+  /** HTTPS link to the event, task, or email that was created or read. */
+  href: string | null;
+  linkLabel: string | null;
+};
+
 export type AgentTurnResponse = {
   reply: string;
   pendingTool: AgentPendingTool | null;
   mode: "openai" | "mock";
+  receipt?: AgentActionReceipt | null;
 };
 
 /** A fact the user asked to keep. */

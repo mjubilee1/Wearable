@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { MarketingAccountLink } from "@/components/MarketingAccountLink";
 import { MarketingNav } from "@/components/MarketingNav";
 import { WaitlistForm } from "@/components/WaitlistForm";
-import { QUESTIONS, siteJsonLd } from "@/lib/site";
+import { CONNECTOR_PRIVACY_LINE, QUESTIONS, siteJsonLd } from "@/lib/site";
 
 export const metadata: Metadata = {
   alternates: {
@@ -302,7 +302,10 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-        <p className="mx-auto mt-12 max-w-6xl text-xs text-muted">
+        <p className="mx-auto mt-12 max-w-6xl text-xs leading-relaxed text-muted">
+          {CONNECTOR_PRIVACY_LINE}
+        </p>
+        <p className="mx-auto mt-3 max-w-6xl text-xs text-muted">
           © 2026 Nearby · nearbyhello.com
         </p>
       </footer>

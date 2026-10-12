@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
@@ -33,7 +33,6 @@ function AuthGate({ children }: { children: ReactNode }) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={colors.teal} size="large" />
-        <Text style={styles.loadingText}>Connecting…</Text>
       </View>
     );
   }
@@ -77,5 +76,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.page,
     gap: 12,
   },
-  loadingText: { fontSize: 14, color: colors.muted },
 });

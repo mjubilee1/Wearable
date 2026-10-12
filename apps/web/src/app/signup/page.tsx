@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { isEmailLikeName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 
 export default function SignupPage() {
@@ -19,8 +20,8 @@ export default function SignupPage() {
     setError(null);
 
     const trimmed = name.trim();
-    if (!trimmed) {
-      setError("Enter your name.");
+    if (!trimmed || isEmailLikeName(trimmed, email)) {
+      setError("Enter your first name, not your email.");
       return;
     }
 
@@ -51,9 +52,11 @@ export default function SignupPage() {
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-ink">Name</span>
+          <span className="text-xs font-semibold text-ink">First name</span>
           <input
             required
+            autoComplete="given-name"
+            placeholder="Your first name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"

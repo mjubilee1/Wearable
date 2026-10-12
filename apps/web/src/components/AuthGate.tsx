@@ -28,11 +28,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (loading && !isPublic) {
     return (
-      <div className="flex min-h-dvh items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-pulse rounded-full bg-teal" />
-          <p className="mt-3 text-sm text-muted">Connecting…</p>
-        </div>
+      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pt-20 sm:px-8">
+        <div className="fixed inset-x-0 top-0 z-40 h-[52px] border-b border-black/5 bg-white/80" />
+        <div className="h-3 w-16 animate-pulse rounded bg-teal/20" />
+        <div className="mt-3 h-9 w-40 animate-pulse rounded-lg bg-surface" />
+        <div className="mt-6 h-36 animate-pulse rounded-3xl bg-card shadow-sm" />
+        <div className="mt-4 h-28 animate-pulse rounded-3xl bg-card shadow-sm" />
       </div>
     );
   }

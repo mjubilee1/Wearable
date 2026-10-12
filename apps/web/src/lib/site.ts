@@ -6,6 +6,8 @@ export const SITE_TITLE = "Nearby — Voice assistant that answers out loud";
 export const SITE_DESCRIPTION =
   "Voice assistant for your day. Speak from a laptop or headphones about calendar, notes, and reminders, and get a short answer out loud.";
 export const SITE_TAGLINE = "Speak, and it answers out loud.";
+export const CONNECTOR_PRIVACY_LINE =
+  "Nearby only uses a connector when you ask. You can disconnect anytime.";
 
 export const QUESTIONS = [
   {
@@ -32,6 +34,7 @@ const PRIVATE_PATHS = [
   "/forgot-password",
   "/activity",
   "/profile",
+  "/connectors",
   "/nearby",
   "/connections",
 ];

@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
+  firstNameFrom,
   isAgentToolName,
+  isPlaceholderNote,
+  type AgentActionReceipt,
   type AgentMemoryItem,
   type AgentPendingTool,
   type AgentToolName,
@@ -9,8 +12,8 @@ import {
 } from "@nearby/shared";
 import {
   createGoogleTask,
-  speakTodaysCalendar,
-  speakUnreadGmail,
+  readCalendar,
+  readUnreadGmail,
 } from "./connectors/google-calendar.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 
@@ -165,12 +168,17 @@ function wantsNoteRead(lower: string): boolean {
   );
 }
 
+function visibleNotes(notes: StoredAction[]): StoredAction[] {
+  return notes.filter((note) => !isPlaceholderNote(note.text));
+}
+
 function speakNotes(notes: StoredAction[]): string {
-  if (notes.length === 0) {
+  const kept = visibleNotes(notes);
+  if (kept.length === 0) {
     return "You don't have any notes yet.";
   }
   // Chronological (oldest → newest) so the reply has a clear timeline.
-  const ordered = [...notes].sort(byCreatedAtAsc);
+  const ordered = [...kept].sort(byCreatedAtAsc);
   const recent = ordered.slice(-5);
   if (recent.length === 1) {
     const note = recent[0];
@@ -184,7 +192,7 @@ function speakNotes(notes: StoredAction[]): string {
 }
 
 function contextBlock(state: AgentState): string {
-  const notes = [...state.notes]
+  const notes = visibleNotes(state.notes)
     .sort(byCreatedAtAsc)
     .slice(-8)
     .map(
@@ -313,12 +321,94 @@ function parseModel(content: string): AgentTurnResponse | null {
   return { reply, pendingTool, mode: "openai" };
 }
 
-async function modelTurn(uid: string, text: string): Promise<AgentTurnResponse> {
+async function readFirstName(uid: string): Promise<string | null> {
+  if (!isFirebaseConfigured()) return null;
+  try {
+    const snap = await getFirebaseAdmin()
+      .firestore()
+      .collection("users")
+      .doc(uid)
+      .get();
+    const data = snap.data() ?? {};
+    const name = typeof data.name === "string" ? data.name : "";
+    const email = typeof data.email === "string" ? data.email : "";
+    const first = firstNameFrom(name, email);
+    if (!first) return null;
+    return first.replace(/[\r\n]/g, " ").trim().slice(0, 40) || null;
+  } catch (error) {
+    console.error("[agent] profile name", error);
+    return null;
+  }
+}
+
+function taskTitleFrom(text: string): string {
+  const quoted = text.match(/["“']([^"”']+)["”']/);
+  if (quoted?.[1]?.trim()) return clip(quoted[1].trim(), 200);
+  const stripped = text
+    .replace(/\b(please|can you|could you|would you)\b/gi, "")
+    .replace(/\b(add|put|create|save|remind me to|remind me)\b/gi, "")
+    .replace(/\b(to|on|into)\s+(my\s+)?(google\s+)?tasks?\b/gi, "")
+    .replace(/\b(my\s+)?(google\s+)?tasks?\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return clip(stripped || text, 200);
+}
+
+/** Known spoken requests run the tool directly so example chips don't wait on the model. */
+function explicitTool(text: string): AgentPendingTool | null {
+  const lower = text.toLowerCase();
+  if (
+    /\b(tasks?|to-?dos?)\b/.test(lower) &&
+    /\b(add|put|create|save|remind)\b/.test(lower)
+  ) {
+    const title = taskTitleFrom(text);
+    return {
+      tool: "reminder",
+      summary: `Add ${title} to tasks`,
+      payload: { text: title, when: "" },
+    };
+  }
+  if (/\b(gmail|inbox|emails?|e-mails?|unread)\b/.test(lower)) {
+    const count = Number(lower.match(/\b([1-5])\b/)?.[1] ?? "3");
+    return {
+      tool: "gmail",
+      summary: "Summarize unread email",
+      payload: { when: "recent", limit: String(count) },
+    };
+  }
+  if (/\b(calendar|agenda|schedule|meeting|appointment)\b/.test(lower)) {
+    const when = /\btomorrow\b/.test(lower) ? "tomorrow" : "today";
+    const first = /\b(first|next|earliest)\b/.test(lower);
+    return {
+      tool: "calendar",
+      summary: first ? `${when}'s first meeting` : `${when}'s calendar`,
+      payload: { when, first: first ? "1" : "0" },
+    };
+  }
+  return null;
+}
+
+function nameLine(name: string | null): string {
+  if (!name) {
+    return "Do not address the user by an email address. ";
+  }
+  return `The user's first name is ${name}. Use it when you greet them. Never address them by an email address. `;
+}
+
+async function modelTurn(
+  uid: string,
+  text: string,
+  name: string | null,
+): Promise<AgentTurnResponse> {
   const state = await readState(uid);
   const lower = text.toLowerCase();
   if (wantsNoteRead(lower)) {
     const mode = process.env.OPENAI_API_KEY ? "openai" : "mock";
-    return { reply: speakNotes(state.notes), pendingTool: null, mode };
+    const spoken = speakNotes(state.notes);
+    const reply = name
+      ? `${name}, ${spoken.charAt(0).toLowerCase()}${spoken.slice(1)}`
+      : spoken;
+    return { reply, pendingTool: null, mode };
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -342,7 +432,9 @@ async function modelTurn(uid: string, text: string): Promise<AgentTurnResponse> 
           {
             role: "system",
             content:
-              "You are Nearby, a voice assistant. The user spoke one turn. Reply in one or two short sentences meant to be spoken aloud. No markdown, lists, or emoji. You can already see their saved notes, local reminders, and memories below with timestamps — when they ask what they saved, answer in chronological order (oldest to newest) and mention when each was saved in plain speech. Do not claim you cannot access notes. If they want to create a note, set a reminder (pushed to Google Tasks when connected), remember a fact, check the calendar, or read unread Gmail, set tool and do not ask permission — the server runs it in this turn and replaces reply. Otherwise tool is null and reply is the spoken answer. Return JSON only: {\"reply\":string,\"tool\":null|{name:\"calendar\"|\"gmail\"|\"note\"|\"reminder\"|\"remember\",summary:string,payload:object}}. Payload keys: note text; reminder text and when; remember text; calendar when; gmail when.\n\n" +
+              "You are Nearby, a voice assistant. The user spoke one turn. Reply in one or two short sentences meant to be spoken aloud. No markdown, lists, or emoji. " +
+              nameLine(name) +
+              "You can already see their saved notes, local reminders, and memories below with timestamps — when they ask what they saved, answer in chronological order (oldest to newest) and mention when each was saved in plain speech. Do not claim you cannot access notes. If they want to create a note, set a reminder (pushed to Google Tasks when connected), remember a fact, check the calendar, or read unread Gmail, set tool and do not ask permission — the server runs it in this turn and replaces reply. Otherwise tool is null and reply is the spoken answer. Return JSON only: {\"reply\":string,\"tool\":null|{name:\"calendar\"|\"gmail\"|\"note\"|\"reminder\"|\"remember\",summary:string,payload:object}}. Payload keys: note text; reminder text and when; remember text; calendar when (today or tomorrow) and first (1 for the first event only); gmail when and limit.\n\n" +
               contextBlock(state),
           },
           { role: "user", content: text },
@@ -368,36 +460,58 @@ function spokenConfirmation(
   tool: AgentToolName,
   approved: boolean,
   payload: Record<string, string>,
+  name: string | null,
 ): string {
   if (!approved) return "Okay. I won't.";
-  if (tool === "remember") return "I'll remember that.";
-  if (tool === "note") return "Saved.";
+  if (tool === "remember") {
+    return name ? `${name}, I'll remember that.` : "I'll remember that.";
+  }
+  if (tool === "note") return name ? `Saved, ${name}.` : "Saved.";
   if (tool === "reminder") {
-    return payload.when ? `Reminder set for ${payload.when}.` : "Reminder set.";
+    const base = payload.when ? `Reminder set for ${payload.when}.` : "Reminder set.";
+    return name ? `${name}, ${base.charAt(0).toLowerCase()}${base.slice(1)}` : base;
   }
   return "Okay.";
+}
+
+function answered(
+  reply: string,
+  mode: AgentTurnResponse["mode"],
+  receipt: AgentActionReceipt | null = null,
+): AgentTurnResponse {
+  return { reply, pendingTool: null, mode, receipt };
 }
 
 async function applyDecision(
   uid: string,
   decision: NonNullable<AgentTurnRequest["decision"]>,
+  name: string | null,
 ): Promise<AgentTurnResponse> {
   const payload = asPayload(decision.payload);
   const summary = clip(decision.summary || payload.text || "");
   const mode = process.env.OPENAI_API_KEY ? "openai" : "mock";
 
   if (!decision.approved) {
-    return { reply: "Okay. I won't.", pendingTool: null, mode };
+    return answered("Okay. I won't.", mode);
   }
 
   if (decision.tool === "calendar") {
-    const reply = clip(await speakTodaysCalendar(uid), 320);
-    return { reply, pendingTool: null, mode };
+    const when = payload.when === "tomorrow" ? "tomorrow" : "today";
+    const result = await readCalendar(uid, {
+      when,
+      firstOnly: payload.first === "1",
+      name,
+    });
+    return answered(clip(result.spoken, 420), mode, result.receipt);
   }
 
   if (decision.tool === "gmail") {
-    const reply = clip(await speakUnreadGmail(uid), 360);
-    return { reply, pendingTool: null, mode };
+    const limit = Number(payload.limit);
+    const result = await readUnreadGmail(uid, {
+      limit: Number.isFinite(limit) && limit > 0 ? limit : 3,
+      name,
+    });
+    return answered(clip(result.spoken, 520), mode, result.receipt);
   }
 
   const state = await readState(uid);
@@ -409,28 +523,27 @@ async function applyDecision(
         ...state.memories,
       ].slice(0, 50);
       await writeState(uid, state);
-      return {
-        reply: spokenConfirmation(decision.tool, true, payload),
-        pendingTool: null,
-        mode,
-      };
+      return answered(spokenConfirmation(decision.tool, true, payload, name), mode);
     }
     if (decision.tool === "note") {
+      if (isPlaceholderNote(text)) {
+        return answered(
+          name
+            ? `${name}, say the note you want saved.`
+            : "Say the note you want saved.",
+          mode,
+        );
+      }
       state.notes = [
         { id: randomUUID(), text, createdAt: Date.now() },
         ...state.notes,
       ].slice(0, 50);
       await writeState(uid, state);
-      return {
-        reply: spokenConfirmation(decision.tool, true, payload),
-        pendingTool: null,
-        mode,
-      };
+      return answered(spokenConfirmation(decision.tool, true, payload, name), mode);
     }
     if (decision.tool === "reminder") {
-      const task = await createGoogleTask(uid, text, payload.when);
+      const task = await createGoogleTask(uid, text, payload.when, name);
       if (task.ok) {
-        // Keep a local mirror so Talk can still list recent reminders.
         const reminder: StoredAction = {
           id: randomUUID(),
           text,
@@ -439,9 +552,8 @@ async function applyDecision(
         if (payload.when) reminder.when = payload.when;
         state.reminders = [reminder, ...state.reminders].slice(0, 50);
         await writeState(uid, state);
-        return { reply: task.spoken, pendingTool: null, mode };
+        return answered(task.spoken, mode, task.receipt);
       }
-      // Fall back to in-app reminder if Google Tasks isn't connected.
       const reminder: StoredAction = {
         id: randomUUID(),
         text,
@@ -450,19 +562,11 @@ async function applyDecision(
       if (payload.when) reminder.when = payload.when;
       state.reminders = [reminder, ...state.reminders].slice(0, 50);
       await writeState(uid, state);
-      const local = spokenConfirmation("reminder", true, payload);
-      return {
-        reply: `${local} ${task.spoken}`,
-        pendingTool: null,
-        mode,
-      };
+      const local = spokenConfirmation("reminder", true, payload, name);
+      return answered(`${local} ${task.spoken}`, mode);
     }
   }
-  return {
-    reply: spokenConfirmation(decision.tool, true, payload),
-    pendingTool: null,
-    mode,
-  };
+  return answered(spokenConfirmation(decision.tool, true, payload, name), mode);
 }
 
 export async function runAgentTurn(
@@ -473,6 +577,7 @@ export async function runAgentTurn(
     throw new Error("Missing request body");
   }
   const request = body as AgentTurnRequest;
+  const name = await readFirstName(uid);
   if (request.decision) {
     const decision = request.decision;
     if (
@@ -483,27 +588,48 @@ export async function runAgentTurn(
     ) {
       throw new Error("Invalid tool decision");
     }
-    return applyDecision(uid, {
-      tool: decision.tool,
-      approved: decision.approved,
-      summary: typeof decision.summary === "string" ? decision.summary : "",
-      payload: asPayload(decision.payload),
-    });
+    return applyDecision(
+      uid,
+      {
+        tool: decision.tool,
+        approved: decision.approved,
+        summary: typeof decision.summary === "string" ? decision.summary : "",
+        payload: asPayload(decision.payload),
+      },
+      name,
+    );
   }
 
   const text = typeof request.text === "string" ? clip(request.text, 500) : "";
   if (!text) throw new Error("Say something first");
-  const turn = await modelTurn(uid, text);
+  const direct = explicitTool(text);
+  if (direct) {
+    return applyDecision(
+      uid,
+      {
+        tool: direct.tool,
+        approved: true,
+        summary: direct.summary,
+        payload: direct.payload,
+      },
+      name,
+    );
+  }
+  const turn = await modelTurn(uid, text, name);
   const pending =
     turn.pendingTool ??
     (await mockTurn(text, await readState(uid))).pendingTool;
   if (!pending) return turn;
-  return applyDecision(uid, {
-    tool: pending.tool,
-    approved: true,
-    summary: pending.summary,
-    payload: pending.payload,
-  });
+  return applyDecision(
+    uid,
+    {
+      tool: pending.tool,
+      approved: true,
+      summary: pending.summary,
+      payload: pending.payload,
+    },
+    name,
+  );
 }
 
 export async function listAgentMemories(uid: string): Promise<AgentMemoryItem[]> {
@@ -513,7 +639,18 @@ export async function listAgentMemories(uid: string): Promise<AgentMemoryItem[]>
 
 export async function listAgentNotes(uid: string): Promise<StoredAction[]> {
   const state = await readState(uid);
-  return [...state.notes].sort(byCreatedAtAsc);
+  const notes = visibleNotes(state.notes);
+  if (notes.length !== state.notes.length) {
+    state.notes = notes;
+    await writeState(uid, state);
+  }
+  return [...notes].sort(byCreatedAtAsc);
+}
+
+export async function deleteAgentNote(uid: string, id: string): Promise<void> {
+  const state = await readState(uid);
+  state.notes = state.notes.filter((item) => item.id !== id);
+  await writeState(uid, state);
 }
 
 export async function deleteAgentMemory(uid: string, id: string): Promise<void> {

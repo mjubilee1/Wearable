@@ -1,13 +1,46 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+// PARITY: mobile — example chips, spoken Done receipt, notes delete, and the first-name greeting.
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AgentMemoryItem, AgentTurnResponse } from "@nearby/shared";
+import {
+  firstNameFrom,
+  isPlaceholderNote,
+  type AgentActionReceipt,
+  type AgentMemoryItem,
+  type AgentTurnResponse,
+} from "@nearby/shared";
+import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
+import {
+  clearPendingAsk,
+  fetchGoogleCalendarStatus,
+  peekPendingAsk,
+  stashPendingAsk,
+  startGoogleCalendarConnect,
+} from "@/lib/connectors";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+const EXAMPLES = [
+  {
+    id: "calendar",
+    text: "What's my first meeting tomorrow?",
+    needsGoogle: true,
+  },
+  {
+    id: "tasks",
+    text: "Add 'call the lender' to my tasks",
+    needsGoogle: true,
+  },
+  {
+    id: "gmail",
+    text: "Summarize my last 3 unread emails",
+    needsGoogle: true,
+  },
+] as const;
 
 type SpeechRec = {
   lang: string;
@@ -23,6 +56,8 @@ type SpeechRec = {
   stop: () => void;
 };
 
+type AgentNoteItem = { id: string; text: string; createdAt: number };
+
 function speechRecognition(): SpeechRec | null {
   if (typeof window === "undefined") return null;
   const host = window as Window & {
@@ -37,12 +72,28 @@ function speechRecognition(): SpeechRec | null {
   return rec;
 }
 
+function unlockSpeech() {
+  try {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.resume();
+    const warmup = new SpeechSynthesisUtterance(" ");
+    warmup.volume = 0;
+    window.speechSynthesis.speak(warmup);
+  } catch {
+    // Speech is optional. The reply still shows as text.
+  }
+}
+
 function speak(text: string) {
-  if (typeof window === "undefined" || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 1;
-  window.speechSynthesis.speak(utterance);
+  try {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    // Speech is optional. The reply still shows as text.
+  }
 }
 
 function formatNoteTime(ms: number): string {
@@ -54,23 +105,49 @@ function formatNoteTime(ms: number): string {
   });
 }
 
+function friendlyAgentError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : "";
+  if (/sign in/i.test(raw)) return "Sign in again, then retry.";
+  if (/failed to fetch|network/i.test(raw)) {
+    return "Couldn't reach Nearby. Check your connection and retry.";
+  }
+  if (/isn't configured/i.test(raw)) return "Google connect isn't available right now.";
+  if (raw && raw.length < 140) return raw;
+  return "That didn't go through. Retry in a moment.";
+}
+
+function safeHref(href: string | null | undefined): string | null {
+  if (!href) return null;
+  try {
+    const url = new URL(href);
+    if (url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function TalkPanel() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<AgentActionReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [lastRequest, setLastRequest] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [canListen, setCanListen] = useState(false);
   const recognitionRef = useRef<SpeechRec | null>(null);
+  const greeting = profile
+    ? firstNameFrom(profile.name, profile.email)
+    : null;
 
   useEffect(() => {
     setCanListen(speechRecognition() !== null);
     return () => window.speechSynthesis?.cancel();
   }, []);
-
-  type AgentNoteItem = { id: string; text: string; createdAt: number };
 
   const memoriesQuery = useQuery({
     queryKey: ["agent-memories", user?.uid],
@@ -98,54 +175,116 @@ export function TalkPanel() {
       });
       if (!res.ok) throw new Error("Could not load notes");
       const body = (await res.json()) as { notes: AgentNoteItem[] };
-      return body.notes ?? [];
+      return (body.notes ?? []).filter((note) => !isPlaceholderNote(note.text));
     },
   });
 
-  async function postTurn(body: Record<string, unknown>) {
-    if (!user) throw new Error("Sign in first");
-    const token = await user.getIdToken();
-    const res = await fetch(`${API_URL}/v1/agent`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    const payload = (await res.json().catch(() => null)) as
-      | (AgentTurnResponse & { error?: string })
-      | null;
-    if (!res.ok) {
-      throw new Error(payload?.error ?? "The assistant didn't answer");
-    }
-    if (!payload?.reply) throw new Error("Empty reply");
-    return payload;
-  }
+  const googleQuery = useQuery({
+    queryKey: ["google-calendar", user?.uid],
+    enabled: Boolean(user),
+    queryFn: async () => {
+      if (!user) {
+        return { configured: false, connected: false, email: null as string | null };
+      }
+      return fetchGoogleCalendarStatus(await user.getIdToken());
+    },
+  });
 
-  async function ask(spoken: string) {
-    const next = spoken.trim();
-    if (!next || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await postTurn({ text: next });
-      setReply(result.reply);
-      setText("");
-      speak(result.reply);
-      await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
-      await queryClient.invalidateQueries({ queryKey: ["agent-notes"] });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not ask");
-    } finally {
-      setBusy(false);
+  const ask = useCallback(
+    async (spoken: string) => {
+      const next = spoken.trim();
+      if (!next || busy || !user) return;
+      setLastRequest(next);
+      setBusy(true);
+      setError(null);
+      setReply(null);
+      setReceipt(null);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`${API_URL}/v1/agent`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ text: next }),
+        });
+        const payload = (await res.json().catch(() => null)) as
+          | (AgentTurnResponse & { error?: string })
+          | null;
+        if (!res.ok) {
+          throw new Error(payload?.error ?? "Nearby didn't answer");
+        }
+        if (!payload?.reply) throw new Error("Nearby didn't answer");
+        setReply(payload.reply);
+        setReceipt(payload.receipt ?? null);
+        setText("");
+        speak(payload.reply);
+        await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
+        await queryClient.invalidateQueries({ queryKey: ["agent-notes"] });
+      } catch (err) {
+        setError(friendlyAgentError(err));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, queryClient, user],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user || googleQuery.isLoading) return;
+    const pending = peekPendingAsk();
+    if (!pending) return;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      clearPendingAsk();
+      if (googleQuery.data?.connected) {
+        await ask(pending);
+        return;
+      }
+      setLastRequest(pending);
+      setError("Google didn't connect. Tap the example again when you're ready.");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ask, googleQuery.data, googleQuery.isLoading, user]);
+
+  async function onExample(example: (typeof EXAMPLES)[number]) {
+    if (busy || !user || googleQuery.isLoading) return;
+    unlockSpeech();
+    const status = googleQuery.data;
+    if (
+      example.needsGoogle &&
+      status?.configured !== false &&
+      !status?.connected
+    ) {
+      setLastRequest(example.text);
+      setBusy(true);
+      setError(null);
+      setReply(null);
+      setReceipt(null);
+      try {
+        stashPendingAsk(example.text);
+        const url = await startGoogleCalendarConnect(await user.getIdToken());
+        window.location.assign(url);
+      } catch (err) {
+        clearPendingAsk();
+        setBusy(false);
+        setError(friendlyAgentError(err));
+      }
+      return;
     }
+    void ask(example.text);
   }
 
   function startListening() {
     const rec = speechRecognition();
     if (!rec || busy) return;
     recognitionRef.current = rec;
+    unlockSpeech();
     setListening(true);
     setError(null);
     rec.onresult = (event) => {
@@ -185,8 +324,35 @@ export function TalkPanel() {
     await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
   }
 
+  async function deleteNote(id: string) {
+    if (!user) return;
+    setNoteError(null);
+    const token = await user.getIdToken();
+    const res = await fetch(`${API_URL}/v1/agent/notes/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      setNoteError("Could not delete that note. Retry in a moment.");
+      return;
+    }
+    await queryClient.invalidateQueries({ queryKey: ["agent-notes"] });
+  }
+
+  function retryLast() {
+    if (!lastRequest) return;
+    const example = EXAMPLES.find((item) => item.text === lastRequest);
+    if (example) {
+      void onExample(example);
+      return;
+    }
+    void ask(lastRequest);
+  }
+
   const memories = memoriesQuery.data ?? [];
-  const notes = notesQuery.data ?? [];
+  const notes = (notesQuery.data ?? []).filter((note) => !isPlaceholderNote(note.text));
+  const receiptHref = safeHref(receipt?.href);
+  const showExamples = !busy && !reply;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-20 sm:px-8">
@@ -195,31 +361,88 @@ export function TalkPanel() {
           Nearby
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink">Talk</h1>
+        {greeting ? (
+          <p className="mt-2 text-base font-medium text-ink">Hi {greeting}.</p>
+        ) : null}
         <p className="mt-2 max-w-xl text-sm text-muted sm:text-base">
-          One turn, a short answer out loud, then quiet. Connect calendar and
-          other tools in{" "}
-          <Link href="/connectors" className="font-semibold text-teal">
-            Connectors
-          </Link>
-          .
+          What Nearby can do: check your calendar, add a task, summarize unread
+          email, and save a note.
         </p>
       </header>
 
       <main className="flex flex-1 flex-col gap-4">
-        <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
+        <section
+          className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm"
+          aria-live="polite"
+          aria-busy={busy}
+        >
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
             Last reply
           </p>
-          <p className="mt-3 text-lg font-medium leading-snug text-ink">
-            {reply ?? "Tap the microphone, or type what you would say."}
-          </p>
-          {error ? <p className="mt-3 text-sm text-coral">{error}</p> : null}
+          {busy ? (
+            <div className="mt-3">
+              <div className="h-4 w-3/4 animate-pulse rounded bg-surface" />
+              <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-surface" />
+              <p className="mt-3 text-sm text-muted">Working on that…</p>
+            </div>
+          ) : null}
+          {!busy && reply ? (
+            <p className="mt-3 text-lg font-medium leading-snug text-ink">{reply}</p>
+          ) : null}
+          {!busy && receipt ? (
+            <p className="mt-4 text-sm text-ink">
+              <span className="font-semibold text-teal">Done:</span> {receipt.action}
+              {receiptHref ? (
+                <>
+                  {" "}
+                  <a
+                    href={receiptHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-teal underline"
+                  >
+                    {receipt.linkLabel ?? "Open"}
+                  </a>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+          {error ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <p className="text-sm text-coral">{error}</p>
+              {lastRequest ? (
+                <button
+                  type="button"
+                  onClick={() => retryLast()}
+                  className="rounded-full bg-coral-soft px-3 py-1.5 text-xs font-semibold text-coral"
+                >
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {showExamples ? (
+            <div className="mt-4 flex flex-col gap-2">
+              {EXAMPLES.map((example) => (
+                <button
+                  key={example.id}
+                  type="button"
+                  disabled={busy || googleQuery.isLoading}
+                  onClick={() => void onExample(example)}
+                  className="rounded-2xl border border-black/10 bg-surface px-4 py-3 text-left text-sm font-medium text-ink transition hover:border-teal/40 disabled:opacity-60"
+                >
+                  {example.text}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </section>
 
         <form
           className="flex flex-col gap-3 sm:flex-row"
           onSubmit={(event) => {
             event.preventDefault();
+            unlockSpeech();
             void ask(text);
           }}
         >
@@ -230,7 +453,7 @@ export function TalkPanel() {
             id="talk-text"
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="What's on my calendar today?"
+            placeholder="Say or type a request"
             className="min-w-0 flex-1 rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
           />
           {canListen ? (
@@ -256,25 +479,40 @@ export function TalkPanel() {
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
             Notes
           </p>
-          {notes.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">
-              No notes yet. Ask Nearby to take one.
-            </p>
+          {notesQuery.isLoading ? (
+            <div className="mt-3 h-4 w-48 animate-pulse rounded bg-surface" />
+          ) : notes.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">Say &quot;note: ...&quot; to save one.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {notes.map((item) => (
                 <li
                   key={item.id}
-                  className="rounded-2xl bg-surface px-3 py-2"
+                  className="flex items-start justify-between gap-3 rounded-2xl bg-surface px-3 py-2"
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                    {formatNoteTime(item.createdAt)}
-                  </p>
-                  <p className="mt-1 text-sm text-ink">{item.text}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm text-ink">{item.text}</p>
+                    <time
+                      dateTime={new Date(item.createdAt).toISOString()}
+                      className="mt-1 block text-[11px] text-muted"
+                    >
+                      {formatNoteTime(item.createdAt)}
+                    </time>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void deleteNote(item.id)}
+                    className="shrink-0 text-xs font-semibold text-coral"
+                  >
+                    Delete
+                  </button>
                 </li>
               ))}
             </ul>
           )}
+          {noteError ? (
+            <p className="mt-3 text-sm text-coral">{noteError}</p>
+          ) : null}
         </section>
 
         <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
@@ -307,6 +545,7 @@ export function TalkPanel() {
           )}
         </section>
       </main>
+      <PrivacyFooter />
       <TabBar active="activity" />
     </div>
   );

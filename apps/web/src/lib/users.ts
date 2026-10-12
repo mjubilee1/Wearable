@@ -86,6 +86,10 @@ function mapUser(id: string, data: DocumentData): UserProfile {
       data.planUpdatedAt === undefined
         ? undefined
         : Number(data.planUpdatedAt),
+    connectorSetupDismissedAt:
+      typeof data.connectorSetupDismissedAt === "number"
+        ? data.connectorSetupDismissedAt
+        : null,
     createdAt: Number(data.createdAt ?? Date.now()),
     updatedAt: Number(data.updatedAt ?? Date.now()),
   };
@@ -154,6 +158,9 @@ export async function updateUserProfile(
   if (patch.prompts !== undefined) updates.prompts = patch.prompts;
   if (patch.vibes !== undefined) updates.vibes = patch.vibes;
   if (patch.deviceId !== undefined) updates.deviceId = patch.deviceId;
+  if (patch.connectorSetupDismissedAt !== undefined) {
+    updates.connectorSetupDismissedAt = patch.connectorSetupDismissedAt;
+  }
 
   await updateDoc(doc(db, USERS, uid), updates);
 }

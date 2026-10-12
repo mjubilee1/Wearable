@@ -20,6 +20,7 @@ import {
 } from "@nearby/shared";
 import {
   deleteAgentMemory,
+  deleteAgentNote,
   listAgentMemories,
   listAgentNotes,
   runAgentTurn,
@@ -319,6 +320,15 @@ app.delete("/v1/agent/memories/:id", async (c) => {
   const id = c.req.param("id").trim();
   if (!id) return c.json({ error: "Missing memory id" }, 400);
   await deleteAgentMemory(auth.uid, id);
+  return c.json({ ok: true });
+});
+
+app.delete("/v1/agent/notes/:id", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const id = c.req.param("id").trim();
+  if (!id) return c.json({ error: "Missing note id" }, 400);
+  await deleteAgentNote(auth.uid, id);
   return c.json({ ok: true });
 });
 

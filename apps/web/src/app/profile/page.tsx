@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { isEmailLikeName } from "@nearby/shared";
+import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
 import { updateUserProfile } from "@/lib/users";
@@ -15,7 +17,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!profile) return;
-    setName(profile.name);
+    setName(isEmailLikeName(profile.name, profile.email) ? "" : profile.name);
   }, [profile]);
 
   if (!profile) {
@@ -37,8 +39,8 @@ export default function ProfilePage() {
     setMessage(null);
 
     const trimmed = name.trim();
-    if (!trimmed) {
-      setError("Enter your name.");
+    if (!trimmed || isEmailLikeName(trimmed, profile.email)) {
+      setError("Enter your first name, not your email.");
       return;
     }
 
@@ -84,10 +86,12 @@ export default function ProfilePage() {
 
         <form onSubmit={onSave} className="space-y-5">
           <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-ink">Name</span>
+            <span className="text-xs font-semibold text-ink">First name</span>
             <input
               required
               value={name}
+              autoComplete="given-name"
+              placeholder="Your first name"
               onChange={(e) => setName(e.target.value)}
               className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
             />
@@ -129,6 +133,7 @@ export default function ProfilePage() {
         </button>
       </main>
 
+      <PrivacyFooter />
       <TabBar active="profile" />
     </div>
   );
