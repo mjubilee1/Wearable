@@ -13,8 +13,12 @@ import {
   formatClockAmPm,
   formatWhenInZone,
   getZonedParts,
+  zonedClock,
+  zonedDayKey,
   zonedTimeToUtc,
 } from "../timezone.js";
+
+export { zonedClock };
 
 /** One Google connect unlocks Calendar (read/write events), Tasks, and Gmail read + drafts. */
 const SCOPES = [
@@ -347,15 +351,14 @@ function httpsHref(value: string | undefined | null): string | null {
 function dayWindow(
   when: "today" | "tomorrow",
   timeZone: string,
+  now = new Date(),
 ): { start: Date; end: Date } {
-  return dayBoundsInZone(timeZone, when === "tomorrow" ? 1 : 0);
+  return dayBoundsInZone(timeZone, when === "tomorrow" ? 1 : 0, now);
 }
 
-function calendarDayHref(start: Date): string {
-  const year = start.getFullYear();
-  const month = start.getMonth() + 1;
-  const day = start.getDate();
-  return `https://calendar.google.com/calendar/u/0/r/day/${year}/${month}/${day}`;
+function calendarDayHref(start: Date, timeZone: string): string {
+  const parts = getZonedParts(timeZone, start);
+  return `https://calendar.google.com/calendar/u/0/r/day/${parts.year}/${parts.month}/${parts.day}`;
 }
 
 function withName(name: string | null, sentence: string): string {
@@ -368,41 +371,16 @@ function withName(name: string | null, sentence: string): string {
   return `${name}, ${spoken}`;
 }
 
-const ZONED_CLOCK: Intl.DateTimeFormatOptions = {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-};
-
-/** Wall clock in `timeZone`. Same formatter the calendar read uses for "3:00 PM". */
-export function zonedClock(
-  date: Date,
-  timeZone: string,
-): { hour: number; minute: number } | null {
-  if (Number.isNaN(date.getTime())) return null;
-  const parts = new Intl.DateTimeFormat("en-US", {
-    ...ZONED_CLOCK,
-    timeZone,
-  }).formatToParts(date);
-  const hour12 = Number(parts.find((part) => part.type === "hour")?.value);
-  const minute = Number(parts.find((part) => part.type === "minute")?.value);
-  const period = parts.find((part) => part.type === "dayPeriod")?.value?.toLowerCase() ?? "";
-  if (!Number.isFinite(hour12) || !Number.isFinite(minute)) return null;
-  let hour = hour12 % 12;
-  if (period.startsWith("pm")) hour += 12;
-  return { hour, minute };
-}
-
-function formatEventTime(
+export function formatEventTime(
   raw: string | undefined,
   allDay: boolean,
   timeZone: string,
 ): string {
   if (!raw) return "";
   if (allDay) return "all day";
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("en-US", { ...ZONED_CLOCK, timeZone });
+  const clock = zonedClock(new Date(raw), timeZone);
+  if (!clock) return "";
+  return formatClockAmPm(clock.hour, clock.minute);
 }
 
 export async function fetchPrimaryCalendarTimeZone(
@@ -431,6 +409,89 @@ function eventPhrase(event: CalendarEvent): string {
   return `${event.summary} at ${event.startLabel}`;
 }
 
+export type CalendarListItem = {
+  summary?: string;
+  status?: string;
+  htmlLink?: string;
+  start?: { dateTime?: string; date?: string };
+};
+
+function eventOnZonedDay(
+  item: CalendarListItem,
+  start: Date,
+  end: Date,
+  timeZone: string,
+): boolean {
+  const dateOnly =
+    item.start?.date && !item.start?.dateTime ? item.start.date : null;
+  if (dateOnly && /^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+    return dateOnly === zonedDayKey(timeZone, start);
+  }
+  const raw = item.start?.dateTime ?? item.start?.date;
+  if (!raw) return false;
+  const at = new Date(raw);
+  if (Number.isNaN(at.getTime())) return false;
+  return at >= start && at < end;
+}
+
+/** Spoken calendar read for the user's local today or tomorrow. */
+export function calendarDayView(
+  items: CalendarListItem[],
+  options: {
+    when: "today" | "tomorrow";
+    firstOnly: boolean;
+    name: string | null;
+    timeZone: string;
+    now?: Date;
+  },
+): { spoken: string; events: CalendarEvent[]; dayStart: Date } {
+  const now = options.now ?? new Date();
+  const whenWord = options.when === "tomorrow" ? "tomorrow" : "today";
+  const { start, end } = dayWindow(options.when, options.timeZone, now);
+  const events = items
+    .filter((item) => item.status !== "cancelled")
+    .filter((item) => eventOnZonedDay(item, start, end, options.timeZone))
+    .map((item) => {
+      const allDay = Boolean(item.start?.date && !item.start?.dateTime);
+      const startRaw = item.start?.dateTime ?? item.start?.date;
+      return {
+        summary: (item.summary || "Busy").trim(),
+        startLabel: formatEventTime(startRaw, allDay, options.timeZone),
+        htmlLink: httpsHref(item.htmlLink),
+      };
+    })
+    .filter((item) => item.summary);
+
+  if (events.length === 0) {
+    const spoken = options.firstOnly
+      ? withName(options.name, `You don't have a meeting ${whenWord}.`)
+      : withName(options.name, `You're free ${whenWord}. Nothing on the calendar.`);
+    return { spoken, events, dayStart: start };
+  }
+
+  const primary = events[0];
+  if (options.firstOnly) {
+    return {
+      spoken: withName(
+        options.name,
+        `Your first meeting ${whenWord} is ${eventPhrase(primary)}.`,
+      ),
+      events,
+      dayStart: start,
+    };
+  }
+
+  const listed = events.slice(0, 5).map(eventPhrase).join(". ");
+  const spoken =
+    events.length === 1
+      ? withName(options.name, `${whenWord === "today" ? "Today" : "Tomorrow"}: ${listed}.`)
+      : withName(
+          options.name,
+          `${whenWord === "today" ? "Today" : "Tomorrow"} you have ${events.length} events. ${listed}.`,
+        );
+  return { spoken, events, dayStart: start };
+}
+
 export async function readCalendar(
   uid: string,
   options: {
@@ -438,9 +499,11 @@ export async function readCalendar(
     firstOnly: boolean;
     name: string | null;
     timeZone: string;
+    now?: Date;
   },
 ): Promise<GoogleToolResult> {
   const whenWord = options.when === "tomorrow" ? "tomorrow" : "today";
+  const now = options.now ?? new Date();
   if (!isGoogleCalendarConfigured()) {
     return { spoken: "Calendar isn't set up on the server yet.", receipt: null };
   }
@@ -452,12 +515,13 @@ export async function readCalendar(
     };
   }
 
-  const { start, end } = dayWindow(options.when, options.timeZone);
+  const { start, end } = dayWindow(options.when, options.timeZone, now);
   const url = new URL(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
   );
   url.searchParams.set("timeMin", start.toISOString());
   url.searchParams.set("timeMax", end.toISOString());
+  url.searchParams.set("timeZone", options.timeZone);
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
   url.searchParams.set("maxResults", "8");
@@ -476,34 +540,14 @@ export async function readCalendar(
     return { spoken: "I couldn't read your calendar just now.", receipt: null };
   }
 
-  const data = (await res.json()) as {
-    items?: Array<{
-      summary?: string;
-      status?: string;
-      htmlLink?: string;
-      start?: { dateTime?: string; date?: string };
-    }>;
-  };
-  const events: CalendarEvent[] = (data.items ?? [])
-    .filter((item) => item.status !== "cancelled")
-    .map((item) => {
-      const allDay = Boolean(item.start?.date && !item.start?.dateTime);
-      const startRaw = item.start?.dateTime ?? item.start?.date;
-      return {
-        summary: (item.summary || "Busy").trim(),
-        startLabel: formatEventTime(startRaw, allDay, options.timeZone),
-        htmlLink: httpsHref(item.htmlLink),
-      };
-    })
-    .filter((item) => item.summary);
-
-  const dayHref = calendarDayHref(start);
-  if (events.length === 0) {
-    const spoken = options.firstOnly
-      ? withName(options.name, `You don't have a meeting ${whenWord}.`)
-      : withName(options.name, `You're free ${whenWord}. Nothing on the calendar.`);
+  const data = (await res.json()) as { items?: CalendarListItem[] };
+  const view = calendarDayView(data.items ?? [], { ...options, now });
+  const dayHref = calendarDayHref(view.dayStart, options.timeZone);
+  const primary = view.events[0];
+  const href = primary?.htmlLink ?? dayHref;
+  if (view.events.length === 0) {
     return {
-      spoken,
+      spoken: view.spoken,
       receipt: {
         action: `Checked ${whenWord}'s calendar`,
         href: dayHref,
@@ -511,37 +555,22 @@ export async function readCalendar(
       },
     };
   }
-
-  const primary = events[0];
-  const href = primary.htmlLink ?? dayHref;
   if (options.firstOnly) {
     return {
-      spoken: withName(
-        options.name,
-        `Your first meeting ${whenWord} is ${eventPhrase(primary)}.`,
-      ),
+      spoken: view.spoken,
       receipt: {
         action: `Checked ${whenWord}'s first meeting`,
         href,
-        linkLabel: primary.htmlLink ? "Open event" : "Open calendar",
+        linkLabel: primary?.htmlLink ? "Open event" : "Open calendar",
       },
     };
   }
-
-  const listed = events.slice(0, 5).map(eventPhrase).join(". ");
-  const spoken =
-    events.length === 1
-      ? withName(options.name, `${whenWord === "today" ? "Today" : "Tomorrow"}: ${listed}.`)
-      : withName(
-          options.name,
-          `${whenWord === "today" ? "Today" : "Tomorrow"} you have ${events.length} events. ${listed}.`,
-        );
   return {
-    spoken,
+    spoken: view.spoken,
     receipt: {
       action: `Checked ${whenWord}'s calendar`,
       href,
-      linkLabel: primary.htmlLink ? "Open event" : "Open calendar",
+      linkLabel: primary?.htmlLink ? "Open event" : "Open calendar",
     },
   };
 }

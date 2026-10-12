@@ -30,11 +30,18 @@ import {
   previewReschedule,
   readCalendar,
   readUnreadGmail,
+  zonedClock,
   saveGmailDraft,
 } from "./connectors/google-calendar.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 import { LimitReachedError } from "./limits.js";
-import { dayBoundsInZone, isValidTimeZone, zonedDayKey } from "./timezone.js";
+import {
+  dayBoundsInZone,
+  formatClockAmPm,
+  formatWhenInZone,
+  isValidTimeZone,
+  zonedDayKey,
+} from "./timezone.js";
 
 const HISTORY_LIMIT = 20;
 const DEFAULT_TIME_ZONE = "America/New_York";
@@ -471,29 +478,23 @@ function byCreatedAtAsc(
   return a.createdAt - b.createdAt;
 }
 
-function formatSpokenStamp(ms: number, now = Date.now()): string {
+function formatSpokenStamp(
+  ms: number,
+  timeZone: string,
+  now = new Date(),
+): string {
   const d = new Date(ms);
-  const time = d.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const today = new Date(now);
-  if (d.toDateString() === today.toDateString()) return `today at ${time}`;
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) {
-    return `yesterday at ${time}`;
-  }
-  const day = d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  return `${day} at ${time}`;
+  const clock = zonedClock(d, timeZone);
+  const time = clock ? formatClockAmPm(clock.hour, clock.minute) : "";
+  const day = zonedDayKey(timeZone, d);
+  if (day === zonedDayKey(timeZone, now)) return `today at ${time}`;
+  const yesterday = dayBoundsInZone(timeZone, -1, now).start;
+  if (day === zonedDayKey(timeZone, yesterday)) return `yesterday at ${time}`;
+  return formatWhenInZone(d, timeZone);
 }
 
-function formatContextStamp(ms: number): string {
-  return new Date(ms).toISOString();
+function formatContextStamp(ms: number, timeZone: string): string {
+  return formatWhenInZone(new Date(ms), timeZone);
 }
 
 function wantsNoteRead(lower: string): boolean {
@@ -513,7 +514,7 @@ function visibleNotes(notes: StoredAction[]): StoredAction[] {
   return notes.filter((note) => !isPlaceholderNote(note.text));
 }
 
-function speakNotes(notes: StoredAction[]): string {
+function speakNotes(notes: StoredAction[], timeZone: string): string {
   const kept = visibleNotes(notes);
   if (kept.length === 0) {
     return "You don't have any notes yet.";
@@ -523,34 +524,34 @@ function speakNotes(notes: StoredAction[]): string {
   const recent = ordered.slice(-5);
   if (recent.length === 1) {
     const note = recent[0];
-    return `Your note from ${formatSpokenStamp(note.createdAt)}: ${clip(note.text, 200)}`;
+    return `Your note from ${formatSpokenStamp(note.createdAt, timeZone)}: ${clip(note.text, 200)}`;
   }
   const parts = recent.map(
     (note) =>
-      `${formatSpokenStamp(note.createdAt)}: ${clip(note.text, 100)}`,
+      `${formatSpokenStamp(note.createdAt, timeZone)}: ${clip(note.text, 100)}`,
   );
   return `Your notes, oldest to newest. ${parts.join(". ")}.`;
 }
 
-function contextBlock(state: AgentState): string {
+function contextBlock(state: AgentState, timeZone: string): string {
   const notes = visibleNotes(state.notes)
     .sort(byCreatedAtAsc)
     .slice(-8)
     .map(
       (n) =>
-        `- [${formatContextStamp(n.createdAt)}] ${clip(n.text, 160)}`,
+        `- [${formatContextStamp(n.createdAt, timeZone)}] ${clip(n.text, 160)}`,
     );
   const reminders = [...state.reminders]
     .sort(byCreatedAtAsc)
     .slice(-5)
     .map(
       (r) =>
-        `- [${formatContextStamp(r.createdAt)}] ${clip(r.text, 120)}${r.when ? ` (due ${r.when})` : ""}`,
+        `- [${formatContextStamp(r.createdAt, timeZone)}] ${clip(r.text, 120)}${r.when ? ` (due ${r.when})` : ""}`,
     );
   const memories = [...state.memories]
     .sort(byCreatedAtAsc)
     .slice(-5)
-    .map((m) => `- [${formatContextStamp(m.createdAt)}] ${clip(m.text, 120)}`);
+    .map((m) => `- [${formatContextStamp(m.createdAt, timeZone)}] ${clip(m.text, 120)}`);
   return [
     "Saved notes in chronological order (oldest to newest). Prefer this order when answering:",
     notes.length ? notes.join("\n") : "(none)",
@@ -561,14 +562,18 @@ function contextBlock(state: AgentState): string {
   ].join("\n");
 }
 
-function mockTurn(text: string, state: AgentState): AgentTurnResponse {
+function mockTurn(
+  text: string,
+  state: AgentState,
+  timeZone: string,
+): AgentTurnResponse {
   const spoken = clip(text);
   const lower = spoken.toLowerCase();
   if (!spoken) {
     return { reply: "I didn't catch that.", pendingTool: null, mode: "mock" };
   }
   if (wantsNoteRead(lower)) {
-    return { reply: speakNotes(state.notes), pendingTool: null, mode: "mock" };
+    return { reply: speakNotes(state.notes, timeZone), pendingTool: null, mode: "mock" };
   }
   if (/\bremember\b|\bdon't forget\b/.test(lower)) {
     return {
@@ -740,12 +745,13 @@ async function modelTurn(
   uid: string,
   text: string,
   name: string | null,
+  timeZone: string,
 ): Promise<AgentTurnResponse> {
   const state = await readState(uid);
   const lower = text.toLowerCase();
   if (wantsNoteRead(lower)) {
     const mode = process.env.OPENAI_API_KEY ? "openai" : "mock";
-    const spoken = speakNotes(state.notes);
+    const spoken = speakNotes(state.notes, timeZone);
     const reply = name
       ? `${name}, ${spoken.charAt(0).toLowerCase()}${spoken.slice(1)}`
       : spoken;
@@ -753,7 +759,7 @@ async function modelTurn(
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return mockTurn(text, state);
+  if (!apiKey) return mockTurn(text, state, timeZone);
 
   const baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
   const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
@@ -776,7 +782,7 @@ async function modelTurn(
               "You are Nearby, a voice assistant. The user spoke one turn. Reply in one or two short sentences meant to be spoken aloud. No markdown, lists, or emoji. " +
               nameLine(name) +
               "You can already see their saved notes, local reminders, and memories below with timestamps — when they ask what they saved, answer in chronological order (oldest to newest) and mention when each was saved in plain speech. Do not claim you cannot access notes. If they want to create a note, set a reminder (pushed to Google Tasks when connected), remember a fact, check the calendar, or read unread Gmail, set tool and do not ask permission — the server runs it in this turn and replaces reply. Otherwise tool is null and reply is the spoken answer. Return JSON only: {\"reply\":string,\"tool\":null|{name:\"calendar\"|\"gmail\"|\"note\"|\"reminder\"|\"remember\",summary:string,payload:object}}. Payload keys: note text; reminder text and when; remember text; calendar when (today or tomorrow) and first (1 for the first event only); gmail when and limit.\n\n" +
-              contextBlock(state),
+              contextBlock(state, timeZone),
           },
           { role: "user", content: text },
         ],
@@ -784,16 +790,16 @@ async function modelTurn(
     });
     if (!res.ok) {
       console.error("[agent] LLM error", await res.text());
-      return mockTurn(text, state);
+      return mockTurn(text, state, timeZone);
     }
     const payload = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const content = payload.choices?.[0]?.message?.content;
-    return (content && parseModel(content)) || mockTurn(text, state);
+    return (content && parseModel(content)) || mockTurn(text, state, timeZone);
   } catch (error) {
     console.error("[agent] LLM request failed", error);
-    return mockTurn(text, state);
+    return mockTurn(text, state, timeZone);
   }
 }
 
@@ -1259,10 +1265,10 @@ export async function runAgentTurn(
       { recordHistory: true, consumeQuota: true, timeZone },
     );
   }
-  const turn = await modelTurn(uid, text, name);
+  const turn = await modelTurn(uid, text, name, timeZone);
   const pending =
     turn.pendingTool ??
-    (await mockTurn(text, await readState(uid))).pendingTool;
+    (await mockTurn(text, await readState(uid), timeZone)).pendingTool;
   if (!pending) {
     const saved = await appendHistory(
       uid,

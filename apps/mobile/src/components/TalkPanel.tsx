@@ -15,6 +15,14 @@ import { colors } from "@/lib/theme";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
+function deviceTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
+  } catch {
+    return "America/New_York";
+  }
+}
+
 function speak(text: string) {
   try {
     const Speech = require("expo-speech") as typeof import("expo-speech");
@@ -57,7 +65,7 @@ export function TalkPanel() {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, timeZone: deviceTimeZone() }),
     });
     const payload = (await res.json().catch(() => null)) as
       | (AgentTurnResponse & { error?: string })

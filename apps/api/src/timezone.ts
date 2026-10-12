@@ -161,6 +161,31 @@ export function dayOffsetFromToken(
   return delta;
 }
 
+const ZONED_CLOCK: Intl.DateTimeFormatOptions = {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+};
+
+/** Wall clock in `timeZone`. Never the UTC hour or the server's local hour. */
+export function zonedClock(
+  date: Date,
+  timeZone: string,
+): { hour: number; minute: number } | null {
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    ...ZONED_CLOCK,
+    timeZone,
+  }).formatToParts(date);
+  const hour12 = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  const period = parts.find((part) => part.type === "dayPeriod")?.value?.toLowerCase() ?? "";
+  if (!Number.isFinite(hour12) || !Number.isFinite(minute)) return null;
+  let hour = hour12 % 12;
+  if (period.startsWith("pm")) hour += 12;
+  return { hour, minute };
+}
+
 export function formatWhenInZone(date: Date, timeZone: string): string {
   const weekday = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -171,12 +196,8 @@ export function formatWhenInZone(date: Date, timeZone: string): string {
     month: "short",
     day: "numeric",
   }).format(date);
-  const time = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
+  const clock = zonedClock(date, timeZone);
+  const time = clock ? formatClockAmPm(clock.hour, clock.minute) : "";
   return `${weekday}, ${monthDay} at ${time}`;
 }
 

@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { cancelHistoryItems } from "./agent.js";
 import {
+  calendarDayView,
   parseRescheduleRequest,
   resolveRescheduleChoice,
   zonedClock,
+  type CalendarListItem,
   type TimedCalendarEvent,
 } from "./connectors/google-calendar.js";
 import { zonedTimeToUtc } from "./timezone.js";
@@ -40,6 +42,54 @@ test("move my 3 PM to tomorrow at 10 previews Monday 10:00 AM", () => {
   assert.equal(choice.event.id, "robinson");
   assert.match(choice.oldWhen, /Mon, Oct 12 at 3:00 PM/);
   assert.match(choice.newWhen, /Mon, Oct 12 at 10:00 AM/);
+});
+
+test("what's on my calendar tomorrow lists Monday in Eastern time", () => {
+  const now = zonedTimeToUtc(tz, 2026, 10, 11, 23, 55);
+  const items: CalendarListItem[] = [
+    {
+      summary: "Look into: Robinson Group",
+      status: "confirmed",
+      start: { dateTime: "2026-10-12T11:00:00-04:00" },
+    },
+    {
+      summary: "Nearby channel block",
+      status: "confirmed",
+      start: { dateTime: "2026-10-12T12:15:00-04:00" },
+    },
+    {
+      summary: "numbers review",
+      status: "confirmed",
+      start: { dateTime: "2026-10-12T20:30:00-04:00" },
+    },
+  ];
+  assert.equal(
+    new Date("2026-10-12T11:00:00-04:00").toISOString(),
+    "2026-10-12T15:00:00.000Z",
+  );
+
+  const tomorrow = calendarDayView(items, {
+    when: "tomorrow",
+    firstOnly: false,
+    name: null,
+    timeZone: tz,
+    now,
+  });
+  assert.match(tomorrow.spoken, /^Tomorrow you have 3 events\./);
+  assert.match(tomorrow.spoken, /Look into: Robinson Group at 11:00 AM/);
+  assert.match(tomorrow.spoken, /Nearby channel block at 12:15 PM/);
+  assert.match(tomorrow.spoken, /numbers review at 8:30 PM/);
+  assert.doesNotMatch(tomorrow.spoken, /3:00 PM/);
+
+  const today = calendarDayView(items, {
+    when: "today",
+    firstOnly: false,
+    name: null,
+    timeZone: tz,
+    now,
+  });
+  assert.match(today.spoken, /free today/);
+  assert.doesNotMatch(today.spoken, /Robinson/);
 });
 
 test("cancel marks the preview and does not add a turn", () => {
