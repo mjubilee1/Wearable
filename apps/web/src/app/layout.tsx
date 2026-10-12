@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { AuthGate } from "@/components/AuthGate";
 import { GoogleAnalytics } from "@/components/GoogleAnalytics";
@@ -84,6 +85,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${plusJakarta.variable} antialiased`}>
         <GoogleAnalytics />
+        <Analytics />
         <Providers>
           <AuthGate>{children}</AuthGate>
         </Providers>

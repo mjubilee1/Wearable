@@ -19,8 +19,11 @@ import {
   type UserProfile,
 } from "@nearby/shared";
 import {
+  clearAgentHistory,
   deleteAgentMemory,
   deleteAgentNote,
+  getAgentUsage,
+  listAgentHistory,
   listAgentMemories,
   listAgentNotes,
   runAgentTurn,
@@ -312,6 +315,29 @@ app.get("/v1/agent/notes", async (c) => {
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
   const notes = await listAgentNotes(auth.uid);
   return c.json({ notes });
+});
+
+app.get("/v1/agent/history", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const [history, usage] = await Promise.all([
+    listAgentHistory(auth.uid),
+    getAgentUsage(auth.uid),
+  ]);
+  return c.json({ history, usage });
+});
+
+app.delete("/v1/agent/history", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  await clearAgentHistory(auth.uid);
+  return c.json({ ok: true });
+});
+
+app.get("/v1/agent/usage", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  return c.json({ usage: await getAgentUsage(auth.uid) });
 });
 
 app.delete("/v1/agent/memories/:id", async (c) => {

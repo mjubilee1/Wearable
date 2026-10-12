@@ -1,12 +1,17 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { AgentActionReceipt } from "@nearby/shared";
+import type {
+  AgentActionReceipt,
+  AgentDraftPreview,
+  AgentReschedulePreview,
+} from "@nearby/shared";
 import { getFirebaseAdmin, isFirebaseConfigured } from "../firebase.js";
 
-/** One Google connect unlocks Calendar, Tasks, and Gmail read. */
+/** One Google connect unlocks Calendar (read/write events), Tasks, and Gmail read + drafts. */
 const SCOPES = [
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/tasks",
   "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.compose",
   "https://www.googleapis.com/auth/userinfo.email",
 ].join(" ");
 
@@ -669,6 +674,507 @@ export async function readUnreadGmail(
       action: `Summarized your last ${snippets.length} unread emails`,
       href: latest ? `https://mail.google.com/mail/u/0/#inbox/${latest}` : inbox,
       linkLabel: "Open email",
+    },
+  };
+}
+
+function parseClockHint(raw: string): { hour: number; minute: number } | null {
+  const cleaned = raw.trim().toLowerCase().replace(/\./g, "");
+  const m = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+  if (!m) return null;
+  let hour = Number(m[1]);
+  const minute = m[2] ? Number(m[2]) : 0;
+  const meridiem = m[3];
+  if (!Number.isFinite(hour) || hour < 0 || hour > 23 || minute > 59) return null;
+  if (meridiem === "pm" && hour < 12) hour += 12;
+  if (meridiem === "am" && hour === 12) hour = 0;
+  if (!meridiem && hour <= 12) {
+    // Bare "3" in schedule speech usually means 3 PM for daytime moves.
+    if (hour >= 1 && hour <= 11) hour += 12;
+  }
+  return { hour, minute };
+}
+
+function formatWhenLabel(date: Date): string {
+  const day = date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const time = date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${day} at ${time}`;
+}
+
+function dayBounds(offsetDays: number): { start: Date; end: Date } {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() + offsetDays);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+export type RescheduleParse = {
+  fromDayOffset: number;
+  fromClock: { hour: number; minute: number };
+  toDayOffset: number;
+  toClock: { hour: number; minute: number };
+};
+
+/** Parse "Move my 3 PM to tomorrow at 10" style requests. */
+export function parseRescheduleRequest(text: string): RescheduleParse | null {
+  const lower = text.toLowerCase();
+  if (!/\b(move|reschedule|shift|push)\b/.test(lower)) return null;
+  const fromMatch = lower.match(
+    /\b(?:my|the)?\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/,
+  );
+  if (!fromMatch?.[1]) return null;
+  const toMatch = lower.match(
+    /\b(?:to|for)\s+(tomorrow|today)?\s*(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/,
+  );
+  if (!toMatch?.[2]) return null;
+  const fromClock = parseClockHint(fromMatch[1]);
+  const toClock = parseClockHint(toMatch[2]);
+  if (!fromClock || !toClock) return null;
+  const toDayOffset = toMatch[1] === "tomorrow" ? 1 : toMatch[1] === "today" ? 0 : 1;
+  const fromDayOffset = /\btomorrow\b/.test(lower.slice(0, lower.indexOf("to")))
+    ? 1
+    : 0;
+  return { fromDayOffset, fromClock, toDayOffset, toClock };
+}
+
+export async function previewReschedule(
+  uid: string,
+  parsed: RescheduleParse,
+  name: string | null,
+): Promise<
+  | {
+      ok: true;
+      spoken: string;
+      preview: AgentReschedulePreview;
+      payload: Record<string, string>;
+    }
+  | { ok: false; spoken: string }
+> {
+  if (!isGoogleCalendarConfigured()) {
+    return { ok: false, spoken: "Calendar isn't set up on the server yet." };
+  }
+  const accessToken = await getValidAccessToken(uid);
+  if (!accessToken) {
+    return {
+      ok: false,
+      spoken: "Connect Google in Connectors first, then ask again.",
+    };
+  }
+
+  const { start, end } = dayBounds(parsed.fromDayOffset);
+  const url = new URL(
+    "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+  );
+  url.searchParams.set("timeMin", start.toISOString());
+  url.searchParams.set("timeMax", end.toISOString());
+  url.searchParams.set("singleEvents", "true");
+  url.searchParams.set("orderBy", "startTime");
+  url.searchParams.set("maxResults", "20");
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    console.error("[calendar] reschedule list failed", await res.text());
+    return { ok: false, spoken: "I couldn't read your calendar just now." };
+  }
+
+  const data = (await res.json()) as {
+    items?: Array<{
+      id?: string;
+      summary?: string;
+      status?: string;
+      htmlLink?: string;
+      start?: { dateTime?: string; date?: string; timeZone?: string };
+      end?: { dateTime?: string; date?: string; timeZone?: string };
+    }>;
+  };
+
+  const targetMinutes = parsed.fromClock.hour * 60 + parsed.fromClock.minute;
+  const candidates = (data.items ?? [])
+    .filter((item) => item.status !== "cancelled" && item.id && item.start?.dateTime)
+    .map((item) => {
+      const startAt = new Date(item.start!.dateTime!);
+      const endAt = item.end?.dateTime
+        ? new Date(item.end.dateTime)
+        : new Date(startAt.getTime() + 60 * 60 * 1000);
+      const minutes = startAt.getHours() * 60 + startAt.getMinutes();
+      return {
+        id: item.id!,
+        title: (item.summary || "Busy").trim(),
+        htmlLink: httpsHref(item.htmlLink),
+        startAt,
+        endAt,
+        delta: Math.abs(minutes - targetMinutes),
+        timeZone: item.start?.timeZone,
+      };
+    })
+    .filter((item) => item.delta <= 45)
+    .sort((a, b) => a.delta - b.delta);
+
+  const fromLabel =
+    parsed.fromDayOffset === 1 ? "tomorrow" : "today";
+  const clockLabel = `${((parsed.fromClock.hour + 11) % 12) + 1}${
+    parsed.fromClock.minute ? `:${String(parsed.fromClock.minute).padStart(2, "0")}` : ""
+  } ${parsed.fromClock.hour >= 12 ? "PM" : "AM"}`;
+
+  if (candidates.length === 0) {
+    return {
+      ok: false,
+      spoken: withName(
+        name,
+        `I couldn't find a ${clockLabel} event ${fromLabel}. Which one?`,
+      ),
+    };
+  }
+
+  const hit = candidates[0];
+  const durationMs = Math.max(15 * 60 * 1000, hit.endAt.getTime() - hit.startAt.getTime());
+  const newStart = dayBounds(parsed.toDayOffset).start;
+  newStart.setHours(parsed.toClock.hour, parsed.toClock.minute, 0, 0);
+  const newEnd = new Date(newStart.getTime() + durationMs);
+
+  const oldWhen = formatWhenLabel(hit.startAt);
+  const newWhen = formatWhenLabel(newStart);
+  const preview: AgentReschedulePreview = {
+    kind: "reschedule",
+    eventId: hit.id,
+    calendarId: "primary",
+    title: hit.title,
+    oldWhen,
+    newWhen,
+    htmlLink: hit.htmlLink,
+  };
+
+  return {
+    ok: true,
+    spoken: withName(
+      name,
+      `Move ${hit.title} from ${oldWhen} to ${newWhen}?`,
+    ),
+    preview,
+    payload: {
+      eventId: hit.id,
+      calendarId: "primary",
+      title: hit.title,
+      oldWhen,
+      newWhen,
+      newStartIso: newStart.toISOString(),
+      newEndIso: newEnd.toISOString(),
+    },
+  };
+}
+
+export async function applyReschedule(
+  uid: string,
+  input: {
+    eventId: string;
+    calendarId: string;
+    newStartIso: string;
+    newEndIso: string;
+    title: string;
+    oldWhen: string;
+    newWhen: string;
+  },
+  name: string | null,
+): Promise<GoogleToolResult> {
+  if (!isGoogleCalendarConfigured()) {
+    return { spoken: "Calendar isn't set up on the server yet.", receipt: null };
+  }
+  const accessToken = await getValidAccessToken(uid);
+  if (!accessToken) {
+    return {
+      spoken: "Connect Google in Connectors first, then ask again.",
+      receipt: null,
+    };
+  }
+
+  const cal = encodeURIComponent(input.calendarId || "primary");
+  const getRes = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${cal}/events/${encodeURIComponent(input.eventId)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!getRes.ok) {
+    console.error("[calendar] get event failed", await getRes.text());
+    return {
+      spoken: withName(name, "I couldn't find that event anymore."),
+      receipt: null,
+    };
+  }
+  const existing = (await getRes.json()) as {
+    start?: { timeZone?: string };
+    end?: { timeZone?: string };
+    htmlLink?: string;
+    summary?: string;
+  };
+
+  const patchRes = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${cal}/events/${encodeURIComponent(input.eventId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        start: {
+          dateTime: input.newStartIso,
+          timeZone: existing.start?.timeZone,
+        },
+        end: {
+          dateTime: input.newEndIso,
+          timeZone: existing.end?.timeZone ?? existing.start?.timeZone,
+        },
+      }),
+    },
+  );
+  if (!patchRes.ok) {
+    console.error("[calendar] patch failed", await patchRes.text());
+    return {
+      spoken: withName(name, "I couldn't update that event."),
+      receipt: null,
+    };
+  }
+  const updated = (await patchRes.json().catch(() => ({}))) as {
+    htmlLink?: string;
+    summary?: string;
+  };
+  const title = (updated.summary || input.title || "Event").trim();
+  const href = httpsHref(updated.htmlLink) ?? httpsHref(existing.htmlLink);
+  return {
+    spoken: withName(
+      name,
+      `Moved ${title} from ${input.oldWhen} to ${input.newWhen}.`,
+    ),
+    receipt: {
+      action: `Moved ${title} to ${input.newWhen}`,
+      href,
+      linkLabel: "Open event",
+    },
+  };
+}
+
+export type DraftParse = {
+  query: string;
+  intent: string;
+};
+
+/** Parse "Draft a reply to the lender saying I'll send docs Friday". */
+export function parseDraftRequest(text: string): DraftParse | null {
+  const lower = text.toLowerCase();
+  if (!/\b(draft|compose)\b/.test(lower) || !/\b(reply|email|e-mail|message)\b/.test(lower)) {
+    return null;
+  }
+  const toMatch =
+    text.match(
+      /\b(?:to|for)\s+(?:the\s+)?(.+?)(?:\s+saying|\s+about|\s+that\b|,|\.|$)/i,
+    ) ?? text.match(/\breply\s+to\s+(?:the\s+)?(.+?)(?:\s+saying|\s+about|,|\.|$)/i);
+  const sayingMatch = text.match(
+    /\b(?:saying|that|about)\s+(.+)$/i,
+  );
+  const query = (toMatch?.[1] ?? "").replace(/\s+/g, " ").trim();
+  const intent = (sayingMatch?.[1] ?? "").replace(/\s+/g, " ").trim();
+  if (!query || query.length < 2) return null;
+  return {
+    query: query.slice(0, 80),
+    intent: intent.slice(0, 280) || "Thanks — I'll follow up soon.",
+  };
+}
+
+function extractEmail(fromHeader: string): string {
+  const angle = fromHeader.match(/<([^>]+)>/);
+  if (angle?.[1]) return angle[1].trim();
+  if (fromHeader.includes("@")) return fromHeader.trim();
+  return fromHeader.trim();
+}
+
+function buildReplyBody(intent: string, name: string | null): string {
+  const line = intent.replace(/^["']|["']$/g, "").trim();
+  const closing = name ? `\n\nThanks,\n${name}` : "\n\nThanks";
+  if (/^[A-Z]/.test(line)) return `${line}${closing}`;
+  return `Hi,\n\n${line.charAt(0).toUpperCase()}${line.slice(1)}${closing}`;
+}
+
+export async function previewDraftReply(
+  uid: string,
+  parsed: DraftParse,
+  name: string | null,
+): Promise<
+  | { ok: true; spoken: string; preview: AgentDraftPreview }
+  | { ok: false; spoken: string }
+> {
+  if (!isGoogleCalendarConfigured()) {
+    return { ok: false, spoken: "Gmail isn't set up on the server yet." };
+  }
+  const accessToken = await getValidAccessToken(uid);
+  if (!accessToken) {
+    return {
+      ok: false,
+      spoken: "Connect Google in Connectors first, then ask again.",
+    };
+  }
+
+  const listUrl = new URL(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+  );
+  listUrl.searchParams.set(
+    "q",
+    `${parsed.query} newer_than:90d -in:drafts -in:chats`,
+  );
+  listUrl.searchParams.set("maxResults", "5");
+
+  const listRes = await fetch(listUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!listRes.ok) {
+    console.error("[gmail] draft search failed", await listRes.text());
+    return { ok: false, spoken: "I couldn't search Gmail just now." };
+  }
+  const listData = (await listRes.json()) as {
+    messages?: Array<{ id?: string; threadId?: string }>;
+  };
+  const first = listData.messages?.[0];
+  if (!first?.id) {
+    return {
+      ok: false,
+      spoken: withName(
+        name,
+        `I couldn't find a recent thread about ${parsed.query}. Which one?`,
+      ),
+    };
+  }
+
+  const msgRes = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${first.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=References`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!msgRes.ok) {
+    return { ok: false, spoken: "I found a thread but couldn't open it." };
+  }
+  const msg = (await msgRes.json()) as {
+    id?: string;
+    threadId?: string;
+    payload?: { headers?: Array<{ name?: string; value?: string }> };
+  };
+  const headers = msg.payload?.headers;
+  const from = headerValue(headers, "From");
+  const subjectRaw = headerValue(headers, "Subject") || "No subject";
+  const to = extractEmail(from);
+  if (!to.includes("@")) {
+    return {
+      ok: false,
+      spoken: withName(
+        name,
+        `I couldn't find a recent thread about ${parsed.query}. Which one?`,
+      ),
+    };
+  }
+  const subject = /^re:/i.test(subjectRaw) ? subjectRaw : `Re: ${subjectRaw}`;
+  const body = buildReplyBody(parsed.intent, name);
+  const preview: AgentDraftPreview = {
+    kind: "draft_email",
+    threadId: msg.threadId || first.threadId || "",
+    messageId: msg.id || first.id,
+    to,
+    subject,
+    body,
+  };
+  return {
+    ok: true,
+    spoken: withName(
+      name,
+      `Here's a draft reply to ${to} about ${subjectRaw}. Edit it, save to Gmail Drafts, or cancel.`,
+    ),
+    preview,
+  };
+}
+
+function toBase64Url(raw: string): string {
+  return Buffer.from(raw, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+export async function saveGmailDraft(
+  uid: string,
+  input: {
+    to: string;
+    subject: string;
+    body: string;
+    threadId?: string;
+    inReplyToMessageId?: string;
+  },
+  name: string | null,
+): Promise<GoogleToolResult> {
+  if (!isGoogleCalendarConfigured()) {
+    return { spoken: "Gmail isn't set up on the server yet.", receipt: null };
+  }
+  const accessToken = await getValidAccessToken(uid);
+  if (!accessToken) {
+    return {
+      spoken: "Connect Google in Connectors first, then ask again.",
+      receipt: null,
+    };
+  }
+
+  const lines = [
+    `To: ${input.to.trim()}`,
+    `Subject: ${input.subject.trim()}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "",
+    input.body.trim(),
+  ];
+  const raw = toBase64Url(lines.join("\r\n"));
+  const draftBody: {
+    message: { raw: string; threadId?: string };
+  } = {
+    message: { raw },
+  };
+  if (input.threadId) draftBody.message.threadId = input.threadId;
+
+  const res = await fetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/drafts",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(draftBody),
+    },
+  );
+  if (!res.ok) {
+    console.error("[gmail] create draft failed", await res.text());
+    return {
+      spoken: withName(name, "I couldn't save that draft."),
+      receipt: null,
+    };
+  }
+  const created = (await res.json().catch(() => ({}))) as {
+    id?: string;
+    message?: { id?: string; threadId?: string };
+  };
+  const draftId = created.id;
+  const href = draftId
+    ? `https://mail.google.com/mail/u/0/#drafts?compose=${encodeURIComponent(draftId)}`
+    : "https://mail.google.com/mail/u/0/#drafts";
+  return {
+    spoken: withName(name, `Saved a draft to ${input.to}. Nothing was sent.`),
+    receipt: {
+      action: `Saved draft to ${input.to}`,
+      href,
+      linkLabel: "Open draft",
     },
   };
 }

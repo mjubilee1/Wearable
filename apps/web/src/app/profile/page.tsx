@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { isEmailLikeName } from "@nearby/shared";
+import { PlansCard } from "@/components/PlansCard";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
@@ -71,6 +72,8 @@ export default function ProfilePage() {
       </header>
 
       <main className="max-w-xl flex-1">
+        <PlansCard />
+
         <Link
           href="/connectors"
           className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"

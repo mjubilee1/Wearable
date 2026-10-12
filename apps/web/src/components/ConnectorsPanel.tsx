@@ -173,8 +173,9 @@ export function ConnectorsPanel() {
                 ) : null}
               </div>
               <p className="mt-1 text-sm text-muted">
-                One connect for Calendar, Tasks, and Gmail read. Reconnect if you
-                linked Calendar before Tasks and Gmail were added.
+                One connect for Calendar, Tasks, and Gmail. Reconnect if you linked
+                before reschedule or draft save were added — those need write
+                scopes.
               </p>
               {google?.connected && google.email ? (
                 <p className="mt-1 text-xs text-muted">{google.email}</p>

@@ -474,6 +474,8 @@ export const AGENT_TOOL_NAMES = [
   "note",
   "reminder",
   "remember",
+  "reschedule",
+  "draft_email",
 ] as const;
 
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
@@ -508,11 +510,56 @@ export type AgentActionReceipt = {
   linkLabel: string | null;
 };
 
+/** Confirm-first calendar move preview. Nothing is written until Confirm. */
+export type AgentReschedulePreview = {
+  kind: "reschedule";
+  eventId: string;
+  calendarId: string;
+  title: string;
+  oldWhen: string;
+  newWhen: string;
+  htmlLink: string | null;
+};
+
+/** Confirm-first Gmail draft preview. Never sends. */
+export type AgentDraftPreview = {
+  kind: "draft_email";
+  threadId: string;
+  messageId: string;
+  to: string;
+  subject: string;
+  body: string;
+};
+
+export type AgentConfirmPreview =
+  | AgentReschedulePreview
+  | AgentDraftPreview;
+
+/** One Talk turn kept in Recent history (newest 20). */
+export type AgentHistoryItem = {
+  id: string;
+  request: string;
+  reply: string;
+  receipt: AgentActionReceipt | null;
+  createdAt: number;
+};
+
+export type AgentUsageStatus = {
+  plan: "free" | "pro";
+  /** Free daily cap; null when unlimited (Pro). */
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+};
+
 export type AgentTurnResponse = {
   reply: string;
   pendingTool: AgentPendingTool | null;
   mode: "openai" | "mock";
   receipt?: AgentActionReceipt | null;
+  /** Confirm-first preview card; Cancel leaves Google untouched. */
+  preview?: AgentConfirmPreview | null;
+  usage?: AgentUsageStatus;
 };
 
 /** A fact the user asked to keep. */

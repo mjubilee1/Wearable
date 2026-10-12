@@ -1,6 +1,6 @@
 "use client";
 
-// PARITY: mobile — example chips, spoken Done receipt, notes delete, and the first-name greeting.
+// PARITY: mobile — example chips, spoken Done receipt, notes delete, history, confirm previews.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,8 +8,14 @@ import {
   firstNameFrom,
   isPlaceholderNote,
   type AgentActionReceipt,
+  type AgentConfirmPreview,
+  type AgentDraftPreview,
+  type AgentHistoryItem,
   type AgentMemoryItem,
+  type AgentPendingTool,
+  type AgentReschedulePreview,
   type AgentTurnResponse,
+  type AgentUsageStatus,
 } from "@nearby/shared";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
@@ -38,6 +44,16 @@ const EXAMPLES = [
   {
     id: "gmail",
     text: "Summarize my last 3 unread emails",
+    needsGoogle: true,
+  },
+  {
+    id: "reschedule",
+    text: "Move my 3 PM to tomorrow at 10",
+    needsGoogle: true,
+  },
+  {
+    id: "draft",
+    text: "Draft a reply to the lender saying I'll send docs Friday",
     needsGoogle: true,
   },
 ] as const;
@@ -127,18 +143,45 @@ function safeHref(href: string | null | undefined): string | null {
   }
 }
 
+function ReceiptLine({ receipt }: { receipt: AgentActionReceipt }) {
+  const href = safeHref(receipt.href);
+  return (
+    <p className="mt-2 text-sm text-ink">
+      <span className="font-semibold text-teal">Done:</span> {receipt.action}
+      {href ? (
+        <>
+          {" "}
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-teal underline"
+          >
+            {receipt.linkLabel ?? "Open"}
+          </a>
+        </>
+      ) : null}
+    </p>
+  );
+}
+
 export function TalkPanel() {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<AgentActionReceipt | null>(null);
+  const [pending, setPending] = useState<AgentPendingTool | null>(null);
+  const [preview, setPreview] = useState<AgentConfirmPreview | null>(null);
+  const [draftEdit, setDraftEdit] = useState<AgentDraftPreview | null>(null);
+  const [editingDraft, setEditingDraft] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
   const [lastRequest, setLastRequest] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [canListen, setCanListen] = useState(false);
+  const [usage, setUsage] = useState<AgentUsageStatus | null>(null);
   const recognitionRef = useRef<SpeechRec | null>(null);
   const greeting = profile
     ? firstNameFrom(profile.name, profile.email)
@@ -148,6 +191,42 @@ export function TalkPanel() {
     setCanListen(speechRecognition() !== null);
     return () => window.speechSynthesis?.cancel();
   }, []);
+
+  const historyQuery = useQuery({
+    queryKey: ["agent-history", user?.uid],
+    enabled: Boolean(user),
+    queryFn: async () => {
+      if (!user) {
+        return {
+          history: [] as AgentHistoryItem[],
+          usage: null as AgentUsageStatus | null,
+        };
+      }
+      const token = await user.getIdToken();
+      const res = await fetch(`${API_URL}/v1/agent/history`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Could not load history");
+      const body = (await res.json()) as {
+        history: AgentHistoryItem[];
+        usage: AgentUsageStatus;
+      };
+      return {
+        history: body.history ?? [],
+        usage: body.usage ?? null,
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (!historyQuery.data) return;
+    setUsage(historyQuery.data.usage);
+    const latest = historyQuery.data.history[0];
+    if (!latest) return;
+    setReply((current) => current ?? latest.reply);
+    setReceipt((current) => current ?? latest.receipt);
+    setLastRequest((current) => current ?? latest.request);
+  }, [historyQuery.data]);
 
   const memoriesQuery = useQuery({
     queryKey: ["agent-memories", user?.uid],
@@ -190,6 +269,23 @@ export function TalkPanel() {
     },
   });
 
+  function applyTurn(result: AgentTurnResponse, requestText?: string) {
+    setReply(result.reply);
+    setReceipt(result.receipt ?? null);
+    setPending(result.pendingTool);
+    setPreview(result.preview ?? null);
+    if (result.preview?.kind === "draft_email") {
+      setDraftEdit(result.preview);
+      setEditingDraft(false);
+    } else {
+      setDraftEdit(null);
+      setEditingDraft(false);
+    }
+    if (result.usage) setUsage(result.usage);
+    if (requestText) setLastRequest(requestText);
+    speak(result.reply);
+  }
+
   const ask = useCallback(
     async (spoken: string) => {
       const next = spoken.trim();
@@ -199,6 +295,9 @@ export function TalkPanel() {
       setError(null);
       setReply(null);
       setReceipt(null);
+      setPending(null);
+      setPreview(null);
+      setDraftEdit(null);
       try {
         const token = await user.getIdToken();
         const res = await fetch(`${API_URL}/v1/agent`, {
@@ -216,12 +315,11 @@ export function TalkPanel() {
           throw new Error(payload?.error ?? "Nearby didn't answer");
         }
         if (!payload?.reply) throw new Error("Nearby didn't answer");
-        setReply(payload.reply);
-        setReceipt(payload.receipt ?? null);
+        applyTurn(payload, next);
         setText("");
-        speak(payload.reply);
         await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
         await queryClient.invalidateQueries({ queryKey: ["agent-notes"] });
+        await queryClient.invalidateQueries({ queryKey: ["agent-history"] });
       } catch (err) {
         setError(friendlyAgentError(err));
       } finally {
@@ -234,17 +332,17 @@ export function TalkPanel() {
   useEffect(() => {
     let cancelled = false;
     if (!user || googleQuery.isLoading) return;
-    const pending = peekPendingAsk();
-    if (!pending) return;
+    const pendingAsk = peekPendingAsk();
+    if (!pendingAsk) return;
     void (async () => {
       await Promise.resolve();
       if (cancelled) return;
       clearPendingAsk();
       if (googleQuery.data?.connected) {
-        await ask(pending);
+        await ask(pendingAsk);
         return;
       }
-      setLastRequest(pending);
+      setLastRequest(pendingAsk);
       setError("Google didn't connect. Tap the example again when you're ready.");
     })();
     return () => {
@@ -278,6 +376,57 @@ export function TalkPanel() {
       return;
     }
     void ask(example.text);
+  }
+
+  async function decide(approved: boolean) {
+    if (!pending || busy || !user) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const payload =
+        pending.tool === "draft_email" && draftEdit
+          ? {
+              ...pending.payload,
+              to: draftEdit.to,
+              subject: draftEdit.subject,
+              body: draftEdit.body,
+            }
+          : pending.payload;
+      const token = await user.getIdToken();
+      const res = await fetch(`${API_URL}/v1/agent`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          decision: {
+            tool: pending.tool,
+            approved,
+            summary: pending.summary,
+            payload,
+          },
+        }),
+      });
+      const result = (await res.json().catch(() => null)) as
+        | (AgentTurnResponse & { error?: string })
+        | null;
+      if (!res.ok || !result?.reply) {
+        throw new Error(result?.error ?? "Could not finish that");
+      }
+      applyTurn(result, lastRequest ?? pending.summary);
+      setPending(null);
+      setPreview(null);
+      setDraftEdit(null);
+      setEditingDraft(false);
+      await queryClient.invalidateQueries({ queryKey: ["agent-history"] });
+      await queryClient.invalidateQueries({ queryKey: ["agent-notes"] });
+      await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
+    } catch (err) {
+      setError(friendlyAgentError(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function startListening() {
@@ -339,6 +488,27 @@ export function TalkPanel() {
     await queryClient.invalidateQueries({ queryKey: ["agent-notes"] });
   }
 
+  async function clearHistory() {
+    if (!user) return;
+    const ok = window.confirm("Clear your Talk history? This cannot be undone.");
+    if (!ok) return;
+    const token = await user.getIdToken();
+    const res = await fetch(`${API_URL}/v1/agent/history`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      setError("Could not clear history.");
+      return;
+    }
+    setReply(null);
+    setReceipt(null);
+    setLastRequest(null);
+    setPending(null);
+    setPreview(null);
+    await queryClient.invalidateQueries({ queryKey: ["agent-history"] });
+  }
+
   function retryLast() {
     if (!lastRequest) return;
     const example = EXAMPLES.find((item) => item.text === lastRequest);
@@ -351,8 +521,14 @@ export function TalkPanel() {
 
   const memories = memoriesQuery.data ?? [];
   const notes = (notesQuery.data ?? []).filter((note) => !isPlaceholderNote(note.text));
+  const history = historyQuery.data?.history ?? [];
   const receiptHref = safeHref(receipt?.href);
-  const showExamples = !busy && !reply;
+  const showExamples = !busy && !reply && !pending;
+  const reschedulePreview =
+    preview?.kind === "reschedule" ? (preview as AgentReschedulePreview) : null;
+  const draftPreview =
+    draftEdit ??
+    (preview?.kind === "draft_email" ? (preview as AgentDraftPreview) : null);
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-20 sm:px-8">
@@ -366,8 +542,14 @@ export function TalkPanel() {
         ) : null}
         <p className="mt-2 max-w-xl text-sm text-muted sm:text-base">
           What Nearby can do: check your calendar, add a task, summarize unread
-          email, and save a note.
+          email, reschedule, draft a reply, and save a note.
         </p>
+        {usage && usage.plan === "free" && usage.remaining !== null ? (
+          <p className="mt-2 text-sm text-muted">
+            {usage.remaining} free request{usage.remaining === 1 ? "" : "s"} left
+            today
+          </p>
+        ) : null}
       </header>
 
       <main className="flex flex-1 flex-col gap-4">
@@ -407,6 +589,128 @@ export function TalkPanel() {
               ) : null}
             </p>
           ) : null}
+
+          {!busy && reschedulePreview && pending?.tool === "reschedule" ? (
+            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
+                Reschedule preview
+              </p>
+              <p className="mt-2 text-sm font-semibold text-ink">
+                {reschedulePreview.title}
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                From {reschedulePreview.oldWhen}
+              </p>
+              <p className="text-sm text-muted">
+                To {reschedulePreview.newWhen}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void decide(true)}
+                  className="rounded-2xl bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void decide(false)}
+                  className="rounded-2xl border border-black/10 bg-card px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {!busy && draftPreview && pending?.tool === "draft_email" ? (
+            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
+                Draft preview
+              </p>
+              {editingDraft ? (
+                <div className="mt-3 space-y-2">
+                  <label className="block space-y-1">
+                    <span className="text-xs font-semibold text-ink">To</span>
+                    <input
+                      value={draftPreview.to}
+                      onChange={(event) =>
+                        setDraftEdit({ ...draftPreview, to: event.target.value })
+                      }
+                      className="w-full rounded-xl border border-black/10 bg-card px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs font-semibold text-ink">Subject</span>
+                    <input
+                      value={draftPreview.subject}
+                      onChange={(event) =>
+                        setDraftEdit({
+                          ...draftPreview,
+                          subject: event.target.value,
+                        })
+                      }
+                      className="w-full rounded-xl border border-black/10 bg-card px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs font-semibold text-ink">Body</span>
+                    <textarea
+                      value={draftPreview.body}
+                      rows={5}
+                      onChange={(event) =>
+                        setDraftEdit({
+                          ...draftPreview,
+                          body: event.target.value,
+                        })
+                      }
+                      className="w-full rounded-xl border border-black/10 bg-card px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+              ) : (
+                <div className="mt-2 space-y-1 text-sm text-ink">
+                  <p>
+                    <span className="text-muted">To:</span> {draftPreview.to}
+                  </p>
+                  <p>
+                    <span className="text-muted">Subject:</span>{" "}
+                    {draftPreview.subject}
+                  </p>
+                  <p className="whitespace-pre-wrap pt-2">{draftPreview.body}</p>
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setEditingDraft((value) => !value)}
+                  className="rounded-2xl border border-black/10 bg-card px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
+                >
+                  {editingDraft ? "Done editing" : "Edit"}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void decide(true)}
+                  className="rounded-2xl bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Save to Gmail Drafts
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void decide(false)}
+                  className="rounded-2xl border border-black/10 bg-card px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {error ? (
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <p className="text-sm text-coral">{error}</p>
@@ -474,6 +778,51 @@ export function TalkPanel() {
             {busy ? "Asking…" : "Ask"}
           </button>
         </form>
+
+        <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
+              Recent
+            </p>
+            {history.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => void clearHistory()}
+                className="text-xs font-semibold text-coral"
+              >
+                Clear history
+              </button>
+            ) : null}
+          </div>
+          {historyQuery.isLoading ? (
+            <div className="mt-3 h-4 w-48 animate-pulse rounded bg-surface" />
+          ) : history.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">
+              Your last 20 requests will show up here.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-3">
+              {history.map((item) => (
+                <li
+                  key={item.id}
+                  className="rounded-2xl bg-surface px-3 py-3"
+                >
+                  <p className="text-xs font-semibold text-muted">You</p>
+                  <p className="text-sm text-ink">{item.request}</p>
+                  <p className="mt-2 text-xs font-semibold text-muted">Nearby</p>
+                  <p className="text-sm text-ink">{item.reply}</p>
+                  {item.receipt ? <ReceiptLine receipt={item.receipt} /> : null}
+                  <time
+                    dateTime={new Date(item.createdAt).toISOString()}
+                    className="mt-2 block text-[11px] text-muted"
+                  >
+                    {formatNoteTime(item.createdAt)}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
