@@ -30,7 +30,7 @@ const TASKS = [
     body: "Draft a reply to the lender asking for the updated pre-approval.",
   },
   {
-    title: "Follow up",
+    title: "Client follow-up",
     body: "Remind me to follow up with the Johnsons Friday",
   },
   {

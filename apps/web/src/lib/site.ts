@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 
 export const SITE_URL = "https://www.nearbyhello.com";
 export const SITE_NAME = "Nearby";
-export const SITE_TITLE = "Nearby — Voice assistant that answers out loud";
+export const SITE_TITLE = "Nearby: your voice assistant between showings";
 export const SITE_DESCRIPTION =
-  "Voice assistant for your day. Speak from a laptop or headphones about calendar, notes, and reminders, and get a short answer out loud.";
+  "Talk to Nearby between showings. It moves your calendar, sets follow-ups, and drafts emails to lenders and clients. Pro $29/mo with a 7-day free trial.";
 export const SITE_TAGLINE = "Speak, and it answers out loud.";
 export const CONNECTOR_PRIVACY_LINE =
   "Nearby only uses a connector when you ask. You can disconnect anytime.";
@@ -105,12 +105,11 @@ export function siteJsonLd() {
 }
 
 export function llmsText() {
-  const faq = QUESTIONS.map((item) => `### ${item.q}\n${item.a}`).join("\n\n");
   return `# Nearby
 
-> ${SITE_DESCRIPTION} Canonical site: ${SITE_URL}
+> ${SITE_DESCRIPTION}
 
-Nearby (nearbyhello.com) is a voice assistant. You speak from a laptop, phone, or headphones. It handles calendar, notes, and reminders when you ask, then answers out loud and stops. It is an early proof of concept and is not for sale. Nearby does not record the room. It is not a social network, a location-sharing app, or a chat companion.
+Nearby is a paid voice and type assistant for real estate agents and busy professionals. Use it from a laptop, phone, or headphones to handle work between showings. The pendant is coming soon.
 
 ## Canonical
 
@@ -118,33 +117,35 @@ Nearby (nearbyhello.com) is a voice assistant. You speak from a laptop, phone, o
 - Name: Nearby
 - Domain: nearbyhello.com
 - Language: English
-- Category: voice assistant
+- Category: voice and type assistant
 
 ## What it does
 
-- You speak. Nearby handles the task. It answers out loud, then stops.
-- Jobs: calendar, notes, and reminders.
-- Where you can talk: a laptop, a phone, or headphones.
-- A spoken request runs the tool. A saved fact can be deleted.
+- Works with Google Calendar, Google Tasks, Gmail, and Notes.
+- Reschedules calendar events with a confirmation step before making the change.
+- Adds tasks and follow-ups.
+- Summarizes unread email.
+- Drafts replies for you to review and approve. Nearby never sends email on its own.
+- Saves notes.
+- Accepts voice or typed requests and can answer out loud.
 
-## What it does not do
+## Plans
 
-- It does not quietly record the room.
-- It does not ship a gadget for a job the phone already does better.
-- It is not a companion that chats for company.
-- No device is for sale yet.
+- Free: 20 requests per day.
+- Pro: $29 per month or $249 per year, with a 7-day free trial.
+
+## Privacy and control
+
+- Nearby does not record the room.
+- Nearby acts when you ask, then stops.
+- Email drafts require your approval. Nearby never sends them on its own.
+- Connector access can be disconnected at any time.
 
 ## Pages
 
-- [Home](${SITE_URL}/): Product explanation and a waitlist for updates
-- [How it works](${SITE_URL}/#how): Speak, the task runs, then a short spoken answer
-- [The day](${SITE_URL}/#day): Morning agenda, work capture, and hands-free on the move
-- [What we refuse](${SITE_URL}/#refuse): Not a phone in a box, not a companion, not a recorder
-- [Questions](${SITE_URL}/#questions): What Nearby does, recording, devices, and memory
-
-## Questions
-
-${faq}
+- [Home](${SITE_URL}/): Product overview
+- [Pricing](${SITE_URL}/pricing): Free and Pro plan details
+- [Sign up](${SITE_URL}/signup): Create a Nearby account
 
 ## Machine-readable
 
