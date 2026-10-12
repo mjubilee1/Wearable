@@ -36,24 +36,8 @@ export default function TabsLayout() {
         },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Nearby",
-          tabBarLabel: ({ focused }) => (
-            <TabLabel label="Nearby" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="connections"
-        options={{
-          title: "Connections",
-          tabBarLabel: ({ focused }) => (
-            <TabLabel label="Connections" focused={focused} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="connections" options={{ href: null }} />
       <Tabs.Screen
         name="activity"
         options={{

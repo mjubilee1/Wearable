@@ -21,7 +21,7 @@ Product decisions in `nearby-product-and-icp.md` win. The Oct 9 color-clip locks
 
 ## Non-negotiables
 
-1. **Same IA** — Tabs: Nearby · Connections · Talk · Profile. The Talk route stays `/activity` on web and `(tabs)/activity` on mobile. Auth routes: login, signup, forgot-password. Do not invent a fifth product tab.
+1. **Same IA** — Tabs: Talk · Profile. The Talk route stays `/activity` on web and `(tabs)/activity` on mobile. Nearby matches and Connections stay in the repo and redirect to Talk. Auth routes: login, signup, forgot-password. Do not invent a product tab.
 2. **Same identity & data** — Firebase Auth + Firestore profiles/connections. No `Bearer dev` in shipped flows. API calls use real ID tokens.
 3. **Domain logic lives in `@nearby/shared`** — Types, scoring (`compatibilityScore`, `walkByScore`), sanitize helpers, option banks (`VIBE_OPTIONS`, `LOOKING_FOR_OPTIONS`, prompts, interests). Never fork rules between clients.
 4. **Same copy & CTAs** — Match web wording (`Help me say hi`, `Send a hello`, Connections subtabs Incoming/Sent/Connected, accept/decline/cancel/block).
@@ -39,7 +39,7 @@ Product decisions in `nearby-product-and-icp.md` win. The Oct 9 color-clip locks
 | Nearby / facilitate / hello | `apps/web/src/components/NearbyMatches.tsx`, `HelloComposer.tsx`, `ProfileCard.tsx`, `CompatibilityScore.tsx` |
 | Talk | `apps/web/src/components/TalkPanel.tsx` |
 | Connections | `apps/web/src/app/connections/page.tsx`, `apps/web/src/lib/connections.ts` |
-| Profile | `apps/web/src/app/profile/page.tsx`, `apps/web/src/lib/users.ts`, `storage.ts` |
+| Profile | `apps/web/src/app/profile/page.tsx` — account only: name, email, sign out. Match fields and Nearby+ stay off this screen. |
 | Auth | `apps/web/src/lib/auth-context.tsx`, `AuthGate.tsx`, `login`/`signup`/`forgot-password` pages |
 | Tabs | `apps/web/src/components/TabBar.tsx` |
 | Shared domain | `packages/shared/src/index.ts` |
@@ -77,7 +77,7 @@ Parity checklist:
 ### Mobile-only affordances
 
 Allowed: haptics, push, native share, safe-area layout. The color-clip BLE scan is removed. Do not add it back. Talk is the Activity route on both clients (tab label Talk).
-Not allowed: different match/connection rules, different auth model, omitting Connections/Profile while claiming parity.
+Not allowed: different auth model, or omitting Profile while claiming parity. Nearby matches and Connections are off the tab bar on both clients.
 
 ## Anti-patterns
 
@@ -89,4 +89,4 @@ Not allowed: different match/connection rules, different auth model, omitting Co
 
 ## Current known gap (update as parity lands)
 
-Mobile mirrors web IA via Expo Router: Firebase auth (login/signup/forgot-password), tabs Nearby · Connections · Talk · Profile, HelloComposer, facilitate with ID tokens, Connections subtabs, profile editor, and the Talk screen on the Activity route.
+Mobile mirrors web IA via Expo Router: Firebase auth (login/signup/forgot-password), tabs Talk · Profile, and the Talk screen on the Activity route. Nearby and Connections routes redirect to Talk.

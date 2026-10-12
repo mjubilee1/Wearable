@@ -26,9 +26,6 @@ type SignUpInput = {
   email: string;
   password: string;
   name: string;
-  age: number;
-  role: string;
-  interests: string[];
 };
 
 type AuthContextValue = {
@@ -91,9 +88,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           uid: cred.user.uid,
           email: input.email,
           name: input.name,
-          age: input.age,
-          role: input.role,
-          interests: input.interests,
+          age: 0,
+          role: "",
+          interests: [],
         });
         setProfile(created);
       },

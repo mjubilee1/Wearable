@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { ConnectorSetupPrompt } from "@/components/ConnectorSetupPrompt";
 import { useAuth } from "@/lib/auth-context";
 
 const AUTH_PATHS = new Set(["/login", "/signup", "/forgot-password"]);
@@ -39,5 +40,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (!user && !isPublic) return null;
   if (user && isAuthScreen) return null;
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      {user && !isPublic ? <ConnectorSetupPrompt /> : null}
+    </>
+  );
 }

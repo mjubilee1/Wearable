@@ -19,7 +19,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await signIn(email.trim(), password);
-      router.replace("/nearby");
+      router.replace("/activity");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
     } finally {
@@ -36,7 +36,7 @@ export default function LoginPage() {
         Welcome back
       </h1>
       <p className="mt-2 text-sm text-muted">
-        Sign in to see who&apos;s around you.
+        Sign in to talk.
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">

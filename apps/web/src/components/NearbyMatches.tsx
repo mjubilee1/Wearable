@@ -293,7 +293,7 @@ export function NearbyMatches() {
         />
       ) : null}
 
-      <TabBar active="nearby" />
+      <TabBar active="activity" />
     </div>
   );
 }

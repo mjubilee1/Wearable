@@ -3,9 +3,8 @@
 import Link from "next/link";
 
 const TABS = [
-  { id: "nearby", label: "Nearby", href: "/nearby" },
-  { id: "connections", label: "Connections", href: "/connections" },
   { id: "activity", label: "Talk", href: "/activity" },
+  { id: "connectors", label: "Connectors", href: "/connectors" },
   { id: "profile", label: "Profile", href: "/profile" },
 ] as const;
 
@@ -18,7 +17,7 @@ export function TabBar({ active }: { active: TabId }) {
       aria-label="Primary"
     >
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-6 px-4 py-3 sm:px-8">
-        <Link href="/nearby" className="text-sm font-bold tracking-tight text-ink">
+        <Link href="/activity" className="text-sm font-bold tracking-tight text-ink">
           Nearby
         </Link>
         <ul className="flex items-center gap-1">

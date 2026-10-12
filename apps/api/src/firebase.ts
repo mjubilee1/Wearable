@@ -14,6 +14,7 @@ type FirestoreDocRef = {
     options?: { merge?: boolean },
   ) => Promise<void>;
   update: (data: Record<string, unknown>) => Promise<void>;
+  delete: () => Promise<void>;
 };
 
 type FirestoreQuery = {

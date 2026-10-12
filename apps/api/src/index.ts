@@ -29,6 +29,13 @@ import {
 } from "./billing.js";
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
+import {
+  buildGoogleAuthUrl,
+  disconnectGoogleCalendar,
+  getGoogleCalendarStatus,
+  handleGoogleCalendarCallback,
+  isGoogleCalendarConfigured,
+} from "./connectors/google-calendar.js";
 import { listClipSightingsForUser, recordClipSighting } from "./sightings.js";
 import { joinWaitlist } from "./waitlist.js";
 
@@ -127,6 +134,7 @@ app.get("/health", (c) =>
     llm: Boolean(process.env.OPENAI_API_KEY),
     stripe: isStripeConfigured(),
     stripeWebhook: isStripeWebhookConfigured(),
+    googleCalendar: isGoogleCalendarConfigured(),
   }),
 );
 
@@ -230,6 +238,47 @@ app.post("/v1/billing/portal", async (c) => {
       500,
     );
   }
+});
+
+app.get("/v1/connectors/google/calendar", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  return c.json(await getGoogleCalendarStatus(auth.uid));
+});
+
+app.get("/v1/connectors/google/calendar/start", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json({ url: buildGoogleAuthUrl(auth.uid) });
+  } catch (error) {
+    return c.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Google Calendar is not configured",
+      },
+      400,
+    );
+  }
+});
+
+/** Browser redirect from Google — no Bearer header. */
+app.get("/v1/connectors/google/calendar/callback", async (c) => {
+  const redirectTo = await handleGoogleCalendarCallback({
+    code: c.req.query("code"),
+    state: c.req.query("state"),
+    error: c.req.query("error"),
+  });
+  return c.redirect(redirectTo, 302);
+});
+
+app.delete("/v1/connectors/google/calendar", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  await disconnectGoogleCalendar(auth.uid);
+  return c.json({ ok: true });
 });
 
 app.post("/v1/agent", async (c) => {

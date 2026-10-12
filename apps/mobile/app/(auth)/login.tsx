@@ -26,7 +26,7 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       await signIn(email.trim(), password);
-      router.replace("/(tabs)");
+      router.replace("/(tabs)/activity");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
     } finally {
@@ -45,7 +45,7 @@ export default function LoginScreen() {
       >
         <Text style={styles.eyebrow}>Nearby</Text>
         <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>Sign in to see who’s around you.</Text>
+        <Text style={styles.subtitle}>Sign in to talk.</Text>
 
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>

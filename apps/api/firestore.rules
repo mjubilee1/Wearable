@@ -116,6 +116,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // OAuth tokens for agent tools — API (Admin SDK) only.
+    match /agentConnectors/{uid} {
+      allow read, write: if false;
+    }
+
+    match /agentState/{uid} {
+      allow read, write: if false;
+    }
+
     // Public marketing waitlist. Create/merge only; nobody reads from clients.
     match /waitlist/{entryId} {
       allow create: if request.resource.data.keys().hasAll(['email', 'createdAt', 'source'])

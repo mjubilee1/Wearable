@@ -7,6 +7,7 @@ import {
   type AgentTurnRequest,
   type AgentTurnResponse,
 } from "@nearby/shared";
+import { speakTodaysCalendar } from "./connectors/google-calendar.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 
 type StoredAction = {
@@ -239,7 +240,7 @@ function spokenConfirmation(
   if (tool === "reminder") {
     return payload.when ? `Reminder set for ${payload.when}.` : "Reminder set.";
   }
-  return "Calendar isn't connected yet, so I didn't look anything up.";
+  return "Okay.";
 }
 
 async function applyDecision(
@@ -248,38 +249,47 @@ async function applyDecision(
 ): Promise<AgentTurnResponse> {
   const payload = asPayload(decision.payload);
   const summary = clip(decision.summary || payload.text || "");
-  if (decision.approved && decision.tool !== "calendar") {
-    const state = await readState(uid);
-    const text = clip(payload.text || summary, 280);
-    if (text) {
-      if (decision.tool === "remember") {
-        state.memories = [
-          { id: randomUUID(), text, createdAt: Date.now() },
-          ...state.memories,
-        ].slice(0, 50);
-      } else if (decision.tool === "note") {
-        state.notes = [
-          { id: randomUUID(), text, createdAt: Date.now() },
-          ...state.notes,
-        ].slice(0, 50);
-      } else if (decision.tool === "reminder") {
-        state.reminders = [
-          {
-            id: randomUUID(),
-            text,
-            when: payload.when || undefined,
-            createdAt: Date.now(),
-          },
-          ...state.reminders,
-        ].slice(0, 50);
-      }
-      await writeState(uid, state);
+  const mode = process.env.OPENAI_API_KEY ? "openai" : "mock";
+
+  if (!decision.approved) {
+    return { reply: "Okay. I won't.", pendingTool: null, mode };
+  }
+
+  if (decision.tool === "calendar") {
+    const reply = clip(await speakTodaysCalendar(uid), 320);
+    return { reply, pendingTool: null, mode };
+  }
+
+  const state = await readState(uid);
+  const text = clip(payload.text || summary, 280);
+  if (text) {
+    if (decision.tool === "remember") {
+      state.memories = [
+        { id: randomUUID(), text, createdAt: Date.now() },
+        ...state.memories,
+      ].slice(0, 50);
+    } else if (decision.tool === "note") {
+      state.notes = [
+        { id: randomUUID(), text, createdAt: Date.now() },
+        ...state.notes,
+      ].slice(0, 50);
+    } else if (decision.tool === "reminder") {
+      state.reminders = [
+        {
+          id: randomUUID(),
+          text,
+          when: payload.when || undefined,
+          createdAt: Date.now(),
+        },
+        ...state.reminders,
+      ].slice(0, 50);
     }
+    await writeState(uid, state);
   }
   return {
-    reply: spokenConfirmation(decision.tool, decision.approved, payload),
+    reply: spokenConfirmation(decision.tool, true, payload),
     pendingTool: null,
-    mode: process.env.OPENAI_API_KEY ? "openai" : "mock",
+    mode,
   };
 }
 

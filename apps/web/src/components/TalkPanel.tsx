@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AgentMemoryItem,
@@ -199,8 +200,12 @@ export function TalkPanel() {
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink">Talk</h1>
         <p className="mt-2 max-w-xl text-sm text-muted sm:text-base">
-          One turn, a short answer out loud, then quiet. A note, reminder, or
-          memory only happens if you allow it.
+          One turn, a short answer out loud, then quiet. Connect calendar and
+          other tools in{" "}
+          <Link href="/connectors" className="font-semibold text-teal">
+            Connectors
+          </Link>
+          .
         </p>
       </header>
 

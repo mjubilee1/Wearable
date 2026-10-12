@@ -65,7 +65,7 @@ Reuse what works. Don't rebuild it.
 ## Milestones
 
 - **M1, working voice agent:** speak through the laptop, the phone, or AirPods and get a spoken answer. Current target. The phone types the turn until the next dev build grows a microphone button. The website can use the laptop microphone.
-- **M2, useful actions:** at least 3 tasks work, such as checking the calendar, capturing a note, and setting a reminder.
+- **M2, useful actions:** at least 3 tasks work — Google Calendar (read today after permission), plus in-app note and reminder after permission. Calendar OAuth lives in `apps/api` (`/v1/connectors/google/calendar`).
 - **M3, ESP32 talks to the backend:** Wi-Fi, a request to the backend, a valid response.
 - **M4, physical voice prototype:** audio from the I²S mic reaches Nearby and gets a response.
 - **M5, wearable interaction:** the round display shows status and output. Evaluate size, power, and portability.

@@ -1,7 +1,16 @@
 // PARITY: mobile — marketing landing is web-only.
+import type { Metadata } from "next";
 import { MarketingAccountLink } from "@/components/MarketingAccountLink";
 import { MarketingNav } from "@/components/MarketingNav";
 import { WaitlistForm } from "@/components/WaitlistForm";
+import { QUESTIONS, siteJsonLd } from "@/lib/site";
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "/",
+    types: { "text/plain": "/llms.txt" },
+  },
+};
 
 const STEPS = [
   {
@@ -59,30 +68,15 @@ const REFUSE = [
   },
 ] as const;
 
-const QUESTIONS = [
-  {
-    q: "What does Nearby do?",
-    a: "You speak, it handles the task, and it answers out loud. The jobs it’s for are the ones that interrupt a day: calendar, notes, and reminders.",
-  },
-  {
-    q: "Does it record the room?",
-    a: "No. Nearby does not quietly capture what’s around you. Tools run with your permission, and memory keeps only what you approved.",
-  },
-  {
-    q: "Can I buy a device?",
-    a: "Not yet. This is an early proof of concept. The loop runs on a laptop or headphones first. A wearable comes after that loop is worth using every day.",
-  },
-  {
-    q: "What does it remember?",
-    a: "Only what you approve. A conversation is not stored just because it happened near you.",
-  },
-] as const;
-
 const BARS = [10, 18, 28, 14, 36, 22, 12, 32, 20, 40, 16, 26, 12, 34, 22, 14, 30, 18, 10, 24];
 
 export default function HomePage() {
   return (
     <div id="top" className="min-h-dvh scroll-smooth text-ink">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd()) }}
+      />
       <MarketingNav />
 
       <main>
@@ -308,7 +302,9 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-        <p className="mx-auto mt-12 max-w-6xl text-xs text-muted">© 2026 Nearby</p>
+        <p className="mx-auto mt-12 max-w-6xl text-xs text-muted">
+          © 2026 Nearby · nearbyhello.com
+        </p>
       </footer>
     </div>
   );

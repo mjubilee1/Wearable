@@ -10,7 +10,6 @@ import {
   View,
 } from "react-native";
 import { Link, useRouter } from "expo-router";
-import { INTEREST_OPTIONS } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
 
@@ -18,31 +17,16 @@ export default function SignupScreen() {
   const { signUp } = useAuth();
   const router = useRouter();
   const [name, setName] = useState("");
-  const [age, setAge] = useState("27");
-  const [role, setRole] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [interests, setInterests] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  function toggleInterest(interest: string) {
-    setInterests((current) =>
-      current.includes(interest)
-        ? current.filter((item) => item !== interest)
-        : [...current, interest].slice(0, 5),
-    );
-  }
-
   async function onSubmit() {
     setError(null);
-    const parsedAge = Number(age);
-    if (!Number.isFinite(parsedAge) || parsedAge < 18 || parsedAge > 99) {
-      setError("Enter a valid age (18–99).");
-      return;
-    }
-    if (interests.length < 1) {
-      setError("Pick at least one interest.");
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Enter your name.");
       return;
     }
 
@@ -51,12 +35,9 @@ export default function SignupScreen() {
       await signUp({
         email: email.trim(),
         password,
-        name,
-        age: parsedAge,
-        role,
-        interests,
+        name: trimmed,
       });
-      router.replace("/(tabs)");
+      router.replace("/(tabs)/activity");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create account");
     } finally {
@@ -74,36 +55,12 @@ export default function SignupScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.eyebrow}>Nearby</Text>
-        <Text style={styles.title}>Create your profile</Text>
-        <Text style={styles.subtitle}>
-          Your vibes power the wearable score light.
-        </Text>
+        <Text style={styles.title}>Create your account</Text>
+        <Text style={styles.subtitle}>Then you can talk.</Text>
 
         <View style={styles.field}>
           <Text style={styles.label}>Name</Text>
           <TextInput value={name} onChangeText={setName} style={styles.input} />
-        </View>
-
-        <View style={styles.row}>
-          <View style={[styles.field, styles.half]}>
-            <Text style={styles.label}>Age</Text>
-            <TextInput
-              keyboardType="number-pad"
-              value={age}
-              onChangeText={setAge}
-              style={styles.input}
-            />
-          </View>
-          <View style={[styles.field, styles.half]}>
-            <Text style={styles.label}>Role</Text>
-            <TextInput
-              value={role}
-              onChangeText={setRole}
-              placeholder="Designer"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-            />
-          </View>
         </View>
 
         <View style={styles.field}>
@@ -127,28 +84,6 @@ export default function SignupScreen() {
             onChangeText={setPassword}
             style={styles.input}
           />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Interests (up to 5)</Text>
-          <View style={styles.chips}>
-            {INTEREST_OPTIONS.map((interest) => {
-              const active = interests.includes(interest);
-              return (
-                <Pressable
-                  key={interest}
-                  onPress={() => toggleInterest(interest)}
-                  style={[styles.chip, active && styles.chipActive]}
-                >
-                  <Text
-                    style={[styles.chipText, active && styles.chipTextActive]}
-                  >
-                    {interest}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
         </View>
 
         {error ? (
@@ -196,8 +131,6 @@ const styles = StyleSheet.create({
   },
   subtitle: { marginTop: 8, fontSize: 14, color: colors.muted },
   field: { marginTop: 16, gap: 6 },
-  row: { flexDirection: "row", gap: 12 },
-  half: { flex: 1 },
   label: { fontSize: 12, fontWeight: "600", color: colors.ink },
   input: {
     borderRadius: 16,
@@ -209,16 +142,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.ink,
   },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    borderRadius: 999,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  chipActive: { backgroundColor: colors.teal },
-  chipText: { fontSize: 12, fontWeight: "500", color: colors.muted },
-  chipTextActive: { color: "#fff" },
   errorBox: {
     marginTop: 16,
     borderRadius: 16,
