@@ -13,7 +13,7 @@ import {
   writeConnectorSetup,
 } from "@/lib/connectors";
 
-const HIDDEN_PREFIXES = ["/login", "/signup", "/forgot-password"];
+const HIDDEN_PREFIXES = ["/login", "/signup", "/forgot-password", "/onboarding", "/pricing"];
 
 export function ConnectorSetupPrompt() {
   const { user, profile, loading, refreshProfile } = useAuth();

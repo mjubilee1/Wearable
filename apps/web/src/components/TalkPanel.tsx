@@ -6,9 +6,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   firstNameFrom,
+  isLimitReachedBody,
   isPlaceholderNote,
   type AgentActionReceipt,
   type AgentConfirmPreview,
+  type AgentDraftChoicesPreview,
   type AgentDraftPreview,
   type AgentHistoryItem,
   type AgentMemoryItem,
@@ -16,9 +18,11 @@ import {
   type AgentReschedulePreview,
   type AgentTurnResponse,
   type AgentUsageStatus,
+  type LimitReachedBody,
 } from "@nearby/shared";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
+import { UpgradeSheet } from "@/components/UpgradeSheet";
 import { useAuth } from "@/lib/auth-context";
 import {
   clearPendingAsk,
@@ -27,6 +31,8 @@ import {
   stashPendingAsk,
   startGoogleCalendarConnect,
 } from "@/lib/connectors";
+import { updateUserProfile } from "@/lib/users";
+import { trackFunnel } from "@/lib/funnel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -143,6 +149,14 @@ function safeHref(href: string | null | undefined): string | null {
   }
 }
 
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
+  } catch {
+    return "America/New_York";
+  }
+}
+
 function ReceiptLine({ receipt }: { receipt: AgentActionReceipt }) {
   const href = safeHref(receipt.href);
   return (
@@ -181,16 +195,32 @@ export function TalkPanel() {
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [canListen, setCanListen] = useState(false);
-  const [usage, setUsage] = useState<AgentUsageStatus | null>(null);
+  const [usage, setUsage] = useState<AgentUsageStatus | null>({
+    plan: "free",
+    limit: 20,
+    used: 0,
+    remaining: 20,
+  });
+  const [limitHit, setLimitHit] = useState<LimitReachedBody | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRec | null>(null);
   const greeting = profile
     ? firstNameFrom(profile.name, profile.email)
     : null;
+  const timeZone = browserTimeZone();
 
   useEffect(() => {
     setCanListen(speechRecognition() !== null);
     return () => window.speechSynthesis?.cancel();
   }, []);
+
+  useEffect(() => {
+    if (!user || !profile) return;
+    if (profile.timeZone === timeZone) return;
+    void updateUserProfile(user.uid, { timeZone }).catch(() => {
+      // API also persists timezone on each agent turn.
+    });
+  }, [profile, timeZone, user]);
 
   const historyQuery = useQuery({
     queryKey: ["agent-history", user?.uid],
@@ -203,9 +233,12 @@ export function TalkPanel() {
         };
       }
       const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/v1/agent/history`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_URL}/v1/agent/history?timeZone=${encodeURIComponent(browserTimeZone())}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       if (!res.ok) throw new Error("Could not load history");
       const body = (await res.json()) as {
         history: AgentHistoryItem[];
@@ -269,11 +302,20 @@ export function TalkPanel() {
     },
   });
 
+  useEffect(() => {
+    if (!user || !googleQuery.data?.connected) return;
+    trackFunnel("google_connected", { plan: usage?.plan ?? "free" }, {
+      scope: "local",
+      key: `google_connected:${user.uid}`,
+    });
+  }, [googleQuery.data?.connected, usage?.plan, user]);
+
   function applyTurn(result: AgentTurnResponse, requestText?: string) {
     setReply(result.reply);
     setReceipt(result.receipt ?? null);
     setPending(result.pendingTool);
     setPreview(result.preview ?? null);
+    setHistoryId(result.historyId ?? null);
     if (result.preview?.kind === "draft_email") {
       setDraftEdit(result.preview);
       setEditingDraft(false);
@@ -283,7 +325,27 @@ export function TalkPanel() {
     }
     if (result.usage) setUsage(result.usage);
     if (requestText) setLastRequest(requestText);
+    if (user) {
+      trackFunnel("first_task_done", { plan: result.usage?.plan ?? "free" }, {
+        scope: "local",
+        key: `first_task_done:${user.uid}`,
+      });
+    }
     speak(result.reply);
+  }
+
+  function noteLimit(payload: unknown): boolean {
+    if (!isLimitReachedBody(payload)) return false;
+    setLimitHit(payload);
+    trackFunnel(
+      "limit_reached",
+      { plan: "free", feature: payload.feature },
+      {
+        scope: "session",
+        key: `limit_reached:${payload.feature}:${payload.resetAt}`,
+      },
+    );
+    return true;
   }
 
   const ask = useCallback(
@@ -306,12 +368,13 @@ export function TalkPanel() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ text: next }),
+          body: JSON.stringify({ text: next, timeZone }),
         });
         const payload = (await res.json().catch(() => null)) as
           | (AgentTurnResponse & { error?: string })
           | null;
         if (!res.ok) {
+          if (noteLimit(payload)) return;
           throw new Error(payload?.error ?? "Nearby didn't answer");
         }
         if (!payload?.reply) throw new Error("Nearby didn't answer");
@@ -326,7 +389,7 @@ export function TalkPanel() {
         setBusy(false);
       }
     },
-    [busy, queryClient, user],
+    [busy, queryClient, timeZone, user],
   );
 
   useEffect(() => {
@@ -338,12 +401,14 @@ export function TalkPanel() {
       await Promise.resolve();
       if (cancelled) return;
       clearPendingAsk();
-      if (googleQuery.data?.connected) {
-        await ask(pendingAsk);
+      const match = EXAMPLES.find((item) => item.text === pendingAsk);
+      const needsGoogle = match?.needsGoogle ?? true;
+      if (needsGoogle && !googleQuery.data?.connected) {
+        setLastRequest(pendingAsk);
+        setError("Google didn't connect. Tap the example again when you're ready.");
         return;
       }
-      setLastRequest(pendingAsk);
-      setError("Google didn't connect. Tap the example again when you're ready.");
+      await ask(pendingAsk);
     })();
     return () => {
       cancelled = true;
@@ -400,11 +465,13 @@ export function TalkPanel() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          timeZone,
           decision: {
             tool: pending.tool,
             approved,
             summary: pending.summary,
             payload,
+            historyId: historyId ?? undefined,
           },
         }),
       });
@@ -412,6 +479,7 @@ export function TalkPanel() {
         | (AgentTurnResponse & { error?: string })
         | null;
       if (!res.ok || !result?.reply) {
+        if (noteLimit(result)) return;
         throw new Error(result?.error ?? "Could not finish that");
       }
       applyTurn(result, lastRequest ?? pending.summary);
@@ -419,9 +487,52 @@ export function TalkPanel() {
       setPreview(null);
       setDraftEdit(null);
       setEditingDraft(false);
+      if (!approved) setHistoryId(null);
       await queryClient.invalidateQueries({ queryKey: ["agent-history"] });
       await queryClient.invalidateQueries({ queryKey: ["agent-notes"] });
       await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
+    } catch (err) {
+      setError(friendlyAgentError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pickDraftChoice(choice: {
+    messageId: string;
+    threadId: string;
+  }) {
+    if (!user || busy || preview?.kind !== "draft_choices") return;
+    const choices = preview as AgentDraftChoicesPreview;
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`${API_URL}/v1/agent`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          timeZone,
+          draftPick: {
+            messageId: choice.messageId,
+            threadId: choice.threadId,
+            intent: choices.intent,
+            query: choices.query,
+          },
+        }),
+      });
+      const result = (await res.json().catch(() => null)) as
+        | (AgentTurnResponse & { error?: string })
+        | null;
+      if (!res.ok || !result?.reply) {
+        if (noteLimit(result)) return;
+        throw new Error(result?.error ?? "Could not open that thread");
+      }
+      applyTurn(result, lastRequest ?? `Draft to ${choices.query}`);
+      await queryClient.invalidateQueries({ queryKey: ["agent-history"] });
     } catch (err) {
       setError(friendlyAgentError(err));
     } finally {
@@ -526,6 +637,10 @@ export function TalkPanel() {
   const showExamples = !busy && !reply && !pending;
   const reschedulePreview =
     preview?.kind === "reschedule" ? (preview as AgentReschedulePreview) : null;
+  const draftChoicesPreview =
+    preview?.kind === "draft_choices"
+      ? (preview as AgentDraftChoicesPreview)
+      : null;
   const draftPreview =
     draftEdit ??
     (preview?.kind === "draft_email" ? (preview as AgentDraftPreview) : null);
@@ -544,10 +659,13 @@ export function TalkPanel() {
           What Nearby can do: check your calendar, add a task, summarize unread
           email, reschedule, draft a reply, and save a note.
         </p>
-        {usage && usage.plan === "free" && usage.remaining !== null ? (
+        {usage?.plan === "pro" ? (
+          <p className="mt-3 inline-flex rounded-full bg-teal-soft px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-teal">
+            Pro
+          </p>
+        ) : usage && usage.remaining !== null ? (
           <p className="mt-2 text-sm text-muted">
-            {usage.remaining} free request{usage.remaining === 1 ? "" : "s"} left
-            today
+            {usage.remaining} of {usage.limit ?? 20} free requests left today
           </p>
         ) : null}
       </header>
@@ -590,19 +708,35 @@ export function TalkPanel() {
             </p>
           ) : null}
 
+          {!busy && draftChoicesPreview ? (
+            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
+                Pick a thread
+              </p>
+              <div className="mt-3 flex flex-col gap-2">
+                {draftChoicesPreview.choices.map((choice) => (
+                  <button
+                    key={choice.messageId}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void pickDraftChoice(choice)}
+                    className="rounded-2xl border border-black/10 bg-card px-4 py-3 text-left text-sm font-medium text-ink disabled:opacity-60"
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {!busy && reschedulePreview && pending?.tool === "reschedule" ? (
             <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
                 Reschedule preview
               </p>
-              <p className="mt-2 text-sm font-semibold text-ink">
-                {reschedulePreview.title}
-              </p>
-              <p className="mt-1 text-sm text-muted">
-                From {reschedulePreview.oldWhen}
-              </p>
-              <p className="text-sm text-muted">
-                To {reschedulePreview.newWhen}
+              <p className="mt-2 text-sm text-ink">
+                Move &apos;{reschedulePreview.title}&apos; from{" "}
+                {reschedulePreview.oldWhen} to {reschedulePreview.newWhen}?
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -807,7 +941,14 @@ export function TalkPanel() {
                   key={item.id}
                   className="rounded-2xl bg-surface px-3 py-3"
                 >
-                  <p className="text-xs font-semibold text-muted">You</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-muted">You</p>
+                    {item.status === "cancelled" ? (
+                      <span className="rounded-full bg-coral-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-coral">
+                        Cancelled
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="text-sm text-ink">{item.request}</p>
                   <p className="mt-2 text-xs font-semibold text-muted">Nearby</p>
                   <p className="text-sm text-ink">{item.reply}</p>
@@ -896,6 +1037,9 @@ export function TalkPanel() {
       </main>
       <PrivacyFooter />
       <TabBar active="activity" />
+      {limitHit ? (
+        <UpgradeSheet feature={limitHit.feature} onClose={() => setLimitHit(null)} />
+      ) : null}
     </div>
   );
 }

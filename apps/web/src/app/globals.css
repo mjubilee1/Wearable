@@ -60,3 +60,30 @@ body {
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+@keyframes nearby-receipt {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  32%,
+  88% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.nearby-demo-receipt {
+  animation: nearby-receipt 5.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nearby-demo-receipt {
+    animation: none;
+  }
+}

@@ -12,9 +12,12 @@ import {
   compatibilityScore,
   hueFromSeed,
   initialsFromName,
+  normalizePlan,
   vibeCaption,
+  type BillingInterval,
   type MatchProfile,
   type ProfilePrompt,
+  type SubscriptionStatus,
   type UpdateUserInput,
   type UserProfile,
 } from "@nearby/shared";
@@ -68,11 +71,10 @@ function mapUser(id: string, data: DocumentData): UserProfile {
       data.deviceId === undefined || data.deviceId === null
         ? null
         : String(data.deviceId),
-    plan: data.plan === "plus" ? "plus" : "free",
-    subscriptionStatus:
-      typeof data.subscriptionStatus === "string"
-        ? (data.subscriptionStatus as UserProfile["subscriptionStatus"])
-        : "none",
+    plan: normalizePlan(data.plan),
+    subscriptionStatus: (typeof data.subscriptionStatus === "string"
+      ? data.subscriptionStatus
+      : "none") as SubscriptionStatus,
     stripeCustomerId:
       data.stripeCustomerId === undefined || data.stripeCustomerId === null
         ? null
@@ -86,9 +88,27 @@ function mapUser(id: string, data: DocumentData): UserProfile {
       data.planUpdatedAt === undefined
         ? undefined
         : Number(data.planUpdatedAt),
+    trialEndsAt:
+      typeof data.trialEndsAt === "number" ? data.trialEndsAt : null,
+    currentPeriodEnd:
+      typeof data.currentPeriodEnd === "number" ? data.currentPeriodEnd : null,
+    cancelAtPeriodEnd: data.cancelAtPeriodEnd === true,
+    billingInterval:
+      data.billingInterval === "month" || data.billingInterval === "year"
+        ? (data.billingInterval as BillingInterval)
+        : null,
+    paymentFailedAt:
+      typeof data.paymentFailedAt === "number" ? data.paymentFailedAt : null,
+    utmSource: typeof data.utmSource === "string" ? data.utmSource : null,
+    utmMedium: typeof data.utmMedium === "string" ? data.utmMedium : null,
+    utmCampaign: typeof data.utmCampaign === "string" ? data.utmCampaign : null,
     connectorSetupDismissedAt:
       typeof data.connectorSetupDismissedAt === "number"
         ? data.connectorSetupDismissedAt
+        : null,
+    timeZone:
+      typeof data.timeZone === "string" && data.timeZone
+        ? data.timeZone
         : null,
     createdAt: Number(data.createdAt ?? Date.now()),
     updatedAt: Number(data.updatedAt ?? Date.now()),
@@ -108,6 +128,10 @@ export async function createUserProfile(input: {
   age: number;
   role: string;
   interests: string[];
+  timeZone?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
 }): Promise<UserProfile> {
   const now = Date.now();
   const profile: UserProfile = {
@@ -129,6 +153,15 @@ export async function createUserProfile(input: {
     subscriptionStatus: "none",
     stripeCustomerId: null,
     stripeSubscriptionId: null,
+    trialEndsAt: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+    billingInterval: null,
+    paymentFailedAt: null,
+    utmSource: input.utmSource ?? null,
+    utmMedium: input.utmMedium ?? null,
+    utmCampaign: input.utmCampaign ?? null,
+    timeZone: input.timeZone ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -161,6 +194,7 @@ export async function updateUserProfile(
   if (patch.connectorSetupDismissedAt !== undefined) {
     updates.connectorSetupDismissedAt = patch.connectorSetupDismissedAt;
   }
+  if (patch.timeZone !== undefined) updates.timeZone = patch.timeZone;
 
   await updateDoc(doc(db, USERS, uid), updates);
 }

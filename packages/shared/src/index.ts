@@ -5,7 +5,12 @@ export type ProfilePrompt = {
 };
 
 /** Paid plan tier. Hardware is separate; this is the recurring SaaS layer. */
-export type PlanTier = "free" | "plus";
+export type PlanTier = "free" | "pro";
+
+/** Legacy Firestore value from the Nearby+ spike. Read as Pro. */
+export type StoredPlanTier = PlanTier | "plus";
+
+export type BillingInterval = "month" | "year";
 
 export type SubscriptionStatus =
   | "none"
@@ -15,6 +20,59 @@ export type SubscriptionStatus =
   | "canceled"
   | "unpaid"
   | "incomplete";
+
+export const PRO_MONTHLY_USD = 29;
+export const PRO_YEARLY_USD = 290;
+export const PRO_TRIAL_DAYS = 7;
+export const FREE_DAILY_REQUESTS = 20;
+export const FREE_DAILY_RESCHEDULES = 3;
+export const FREE_DAILY_DRAFTS = 3;
+
+export type LimitFeature = "requests" | "reschedule" | "draft_email";
+
+export type LimitReachedBody = {
+  code: "limit_reached";
+  feature: LimitFeature;
+  resetAt: string;
+};
+
+export function normalizePlan(plan: unknown): PlanTier {
+  return plan === "pro" || plan === "plus" ? "pro" : "free";
+}
+
+/** Pro, trial, or a failed payment still inside the paid period. */
+export function hasProAccess(profile: {
+  plan?: string | null;
+  subscriptionStatus?: string | null;
+}): boolean {
+  const status = profile.subscriptionStatus ?? "none";
+  if (status !== "active" && status !== "trialing" && status !== "past_due") {
+    return false;
+  }
+  return normalizePlan(profile.plan) === "pro";
+}
+
+export function isLimitReachedBody(value: unknown): value is LimitReachedBody {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return (
+    row.code === "limit_reached" &&
+    (row.feature === "requests" ||
+      row.feature === "reschedule" ||
+      row.feature === "draft_email") &&
+    typeof row.resetAt === "string"
+  );
+}
+
+export function limitReachedMessage(feature: LimitFeature): string {
+  if (feature === "reschedule") {
+    return "You've used today's free reschedules. Pro does unlimited for $29/mo, free for 7 days.";
+  }
+  if (feature === "draft_email") {
+    return "You've used today's free email drafts. Pro does unlimited for $29/mo, free for 7 days.";
+  }
+  return "You've used today's 20 free requests. Pro does unlimited for $29/mo, free for 7 days.";
+}
 
 export type UserProfile = {
   id: string;
@@ -43,17 +101,32 @@ export type UserProfile = {
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
   planUpdatedAt?: number;
+  /** Unix ms. Set while the Stripe subscription is trialing. */
+  trialEndsAt?: number | null;
+  /** Unix ms. End of the current paid period. */
+  currentPeriodEnd?: number | null;
+  cancelAtPeriodEnd?: boolean;
+  billingInterval?: BillingInterval | null;
+  /** Unix ms of the last failed invoice. Cleared when payment succeeds. */
+  paymentFailedAt?: number | null;
+  /** First-touch campaign params saved at signup. */
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
   /** Set when the connector welcome modal is dismissed. */
   connectorSetupDismissedAt?: number | null;
+  /** IANA timezone from the browser (e.g. America/New_York). */
+  timeZone?: string | null;
   createdAt: number;
   updatedAt: number;
 };
 
-/** Active Nearby+ (or trialing). */
-export function isNearbyPlus(profile: Pick<UserProfile, "plan" | "subscriptionStatus">): boolean {
-  if (profile.plan !== "plus") return false;
-  const status = profile.subscriptionStatus ?? "none";
-  return status === "active" || status === "trialing";
+/** Active Pro (or trialing / past due). Nearby+ is the old name for Pro. */
+export function isNearbyPlus(profile: {
+  plan?: string | null;
+  subscriptionStatus?: string | null;
+}): boolean {
+  return hasProAccess(profile);
 }
 
 export type MatchProfile = UserProfile & {
@@ -86,6 +159,7 @@ export type UpdateUserInput = Partial<
     | "vibes"
     | "deviceId"
     | "connectorSetupDismissedAt"
+    | "timeZone"
   >
 >;
 
@@ -487,11 +561,22 @@ export function isAgentToolName(value: string): value is AgentToolName {
 /** One spoken turn. A tool the model selects runs in this same request. */
 export type AgentTurnRequest = {
   text?: string;
+  /** Browser IANA timezone for today/tomorrow and wall-clock times. */
+  timeZone?: string;
   decision?: {
     tool: AgentToolName;
     approved: boolean;
     summary: string;
     payload: Record<string, string>;
+    /** When cancelling a preview, mark this history row instead of adding a turn. */
+    historyId?: string;
+  };
+  /** User picked one of several matching email threads. */
+  draftPick?: {
+    messageId: string;
+    threadId: string;
+    intent: string;
+    query: string;
   };
 };
 
@@ -531,9 +616,23 @@ export type AgentDraftPreview = {
   body: string;
 };
 
+/** Several matching threads — user must pick before a draft is built. */
+export type AgentDraftChoicesPreview = {
+  kind: "draft_choices";
+  query: string;
+  intent: string;
+  choices: Array<{
+    messageId: string;
+    threadId: string;
+    to: string;
+    label: string;
+  }>;
+};
+
 export type AgentConfirmPreview =
   | AgentReschedulePreview
-  | AgentDraftPreview;
+  | AgentDraftPreview
+  | AgentDraftChoicesPreview;
 
 /** One Talk turn kept in Recent history (newest 20). */
 export type AgentHistoryItem = {
@@ -542,14 +641,26 @@ export type AgentHistoryItem = {
   reply: string;
   receipt: AgentActionReceipt | null;
   createdAt: number;
+  /** Preview that was cancelled — not a separate Cancel turn. */
+  status?: "cancelled" | null;
+};
+
+export type AgentFeatureUsage = {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
 };
 
 export type AgentUsageStatus = {
   plan: "free" | "pro";
-  /** Free daily cap; null when unlimited (Pro). */
+  /** Free daily request cap; null when unlimited (Pro). */
   limit: number | null;
   used: number;
   remaining: number | null;
+  reschedules?: AgentFeatureUsage;
+  drafts?: AgentFeatureUsage;
+  /** ISO time when free counters reset (next midnight in the user timezone). */
+  resetAt?: string;
 };
 
 export type AgentTurnResponse = {
@@ -560,6 +671,8 @@ export type AgentTurnResponse = {
   /** Confirm-first preview card; Cancel leaves Google untouched. */
   preview?: AgentConfirmPreview | null;
   usage?: AgentUsageStatus;
+  /** History row for this turn — Cancel marks it cancelled instead of adding another. */
+  historyId?: string | null;
 };
 
 /** A fact the user asked to keep. */

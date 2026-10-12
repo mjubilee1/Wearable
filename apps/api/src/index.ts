@@ -9,7 +9,7 @@ import { logger } from "hono/logger";
 import {
   SEED_PROFILES,
   compatibilityScore,
-  isNearbyPlus,
+  hasProAccess,
   mockFacilitate,
   normalizeDeviceId,
   vibeCaption,
@@ -36,6 +36,7 @@ import {
   isStripeConfigured,
   isStripeWebhookConfigured,
 } from "./billing.js";
+import { LimitReachedError } from "./limits.js";
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 import {
@@ -203,15 +204,21 @@ app.post("/v1/billing/checkout", async (c) => {
 
   const profile =
     (await loadProfile(auth.uid)) ?? demoSelf(auth.uid, auth.email);
-  if (isNearbyPlus(profile)) {
-    return c.json({ error: "Already on Nearby+" }, 409);
+  if (hasProAccess(profile)) {
+    return c.json({ error: "Already on Pro" }, 409);
   }
+
+  const body = (await c.req.json().catch(() => null)) as {
+    interval?: string;
+  } | null;
+  const interval = body?.interval === "year" ? "year" : "month";
 
   try {
     const session = await createCheckoutSession({
       uid: auth.uid,
       email: auth.email ?? profile.email,
       stripeCustomerId: profile.stripeCustomerId,
+      interval,
     });
     return c.json(session);
   } catch (err) {
@@ -259,7 +266,8 @@ app.get("/v1/connectors/google/calendar/start", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
   try {
-    return c.json({ url: buildGoogleAuthUrl(auth.uid) });
+    const next = c.req.query("next") === "demo" ? "demo" : undefined;
+    return c.json({ url: buildGoogleAuthUrl(auth.uid, next) });
   } catch (error) {
     return c.json(
       {
@@ -297,6 +305,16 @@ app.post("/v1/agent", async (c) => {
   try {
     return c.json(await runAgentTurn(auth.uid, body));
   } catch (error) {
+    if (error instanceof LimitReachedError) {
+      return c.json(
+        {
+          code: error.code,
+          feature: error.feature,
+          resetAt: error.resetAt,
+        },
+        402,
+      );
+    }
     const message = error instanceof Error ? error.message : "Failed";
     console.error("[agent]", message);
     return c.json({ error: message }, 400);
@@ -320,9 +338,10 @@ app.get("/v1/agent/notes", async (c) => {
 app.get("/v1/agent/history", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const timeZone = c.req.query("timeZone") ?? undefined;
   const [history, usage] = await Promise.all([
     listAgentHistory(auth.uid),
-    getAgentUsage(auth.uid),
+    getAgentUsage(auth.uid, timeZone),
   ]);
   return c.json({ history, usage });
 });
@@ -337,7 +356,9 @@ app.delete("/v1/agent/history", async (c) => {
 app.get("/v1/agent/usage", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
-  return c.json({ usage: await getAgentUsage(auth.uid) });
+  return c.json({
+    usage: await getAgentUsage(auth.uid, c.req.query("timeZone") ?? undefined),
+  });
 });
 
 app.delete("/v1/agent/memories/:id", async (c) => {

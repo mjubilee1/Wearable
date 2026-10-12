@@ -68,3 +68,4 @@ next-env.d.ts
 
 # Omi upstream clone (pinned in third_party/OMI_COMMIT.txt; do not edit the tree)
 third_party/omi/
+.env.production

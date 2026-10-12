@@ -146,8 +146,12 @@ export async function fetchGoogleCalendarStatus(
   return (await res.json()) as GoogleCalendarStatus;
 }
 
-export async function startGoogleCalendarConnect(token: string): Promise<string> {
-  const res = await fetch(`${API_URL}/v1/connectors/google/calendar/start`, {
+export async function startGoogleCalendarConnect(
+  token: string,
+  next?: "demo",
+): Promise<string> {
+  const query = next ? `?next=${next}` : "";
+  const res = await fetch(`${API_URL}/v1/connectors/google/calendar/start${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const body = (await res.json().catch(() => ({}))) as {

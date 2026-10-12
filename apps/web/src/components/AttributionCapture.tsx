@@ -2,15 +2,15 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
-import { captureUtmSource } from "@/lib/attribution";
+import { captureAttribution } from "@/lib/attribution";
 
-/** Remember ?utm_source= for this tab so a later waitlist submit still has it. */
+/** Remember first-touch utm params so a later signup still has them. */
 export function AttributionCapture() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
     const query = searchParams.toString();
-    captureUtmSource(query ? `?${query}` : "");
+    captureAttribution(query ? `?${query}` : "");
   }, [searchParams]);
 
   return null;

@@ -25,7 +25,7 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         'name', 'age', 'role', 'interests', 'photoUrl', 'bio', 'lookingFor',
         'prompts', 'vibes', 'deviceId', 'updatedAt', 'initials', 'avatarHue',
-        'email', 'connectorSetupDismissedAt'
+        'email', 'connectorSetupDismissedAt', 'timeZone'
       ]);
     }
 

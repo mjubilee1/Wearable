@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { isEmailLikeName } from "@nearby/shared";
 import { PlansCard } from "@/components/PlansCard";
@@ -72,7 +72,9 @@ export default function ProfilePage() {
       </header>
 
       <main className="max-w-xl flex-1">
-        <PlansCard />
+        <Suspense fallback={null}>
+          <PlansCard />
+        </Suspense>
 
         <Link
           href="/connectors"

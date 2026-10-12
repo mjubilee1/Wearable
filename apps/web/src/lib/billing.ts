@@ -1,4 +1,6 @@
+import type { BillingInterval } from "@nearby/shared";
 import { auth } from "@/lib/firebase";
+import { trackFunnel } from "@/lib/funnel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -12,7 +14,7 @@ async function authHeaders(): Promise<HeadersInit> {
   };
 }
 
-async function postBilling(path: string): Promise<string> {
+async function postBilling(path: string, body?: unknown): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25_000);
 
@@ -20,6 +22,7 @@ async function postBilling(path: string): Promise<string> {
     const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
       headers: await authHeaders(),
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
     const data = (await res.json().catch(() => ({}))) as {
@@ -50,8 +53,15 @@ async function postBilling(path: string): Promise<string> {
   }
 }
 
+export async function startProCheckout(
+  interval: BillingInterval = "month",
+): Promise<string> {
+  trackFunnel("checkout_started", { plan: interval === "year" ? "pro_yearly" : "pro_monthly" });
+  return postBilling("/v1/billing/checkout", { interval });
+}
+
 export async function startNearbyPlusCheckout(): Promise<string> {
-  return postBilling("/v1/billing/checkout");
+  return startProCheckout("month");
 }
 
 export async function openBillingPortal(): Promise<string> {

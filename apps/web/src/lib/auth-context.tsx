@@ -28,6 +28,10 @@ type SignUpInput = {
   email: string;
   password: string;
   name: string;
+  timeZone?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
 };
 
 type AuthContextValue = {
@@ -93,6 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           age: 0,
           role: "",
           interests: [],
+          timeZone: input.timeZone,
+          utmSource: input.utmSource,
+          utmMedium: input.utmMedium,
+          utmCampaign: input.utmCampaign,
         });
         setProfile(created);
       },

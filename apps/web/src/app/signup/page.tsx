@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isEmailLikeName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
+import { captureAttribution } from "@/lib/attribution";
+import { trackFunnel } from "@/lib/funnel";
+
+const ONBOARDING_FLAG = "nearby_onboarding";
 
 export default function SignupPage() {
   const { signUp } = useAuth();
@@ -14,6 +18,13 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    trackFunnel("signup_start", { plan: "free" }, {
+      scope: "session",
+      key: "signup_start",
+    });
+  }, []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -27,13 +38,38 @@ export default function SignupPage() {
 
     setSubmitting(true);
     try {
+      const touch = captureAttribution();
+      let timeZone: string | null = null;
+      try {
+        timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+      } catch {
+        timeZone = null;
+      }
+      try {
+        sessionStorage.setItem(ONBOARDING_FLAG, "1");
+      } catch {
+        // Onboarding still runs from this page's redirect.
+      }
       await signUp({
         email: email.trim(),
         password,
         name: trimmed,
+        timeZone,
+        utmSource: touch.utm_source,
+        utmMedium: touch.utm_medium,
+        utmCampaign: touch.utm_campaign,
       });
-      router.replace("/activity");
+      trackFunnel("signup_complete", { plan: "free" }, {
+        scope: "session",
+        key: "signup_complete",
+      });
+      router.replace("/onboarding");
     } catch (err) {
+      try {
+        sessionStorage.removeItem(ONBOARDING_FLAG);
+      } catch {
+        // Ignore storage failures.
+      }
       setError(err instanceof Error ? err.message : "Could not create account");
     } finally {
       setSubmitting(false);

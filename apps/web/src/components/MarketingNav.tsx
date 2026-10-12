@@ -4,9 +4,8 @@ import { useAuth } from "@/lib/auth-context";
 import { MarketingAccountLink } from "@/components/MarketingAccountLink";
 
 const LINKS = [
-  { href: "#how", label: "How it works" },
-  { href: "#day", label: "The day" },
-  { href: "#refuse", label: "What we refuse" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "#pricing", label: "Plans" },
 ] as const;
 
 export function MarketingNav() {
@@ -29,19 +28,24 @@ export function MarketingNav() {
           ))}
         </nav>
         {loading ? (
-          <span className="h-9 w-28" aria-hidden />
+          <span className="h-9 w-36" aria-hidden />
         ) : user ? (
           <MarketingAccountLink
             className="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-white"
             signedInLabel="Open the app"
           />
         ) : (
-          <a
-            href="#waitlist"
-            className="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
-          >
-            Get updates
-          </a>
+          <div className="flex items-center gap-4">
+            <a href="/login" className="text-sm font-semibold text-muted hover:text-ink">
+              Sign in
+            </a>
+            <a
+              href="/signup"
+              className="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+            >
+              Sign up
+            </a>
+          </div>
         )}
       </div>
     </header>

@@ -1,151 +1,133 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { track } from "@vercel/analytics";
-import { useAuth } from "@/lib/auth-context";
+// PARITY: mobile — Pro plan card, checkout, and portal are web-only for this phase.
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  PRO_MONTHLY_USD,
+  PRO_YEARLY_USD,
+  hasProAccess,
+  type BillingInterval,
+} from "@nearby/shared";
+import { useAuth } from "@/lib/auth-context";
+import { openBillingPortal, startProCheckout } from "@/lib/billing";
+import { trackFunnel } from "@/lib/funnel";
+
+function statusLine(profile: NonNullable<ReturnType<typeof useAuth>["profile"]>): string {
+  if (profile.subscriptionStatus === "past_due" || profile.paymentFailedAt) {
+    return hasProAccess(profile) ? "Pro · payment failed" : "Free · payment failed";
+  }
+  if (!hasProAccess(profile)) {
+    if (profile.subscriptionStatus === "canceled") return "Free · canceled";
+    return "Free";
+  }
+  if (profile.subscriptionStatus === "trialing") return "Pro · trial";
+  if (profile.cancelAtPeriodEnd && profile.currentPeriodEnd) {
+    const when = new Date(profile.currentPeriodEnd).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+    return `Pro · cancels ${when}`;
+  }
+  if (profile.billingInterval === "year") return "Pro · yearly";
+  return "Pro · monthly";
+}
 
 export function PlansCard() {
   const { profile } = useAuth();
-  const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState(profile?.email ?? "");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const [busy, setBusy] = useState<"month" | "year" | "portal" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const billing = searchParams.get("billing");
 
-  function onProClick() {
-    track("pro_waitlist_click");
-    setEmail(profile?.email ?? "");
-    setMessage(null);
+  if (!profile) return null;
+  const pro = hasProAccess(profile);
+
+  async function onUpgrade(interval: BillingInterval) {
     setError(null);
-    setOpen(true);
+    setBusy(interval);
+    const plan = interval === "year" ? "pro_yearly" : "pro_monthly";
+    trackFunnel("upgrade_click", { plan });
+    try {
+      window.location.href = await startProCheckout(interval);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Checkout failed");
+      setBusy(null);
+    }
   }
 
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
+  async function onManage() {
     setError(null);
-    setMessage(null);
+    setBusy("portal");
     try {
-      const res = await fetch(`${API_URL}/v1/waitlist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          source: "pro",
-        }),
-      });
-      const body = (await res.json().catch(() => null)) as {
-        error?: string;
-        alreadyJoined?: boolean;
-      } | null;
-      if (!res.ok) {
-        throw new Error(body?.error ?? "Could not join the waitlist");
-      }
-      setMessage(
-        body?.alreadyJoined
-          ? "You're already on the Pro waitlist."
-          : "You're on the Pro waitlist. We'll email you when billing opens.",
-      );
-      setOpen(false);
+      window.location.href = await openBillingPortal();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not join");
-    } finally {
-      setBusy(false);
+      setError(err instanceof Error ? err.message : "Could not open billing");
+      setBusy(null);
     }
   }
 
   return (
     <section className="mb-6 rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
-        Plans
+        Plan
       </p>
       <h2 className="mt-1 text-lg font-bold tracking-tight text-ink">
-        Free vs Pro
+        {statusLine(profile)}
       </h2>
       <p className="mt-2 text-sm text-muted">
-        No payments yet. Join the waitlist if you want Pro when it opens.
+        {pro
+          ? "Unlimited requests, reschedules, and email drafts."
+          : `Free includes 20 requests, 3 reschedules, and 3 email drafts a day. Pro is $${PRO_MONTHLY_USD}/mo or $${PRO_YEARLY_USD}/yr, free for 7 days.`}
       </p>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl bg-surface px-4 py-4">
-          <p className="text-sm font-bold text-ink">Free</p>
-          <ul className="mt-2 space-y-1.5 text-sm text-muted">
-            <li>Example tasks on Talk</li>
-            <li>20 requests a day</li>
-            <li>Calendar, tasks, unread mail, notes</li>
-          </ul>
-        </div>
-        <div className="rounded-2xl border border-teal/30 bg-teal-soft/40 px-4 py-4">
-          <p className="text-sm font-bold text-ink">
-            Pro{" "}
-            <span className="font-semibold text-teal">$29/mo</span>
-          </p>
-          <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-teal">
-            Early access price
-          </p>
-          <ul className="mt-2 space-y-1.5 text-sm text-muted">
-            <li>Unlimited requests</li>
-            <li>Reschedule and email drafts</li>
-            <li>Priority on new connectors</li>
-          </ul>
-          <button
-            type="button"
-            onClick={onProClick}
-            className="mt-4 w-full rounded-2xl bg-teal px-4 py-2.5 text-sm font-semibold text-white"
-          >
-            Join Pro waitlist
-          </button>
-        </div>
-      </div>
-
-      {message ? (
+      {billing === "success" ? (
         <p className="mt-3 rounded-2xl bg-teal-soft px-3 py-2 text-sm text-teal">
-          {message}
+          Checkout finished. Pro shows here as soon as Stripe confirms it.
         </p>
       ) : null}
-      {error && !open ? (
+      {billing === "canceled" ? (
+        <p className="mt-3 rounded-2xl bg-surface px-3 py-2 text-sm text-muted">
+          Checkout canceled. You can upgrade anytime.
+        </p>
+      ) : null}
+      {error ? (
         <p className="mt-3 rounded-2xl bg-coral-soft px-3 py-2 text-sm text-coral">
           {error}
         </p>
       ) : null}
 
-      {open ? (
-        <form
-          onSubmit={onSubmit}
-          className="mt-4 space-y-3 rounded-2xl border border-black/10 bg-surface px-4 py-4"
+      {pro || profile.stripeCustomerId ? (
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => void onManage()}
+          className="mt-4 w-full rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
         >
-          <p className="text-sm font-semibold text-ink">Join Pro waitlist</p>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-ink">Email</span>
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
-            />
-          </label>
-          {error ? <p className="text-sm text-coral">{error}</p> : null}
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-2xl bg-teal px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              {busy ? "Saving…" : "Join waitlist"}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setOpen(false)}
-              className="rounded-2xl border border-black/10 bg-card px-4 py-2.5 text-sm font-semibold text-ink"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+          {busy === "portal" ? "Opening…" : "Manage billing"}
+        </button>
+      ) : null}
+
+      {!pro ? (
+        <div className="mt-3 flex flex-col gap-2">
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void onUpgrade("month")}
+            className="w-full rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {busy === "month" ? "Opening checkout…" : `Upgrade · $${PRO_MONTHLY_USD}/mo`}
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void onUpgrade("year")}
+            className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm font-semibold text-ink disabled:opacity-60"
+          >
+            {busy === "year" ? "Opening checkout…" : `Yearly · $${PRO_YEARLY_USD}`}
+          </button>
+        </div>
       ) : null}
     </section>
   );

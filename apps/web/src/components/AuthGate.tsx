@@ -1,17 +1,28 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ConnectorSetupPrompt } from "@/components/ConnectorSetupPrompt";
+import { TrialBanner } from "@/components/TrialBanner";
 import { useAuth } from "@/lib/auth-context";
 
 const AUTH_PATHS = new Set(["/login", "/signup", "/forgot-password"]);
+const ONBOARDING_FLAG = "nearby_onboarding";
+
+function afterAuthPath(): string {
+  try {
+    if (sessionStorage.getItem(ONBOARDING_FLAG) === "1") return "/onboarding";
+  } catch {
+    // Fall through to Talk.
+  }
+  return "/activity";
+}
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const isMarketing = pathname === "/";
+  const isMarketing = pathname === "/" || pathname === "/pricing";
   const isAuthScreen = AUTH_PATHS.has(pathname);
   const isPublic = isMarketing || isAuthScreen;
 
@@ -22,7 +33,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
     if (user && isAuthScreen) {
-      router.replace("/activity");
+      router.replace(afterAuthPath());
     }
   }, [user, loading, isPublic, isAuthScreen, router]);
 
@@ -43,8 +54,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <Suspense fallback={null}>
+        <TrialBanner />
+      </Suspense>
       {children}
-      {user && !isPublic ? <ConnectorSetupPrompt /> : null}
+      {user && !isPublic && pathname !== "/onboarding" ? (
+        <ConnectorSetupPrompt />
+      ) : null}
     </>
   );
 }

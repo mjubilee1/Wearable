@@ -35,6 +35,7 @@ const PRIVATE_PATHS = [
   "/activity",
   "/profile",
   "/connectors",
+  "/onboarding",
   "/nearby",
   "/connections",
 ];

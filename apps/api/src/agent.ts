@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import {
   firstNameFrom,
+  FREE_DAILY_DRAFTS,
+  FREE_DAILY_REQUESTS,
+  FREE_DAILY_RESCHEDULES,
+  hasProAccess,
   isAgentToolName,
   isPlaceholderNote,
   type AgentActionReceipt,
   type AgentConfirmPreview,
+  type AgentFeatureUsage,
   type AgentHistoryItem,
   type AgentMemoryItem,
   type AgentPendingTool,
@@ -12,12 +17,15 @@ import {
   type AgentTurnRequest,
   type AgentTurnResponse,
   type AgentUsageStatus,
+  type LimitFeature,
 } from "@nearby/shared";
 import {
   applyReschedule,
   createGoogleTask,
+  fetchPrimaryCalendarTimeZone,
   parseDraftRequest,
   parseRescheduleRequest,
+  previewDraftFromPick,
   previewDraftReply,
   previewReschedule,
   readCalendar,
@@ -25,9 +33,11 @@ import {
   saveGmailDraft,
 } from "./connectors/google-calendar.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
+import { LimitReachedError } from "./limits.js";
+import { dayBoundsInZone, isValidTimeZone, zonedDayKey } from "./timezone.js";
 
-const FREE_DAILY_LIMIT = 20;
 const HISTORY_LIMIT = 20;
+const DEFAULT_TIME_ZONE = "America/New_York";
 
 type StoredAction = {
   id: string;
@@ -39,6 +49,8 @@ type StoredAction = {
 type UsageDay = {
   day: string;
   count: number;
+  reschedules: number;
+  drafts: number;
 };
 
 type AgentState = {
@@ -55,9 +67,6 @@ function emptyState(): AgentState {
   return { memories: [], notes: [], reminders: [], history: [], usage: null };
 }
 
-function utcDayKey(now = Date.now()): string {
-  return new Date(now).toISOString().slice(0, 10);
-}
 
 function asMemory(value: unknown): AgentMemoryItem | null {
   if (!value || typeof value !== "object") return null;
@@ -109,20 +118,38 @@ function asHistoryItem(value: unknown): AgentHistoryItem | null {
   ) {
     return null;
   }
-  return {
+  const item: AgentHistoryItem = {
     id: row.id,
     request: clip(row.request, 500),
     reply: clip(row.reply, 520),
     receipt: asReceipt(row.receipt),
     createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
   };
+  if (row.status === "cancelled") item.status = "cancelled";
+  return item;
 }
 
 function asUsage(value: unknown): UsageDay | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
-  if (typeof row.day !== "string" || typeof row.count !== "number") return null;
-  return { day: row.day, count: Math.max(0, Math.floor(row.count)) };
+  if (typeof row.day !== "string") return null;
+  const count =
+    typeof row.count === "number"
+      ? row.count
+      : typeof row.requests === "number"
+        ? row.requests
+        : null;
+  if (count === null) return null;
+  return {
+    day: row.day,
+    count: Math.max(0, Math.floor(count)),
+    reschedules:
+      typeof row.reschedules === "number"
+        ? Math.max(0, Math.floor(row.reschedules))
+        : 0,
+    drafts:
+      typeof row.drafts === "number" ? Math.max(0, Math.floor(row.drafts)) : 0,
+  };
 }
 
 /** Firestore rejects undefined field values — only serialize defined keys. */
@@ -181,13 +208,18 @@ function serializeReceipt(
 function serializeHistoryItem(
   item: AgentHistoryItem,
 ): Record<string, string | number | Record<string, string | null> | null> {
-  return {
+  const out: Record<
+    string,
+    string | number | Record<string, string | null> | null
+  > = {
     id: item.id,
     request: item.request,
     reply: item.reply,
     receipt: serializeReceipt(item.receipt),
     createdAt: item.createdAt,
   };
+  if (item.status === "cancelled") out.status = "cancelled";
+  return out;
 }
 
 async function writeState(uid: string, state: AgentState): Promise<void> {
@@ -216,19 +248,115 @@ function asPayload(value: unknown): Record<string, string> {
   return out;
 }
 
-function usageStatus(state: AgentState, plan: "free" | "pro" = "free"): AgentUsageStatus {
-  const day = utcDayKey();
-  const used =
-    state.usage && state.usage.day === day ? state.usage.count : 0;
+function usageStatus(
+  state: AgentState,
+  timeZone: string,
+  plan: "free" | "pro" = "free",
+): AgentUsageStatus {
+  const day = zonedDayKey(timeZone);
+  const usage = state.usage && state.usage.day === day ? state.usage : null;
+  const used = usage?.count ?? 0;
+  const reschedulesUsed = usage?.reschedules ?? 0;
+  const draftsUsed = usage?.drafts ?? 0;
+  const resetAt = dayBoundsInZone(timeZone, 1).start.toISOString();
+  const feature = (usedCount: number, limit: number): AgentFeatureUsage =>
+    plan === "pro"
+      ? { limit: null, used: usedCount, remaining: null }
+      : {
+          limit,
+          used: usedCount,
+          remaining: Math.max(0, limit - usedCount),
+        };
   if (plan === "pro") {
-    return { plan, limit: null, used, remaining: null };
+    return {
+      plan,
+      limit: null,
+      used,
+      remaining: null,
+      reschedules: feature(reschedulesUsed, FREE_DAILY_RESCHEDULES),
+      drafts: feature(draftsUsed, FREE_DAILY_DRAFTS),
+      resetAt,
+    };
   }
   return {
     plan: "free",
-    limit: FREE_DAILY_LIMIT,
+    limit: FREE_DAILY_REQUESTS,
     used,
-    remaining: Math.max(0, FREE_DAILY_LIMIT - used),
+    remaining: Math.max(0, FREE_DAILY_REQUESTS - used),
+    reschedules: feature(reschedulesUsed, FREE_DAILY_RESCHEDULES),
+    drafts: feature(draftsUsed, FREE_DAILY_DRAFTS),
+    resetAt,
   };
+}
+
+function featureUsed(
+  state: AgentState,
+  timeZone: string,
+  feature: LimitFeature,
+): number {
+  const day = zonedDayKey(timeZone);
+  if (!state.usage || state.usage.day !== day) return 0;
+  if (feature === "requests") return state.usage.count;
+  if (feature === "reschedule") return state.usage.reschedules;
+  return state.usage.drafts;
+}
+
+function assertWithinLimit(
+  state: AgentState,
+  timeZone: string,
+  feature: LimitFeature,
+  plan: "free" | "pro",
+): void {
+  if (plan === "pro") return;
+  const limit =
+    feature === "requests"
+      ? FREE_DAILY_REQUESTS
+      : feature === "reschedule"
+        ? FREE_DAILY_RESCHEDULES
+        : FREE_DAILY_DRAFTS;
+  if (featureUsed(state, timeZone, feature) >= limit) {
+    throw new LimitReachedError(feature, timeZone);
+  }
+}
+
+async function readPlan(uid: string): Promise<"free" | "pro"> {
+  if (!isFirebaseConfigured()) return "free";
+  try {
+    const snap = await getFirebaseAdmin()
+      .firestore()
+      .collection("users")
+      .doc(uid)
+      .get();
+    return hasProAccess(snap.data() ?? {}) ? "pro" : "free";
+  } catch (error) {
+    console.error("[agent] plan", error);
+    return "free";
+  }
+}
+
+async function statusFor(
+  uid: string,
+  state: AgentState,
+  timeZone: string,
+): Promise<AgentUsageStatus> {
+  return usageStatus(state, timeZone, await readPlan(uid));
+}
+
+async function bumpFeature(
+  uid: string,
+  timeZone: string,
+  feature: "reschedule" | "draft_email",
+): Promise<void> {
+  const state = await readState(uid);
+  const day = zonedDayKey(timeZone);
+  const prev =
+    state.usage && state.usage.day === day
+      ? state.usage
+      : { day, count: 0, reschedules: 0, drafts: 0 };
+  if (feature === "reschedule") prev.reschedules += 1;
+  else prev.drafts += 1;
+  state.usage = prev;
+  await writeState(uid, state);
 }
 
 async function appendHistory(
@@ -239,7 +367,8 @@ async function appendHistory(
     receipt?: AgentActionReceipt | null;
   },
   consumeQuota: boolean,
-): Promise<AgentUsageStatus> {
+  timeZone: string,
+): Promise<{ usage: AgentUsageStatus; historyId: string }> {
   const state = await readState(uid);
   const item: AgentHistoryItem = {
     id: randomUUID(),
@@ -250,13 +379,81 @@ async function appendHistory(
   };
   state.history = [item, ...state.history].slice(0, HISTORY_LIMIT);
   if (consumeQuota) {
-    const day = utcDayKey();
-    const prev =
-      state.usage && state.usage.day === day ? state.usage.count : 0;
-    state.usage = { day, count: prev + 1 };
+    const day = zonedDayKey(timeZone);
+    const same = state.usage && state.usage.day === day ? state.usage : null;
+    state.usage = {
+      day,
+      count: (same?.count ?? 0) + 1,
+      reschedules: same?.reschedules ?? 0,
+      drafts: same?.drafts ?? 0,
+    };
   }
   await writeState(uid, state);
-  return usageStatus(state);
+  return { usage: await statusFor(uid, state, timeZone), historyId: item.id };
+}
+
+async function markHistoryCancelled(
+  uid: string,
+  historyId: string | undefined,
+  timeZone: string,
+): Promise<AgentUsageStatus> {
+  const state = await readState(uid);
+  if (historyId) {
+    state.history = state.history.map((item) =>
+      item.id === historyId ? { ...item, status: "cancelled" as const } : item,
+    );
+  } else if (state.history[0] && state.history[0].status !== "cancelled") {
+    state.history = [
+      { ...state.history[0], status: "cancelled" },
+      ...state.history.slice(1),
+    ];
+  }
+  await writeState(uid, state);
+  return statusFor(uid, state, timeZone);
+}
+
+async function readProfileTimeZone(uid: string): Promise<string | null> {
+  if (!isFirebaseConfigured()) return null;
+  try {
+    const snap = await getFirebaseAdmin()
+      .firestore()
+      .collection("users")
+      .doc(uid)
+      .get();
+    const value = snap.data()?.timeZone;
+    return typeof value === "string" && isValidTimeZone(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function persistTimeZone(uid: string, timeZone: string): Promise<void> {
+  if (!isFirebaseConfigured() || !isValidTimeZone(timeZone)) return;
+  try {
+    await getFirebaseAdmin()
+      .firestore()
+      .collection("users")
+      .doc(uid)
+      .set({ timeZone, updatedAt: Date.now() }, { merge: true });
+  } catch (error) {
+    console.error("[agent] persist timeZone", error);
+  }
+}
+
+async function resolveTimeZone(
+  uid: string,
+  requested: unknown,
+): Promise<string> {
+  if (typeof requested === "string" && isValidTimeZone(requested.trim())) {
+    const tz = requested.trim();
+    await persistTimeZone(uid, tz);
+    return tz;
+  }
+  const fromProfile = await readProfileTimeZone(uid);
+  if (fromProfile) return fromProfile;
+  const fromCalendar = await fetchPrimaryCalendarTimeZone(uid);
+  if (fromCalendar && isValidTimeZone(fromCalendar)) return fromCalendar;
+  return DEFAULT_TIME_ZONE;
 }
 
 function byCreatedAtAsc(
@@ -618,6 +815,7 @@ function answered(
     preview?: AgentConfirmPreview | null;
     pendingTool?: AgentPendingTool | null;
     usage?: AgentUsageStatus;
+    historyId?: string | null;
   } = {},
 ): AgentTurnResponse {
   return {
@@ -627,6 +825,7 @@ function answered(
     receipt: extras.receipt ?? null,
     preview: extras.preview ?? null,
     usage: extras.usage,
+    historyId: extras.historyId ?? null,
   };
 }
 
@@ -635,13 +834,18 @@ async function applyDecision(
   decision: NonNullable<AgentTurnRequest["decision"]>,
   name: string | null,
   requestText = "",
-  options: { recordHistory?: boolean; consumeQuota?: boolean } = {},
+  options: {
+    recordHistory?: boolean;
+    consumeQuota?: boolean;
+    timeZone: string;
+  },
 ): Promise<AgentTurnResponse> {
   const payload = asPayload(decision.payload);
   const summary = clip(decision.summary || payload.text || "");
   const mode = process.env.OPENAI_API_KEY ? "openai" : "mock";
   const recordHistory = options.recordHistory !== false;
   const consumeQuota = Boolean(options.consumeQuota);
+  const timeZone = options.timeZone;
 
   async function finish(
     reply: string,
@@ -651,9 +855,8 @@ async function applyDecision(
       pendingTool?: AgentPendingTool | null;
     } = {},
   ): Promise<AgentTurnResponse> {
-    let usage: AgentUsageStatus | undefined;
     if (recordHistory) {
-      usage = await appendHistory(
+      const saved = await appendHistory(
         uid,
         {
           request: requestText || summary || decision.tool,
@@ -661,18 +864,36 @@ async function applyDecision(
           receipt: extras.receipt ?? null,
         },
         consumeQuota,
+        timeZone,
       );
-    } else {
-      usage = usageStatus(await readState(uid));
+      return answered(reply, mode, {
+        ...extras,
+        usage: saved.usage,
+        historyId: saved.historyId,
+      });
     }
-    return answered(reply, mode, { ...extras, usage });
+    return answered(reply, mode, {
+      ...extras,
+      usage: await statusFor(uid, await readState(uid), timeZone),
+    });
   }
 
   if (!decision.approved) {
-    return finish("Okay. Cancelled. Nothing changed.");
+    const usage = await markHistoryCancelled(
+      uid,
+      decision.historyId,
+      timeZone,
+    );
+    return answered("Okay. Cancelled. Nothing changed.", mode, { usage });
   }
 
   if (decision.tool === "reschedule") {
+    assertWithinLimit(
+      await readState(uid),
+      timeZone,
+      "reschedule",
+      await readPlan(uid),
+    );
     const result = await applyReschedule(
       uid,
       {
@@ -686,10 +907,17 @@ async function applyDecision(
       },
       name,
     );
+    if (result.receipt) await bumpFeature(uid, timeZone, "reschedule");
     return finish(clip(result.spoken, 420), { receipt: result.receipt });
   }
 
   if (decision.tool === "draft_email") {
+    assertWithinLimit(
+      await readState(uid),
+      timeZone,
+      "draft_email",
+      await readPlan(uid),
+    );
     const result = await saveGmailDraft(
       uid,
       {
@@ -701,6 +929,7 @@ async function applyDecision(
       },
       name,
     );
+    if (result.receipt) await bumpFeature(uid, timeZone, "draft_email");
     return finish(clip(result.spoken, 420), { receipt: result.receipt });
   }
 
@@ -710,6 +939,7 @@ async function applyDecision(
       when,
       firstOnly: payload.first === "1",
       name,
+      timeZone,
     });
     return finish(clip(result.spoken, 420), { receipt: result.receipt });
   }
@@ -781,33 +1011,52 @@ async function beginConfirmTurn(
   uid: string,
   text: string,
   name: string | null,
+  timeZone: string,
 ): Promise<AgentTurnResponse | null> {
   const mode = process.env.OPENAI_API_KEY ? "openai" : "mock";
-  const reschedule = parseRescheduleRequest(text);
+  const reschedule = parseRescheduleRequest(text, timeZone);
   if (reschedule) {
-    const result = await previewReschedule(uid, reschedule, name);
+    if (!reschedule.ok) {
+      const saved = await appendHistory(
+        uid,
+        { request: text, reply: reschedule.ask, receipt: null },
+        true,
+        timeZone,
+      );
+      return answered(reschedule.ask, mode, {
+        usage: saved.usage,
+        historyId: saved.historyId,
+      });
+    }
+    const result = await previewReschedule(uid, reschedule, name, timeZone);
     if (!result.ok) {
-      const usage = await appendHistory(
+      const saved = await appendHistory(
         uid,
         { request: text, reply: result.spoken, receipt: null },
         true,
+        timeZone,
       );
-      return answered(result.spoken, mode, { usage });
+      return answered(result.spoken, mode, {
+        usage: saved.usage,
+        historyId: saved.historyId,
+      });
     }
     const pendingTool: AgentPendingTool = {
       tool: "reschedule",
       summary: `${result.preview.title}: ${result.preview.oldWhen} → ${result.preview.newWhen}`,
       payload: result.payload,
     };
-    const usage = await appendHistory(
+    const saved = await appendHistory(
       uid,
       { request: text, reply: result.spoken, receipt: null },
       true,
+      timeZone,
     );
     return answered(result.spoken, mode, {
       pendingTool,
       preview: result.preview,
-      usage,
+      usage: saved.usage,
+      historyId: saved.historyId,
     });
   }
 
@@ -815,12 +1064,29 @@ async function beginConfirmTurn(
   if (draft) {
     const result = await previewDraftReply(uid, draft, name);
     if (!result.ok) {
-      const usage = await appendHistory(
+      const saved = await appendHistory(
         uid,
         { request: text, reply: result.spoken, receipt: null },
         true,
+        timeZone,
       );
-      return answered(result.spoken, mode, { usage });
+      return answered(result.spoken, mode, {
+        usage: saved.usage,
+        historyId: saved.historyId,
+      });
+    }
+    if (result.preview.kind === "draft_choices") {
+      const saved = await appendHistory(
+        uid,
+        { request: text, reply: result.spoken, receipt: null },
+        true,
+        timeZone,
+      );
+      return answered(result.spoken, mode, {
+        preview: result.preview,
+        usage: saved.usage,
+        historyId: saved.historyId,
+      });
     }
     const pendingTool: AgentPendingTool = {
       tool: "draft_email",
@@ -833,15 +1099,17 @@ async function beginConfirmTurn(
         messageId: result.preview.messageId,
       },
     };
-    const usage = await appendHistory(
+    const saved = await appendHistory(
       uid,
       { request: text, reply: result.spoken, receipt: null },
       true,
+      timeZone,
     );
     return answered(result.spoken, mode, {
       pendingTool,
       preview: result.preview,
-      usage,
+      usage: saved.usage,
+      historyId: saved.historyId,
     });
   }
 
@@ -857,6 +1125,63 @@ export async function runAgentTurn(
   }
   const request = body as AgentTurnRequest;
   const name = await readFirstName(uid);
+  const timeZone = await resolveTimeZone(uid, request.timeZone);
+  const mode = process.env.OPENAI_API_KEY ? "openai" : "mock";
+
+  if (request.draftPick) {
+    const pick = request.draftPick;
+    if (
+      typeof pick.messageId !== "string" ||
+      typeof pick.threadId !== "string" ||
+      typeof pick.intent !== "string" ||
+      typeof pick.query !== "string"
+    ) {
+      throw new Error("Invalid draft pick");
+    }
+    const plan = await readPlan(uid);
+    assertWithinLimit(await readState(uid), timeZone, "draft_email", plan);
+    const result = await previewDraftFromPick(uid, pick, name);
+    if (!result.ok) {
+      const saved = await appendHistory(
+        uid,
+        { request: `Draft to ${pick.query}`, reply: result.spoken, receipt: null },
+        false,
+        timeZone,
+      );
+      return answered(result.spoken, mode, {
+        usage: saved.usage,
+        historyId: saved.historyId,
+      });
+    }
+    const pendingTool: AgentPendingTool = {
+      tool: "draft_email",
+      summary: `Draft to ${result.preview.to}`,
+      payload: {
+        to: result.preview.to,
+        subject: result.preview.subject,
+        body: result.preview.body,
+        threadId: result.preview.threadId,
+        messageId: result.preview.messageId,
+      },
+    };
+    const saved = await appendHistory(
+      uid,
+      {
+        request: `Draft to ${pick.query}`,
+        reply: result.spoken,
+        receipt: null,
+      },
+      false,
+      timeZone,
+    );
+    return answered(result.spoken, mode, {
+      pendingTool,
+      preview: result.preview,
+      usage: saved.usage,
+      historyId: saved.historyId,
+    });
+  }
+
   if (request.decision) {
     const decision = request.decision;
     if (
@@ -867,6 +1192,18 @@ export async function runAgentTurn(
     ) {
       throw new Error("Invalid tool decision");
     }
+    const plan = await readPlan(uid);
+    if (decision.approved) {
+      const feature: LimitFeature =
+        decision.tool === "reschedule" || decision.tool === "draft_email"
+          ? decision.tool
+          : "requests";
+      assertWithinLimit(await readState(uid), timeZone, feature, plan);
+    }
+    const countsAsRequest =
+      decision.approved &&
+      decision.tool !== "reschedule" &&
+      decision.tool !== "draft_email";
     return applyDecision(
       uid,
       {
@@ -874,31 +1211,29 @@ export async function runAgentTurn(
         approved: decision.approved,
         summary: typeof decision.summary === "string" ? decision.summary : "",
         payload: asPayload(decision.payload),
+        historyId:
+          typeof decision.historyId === "string" ? decision.historyId : undefined,
       },
       name,
       typeof decision.summary === "string" ? decision.summary : decision.tool,
-      { recordHistory: true, consumeQuota: false },
+      { recordHistory: decision.approved, consumeQuota: countsAsRequest, timeZone },
     );
   }
 
   const text = typeof request.text === "string" ? clip(request.text, 500) : "";
   if (!text) throw new Error("Say something first");
 
+  const plan = await readPlan(uid);
   const state = await readState(uid);
-  const usage = usageStatus(state);
-  if (
-    usage.plan === "free" &&
-    usage.remaining !== null &&
-    usage.remaining <= 0
-  ) {
-    const reply =
-      "You've used today's 20 free requests. Join the Pro waitlist on Profile for unlimited early access.";
-    return answered(reply, process.env.OPENAI_API_KEY ? "openai" : "mock", {
-      usage,
-    });
-  }
+  const gated = parseRescheduleRequest(text, timeZone)
+    ? "reschedule"
+    : parseDraftRequest(text)
+      ? "draft_email"
+      : null;
+  if (gated) assertWithinLimit(state, timeZone, gated, plan);
+  assertWithinLimit(state, timeZone, "requests", plan);
 
-  const confirm = await beginConfirmTurn(uid, text, name);
+  const confirm = await beginConfirmTurn(uid, text, name, timeZone);
   if (confirm) return confirm;
 
   const direct = explicitTool(text);
@@ -913,7 +1248,7 @@ export async function runAgentTurn(
       },
       name,
       text,
-      { recordHistory: true, consumeQuota: true },
+      { recordHistory: true, consumeQuota: true, timeZone },
     );
   }
   const turn = await modelTurn(uid, text, name);
@@ -921,16 +1256,21 @@ export async function runAgentTurn(
     turn.pendingTool ??
     (await mockTurn(text, await readState(uid))).pendingTool;
   if (!pending) {
-    const nextUsage = await appendHistory(
+    const saved = await appendHistory(
       uid,
       { request: text, reply: turn.reply, receipt: turn.receipt ?? null },
       true,
+      timeZone,
     );
-    return { ...turn, usage: nextUsage, preview: null };
+    return {
+      ...turn,
+      usage: saved.usage,
+      historyId: saved.historyId,
+      preview: null,
+    };
   }
   if (pending.tool === "reschedule" || pending.tool === "draft_email") {
-    // Model shouldn't auto-run confirm tools; fall through to confirm preview.
-    const again = await beginConfirmTurn(uid, text, name);
+    const again = await beginConfirmTurn(uid, text, name, timeZone);
     if (again) return again;
   }
   return applyDecision(
@@ -943,7 +1283,7 @@ export async function runAgentTurn(
     },
     name,
     text,
-    { recordHistory: true, consumeQuota: true },
+    { recordHistory: true, consumeQuota: true, timeZone },
   );
 }
 
@@ -985,6 +1325,13 @@ export async function clearAgentHistory(uid: string): Promise<void> {
   await writeState(uid, state);
 }
 
-export async function getAgentUsage(uid: string): Promise<AgentUsageStatus> {
-  return usageStatus(await readState(uid));
+export async function getAgentUsage(
+  uid: string,
+  timeZone?: string,
+): Promise<AgentUsageStatus> {
+  const tz =
+    timeZone && isValidTimeZone(timeZone)
+      ? timeZone
+      : (await readProfileTimeZone(uid)) ?? DEFAULT_TIME_ZONE;
+  return statusFor(uid, await readState(uid), tz);
 }

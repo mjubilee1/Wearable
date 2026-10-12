@@ -1,10 +1,19 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   AgentActionReceipt,
+  AgentDraftChoicesPreview,
   AgentDraftPreview,
   AgentReschedulePreview,
 } from "@nearby/shared";
 import { getFirebaseAdmin, isFirebaseConfigured } from "../firebase.js";
+import {
+  dayBoundsInZone,
+  dayOffsetFromToken,
+  formatClockAmPm,
+  formatWhenInZone,
+  getZonedParts,
+  zonedTimeToUtc,
+} from "../timezone.js";
 
 /** One Google connect unlocks Calendar (read/write events), Tasks, and Gmail read + drafts. */
 const SCOPES = [
@@ -67,7 +76,7 @@ function signState(payload: string): string {
   return createHmac("sha256", stateSecret()).update(payload).digest("base64url");
 }
 
-export function buildGoogleAuthUrl(uid: string): string {
+export function buildGoogleAuthUrl(uid: string, next?: "demo"): string {
   if (!isGoogleCalendarConfigured()) {
     throw new Error("Google Calendar is not configured on the API");
   }
@@ -76,6 +85,7 @@ export function buildGoogleAuthUrl(uid: string): string {
       uid,
       exp: Date.now() + 10 * 60 * 1000,
       n: randomBytes(8).toString("hex"),
+      ...(next ? { next } : {}),
     }),
   ).toString("base64url");
   const state = `${body}.${signState(body)}`;
@@ -90,7 +100,7 @@ export function buildGoogleAuthUrl(uid: string): string {
   return url.toString();
 }
 
-function parseState(state: string): { uid: string } | null {
+function parseState(state: string): { uid: string; next?: "demo" } | null {
   const [body, sig] = state.split(".");
   if (!body || !sig) return null;
   const expected = signState(body);
@@ -100,10 +110,13 @@ function parseState(state: string): { uid: string } | null {
   try {
     const parsed = JSON.parse(
       Buffer.from(body, "base64url").toString("utf8"),
-    ) as { uid?: string; exp?: number };
+    ) as { uid?: string; exp?: number; next?: string };
     if (typeof parsed.uid !== "string" || !parsed.uid) return null;
     if (typeof parsed.exp !== "number" || parsed.exp < Date.now()) return null;
-    return { uid: parsed.uid };
+    return {
+      uid: parsed.uid,
+      next: parsed.next === "demo" ? "demo" : undefined,
+    };
   } catch {
     return null;
   }
@@ -267,11 +280,17 @@ export async function handleGoogleCalendarCallback(input: {
   state: string | undefined;
   error: string | undefined;
 }): Promise<string> {
-  const done = (query: string) => `${appBaseUrl()}/connectors?${query}`;
-  if (input.error) return done(`calendar=error&reason=${encodeURIComponent(input.error)}`);
-  if (!input.code || !input.state) return done("calendar=error&reason=missing_code");
+  if (input.error) {
+    return `${appBaseUrl()}/connectors?calendar=error&reason=${encodeURIComponent(input.error)}`;
+  }
+  if (!input.code || !input.state) {
+    return `${appBaseUrl()}/connectors?calendar=error&reason=missing_code`;
+  }
   const parsed = parseState(input.state);
-  if (!parsed) return done("calendar=error&reason=bad_state");
+  if (!parsed) return `${appBaseUrl()}/connectors?calendar=error&reason=bad_state`;
+  const landing =
+    parsed.next === "demo" ? `${appBaseUrl()}/activity` : `${appBaseUrl()}/connectors`;
+  const done = (query: string) => `${landing}?${query}`;
   try {
     const tokens = await exchangeCode(input.code);
     if (!tokens.refreshToken) {
@@ -324,13 +343,11 @@ function httpsHref(value: string | undefined | null): string | null {
   }
 }
 
-function dayWindow(when: "today" | "tomorrow"): { start: Date; end: Date } {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  if (when === "tomorrow") start.setDate(start.getDate() + 1);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
+function dayWindow(
+  when: "today" | "tomorrow",
+  timeZone: string,
+): { start: Date; end: Date } {
+  return dayBoundsInZone(timeZone, when === "tomorrow" ? 1 : 0);
 }
 
 function calendarDayHref(start: Date): string {
@@ -350,15 +367,41 @@ function withName(name: string | null, sentence: string): string {
   return `${name}, ${spoken}`;
 }
 
-function formatEventTime(raw: string | undefined, allDay: boolean): string {
+function formatEventTime(
+  raw: string | undefined,
+  allDay: boolean,
+  timeZone: string,
+): string {
   if (!raw) return "";
   if (allDay) return "all day";
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleTimeString("en-US", {
+    timeZone,
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
   });
+}
+
+export async function fetchPrimaryCalendarTimeZone(
+  uid: string,
+): Promise<string | null> {
+  const accessToken = await getValidAccessToken(uid);
+  if (!accessToken) return null;
+  try {
+    const res = await fetch(
+      "https://www.googleapis.com/calendar/v3/calendars/primary",
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { timeZone?: string };
+    return typeof data.timeZone === "string" && data.timeZone
+      ? data.timeZone
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function eventPhrase(event: CalendarEvent): string {
@@ -369,7 +412,12 @@ function eventPhrase(event: CalendarEvent): string {
 
 export async function readCalendar(
   uid: string,
-  options: { when: "today" | "tomorrow"; firstOnly: boolean; name: string | null },
+  options: {
+    when: "today" | "tomorrow";
+    firstOnly: boolean;
+    name: string | null;
+    timeZone: string;
+  },
 ): Promise<GoogleToolResult> {
   const whenWord = options.when === "tomorrow" ? "tomorrow" : "today";
   if (!isGoogleCalendarConfigured()) {
@@ -383,7 +431,7 @@ export async function readCalendar(
     };
   }
 
-  const { start, end } = dayWindow(options.when);
+  const { start, end } = dayWindow(options.when, options.timeZone);
   const url = new URL(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
   );
@@ -422,7 +470,7 @@ export async function readCalendar(
       const startRaw = item.start?.dateTime ?? item.start?.date;
       return {
         summary: (item.summary || "Busy").trim(),
-        startLabel: formatEventTime(startRaw, allDay),
+        startLabel: formatEventTime(startRaw, allDay, options.timeZone),
         htmlLink: httpsHref(item.htmlLink),
       };
     })
@@ -678,54 +726,60 @@ export async function readUnreadGmail(
   };
 }
 
-function parseClockHint(raw: string): { hour: number; minute: number } | null {
+type ClockParse =
+  | { ok: true; hour: number; minute: number }
+  | { ok: false; ask: string };
+
+/**
+ * Bare hours: 7–11 → AM, 1–6 → PM, 12 → noon.
+ * Explicit am/pm always wins. Unclear bare hours ask AM or PM.
+ */
+export function parseClockHint(raw: string): ClockParse {
   const cleaned = raw.trim().toLowerCase().replace(/\./g, "");
   const m = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
-  if (!m) return null;
+  if (!m) return { ok: false, ask: "Which time did you mean?" };
   let hour = Number(m[1]);
   const minute = m[2] ? Number(m[2]) : 0;
-  const meridiem = m[3];
-  if (!Number.isFinite(hour) || hour < 0 || hour > 23 || minute > 59) return null;
-  if (meridiem === "pm" && hour < 12) hour += 12;
-  if (meridiem === "am" && hour === 12) hour = 0;
-  if (!meridiem && hour <= 12) {
-    // Bare "3" in schedule speech usually means 3 PM for daytime moves.
-    if (hour >= 1 && hour <= 11) hour += 12;
+  const meridiem = m[3] as "am" | "pm" | undefined;
+  if (!Number.isFinite(hour) || hour < 0 || hour > 23 || minute > 59) {
+    return { ok: false, ask: "Which time did you mean?" };
   }
-  return { hour, minute };
+  if (meridiem === "pm" && hour < 12) hour += 12;
+  else if (meridiem === "am" && hour === 12) hour = 0;
+  else if (meridiem === "am" && hour < 12) {
+    // keep hour
+  } else if (!meridiem) {
+    if (hour >= 13 && hour <= 23) {
+      // already 24h
+    } else if (hour >= 7 && hour <= 11) {
+      // working-hours morning → AM
+    } else if (hour >= 1 && hour <= 6) {
+      hour += 12; // afternoon → PM
+    } else if (hour === 12) {
+      // noon
+    } else {
+      const bare = String(Number(m[1]));
+      return { ok: false, ask: `${bare} AM or ${bare} PM?` };
+    }
+  }
+  return { ok: true, hour, minute };
 }
 
-function formatWhenLabel(date: Date): string {
-  const day = date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  const time = date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${day} at ${time}`;
-}
-
-function dayBounds(offsetDays: number): { start: Date; end: Date } {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() + offsetDays);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
-}
-
-export type RescheduleParse = {
-  fromDayOffset: number;
-  fromClock: { hour: number; minute: number };
-  toDayOffset: number;
-  toClock: { hour: number; minute: number };
-};
+export type RescheduleParse =
+  | {
+      ok: true;
+      fromDayOffset: number;
+      fromClock: { hour: number; minute: number };
+      toDayOffset: number;
+      toClock: { hour: number; minute: number };
+    }
+  | { ok: false; ask: string };
 
 /** Parse "Move my 3 PM to tomorrow at 10" style requests. */
-export function parseRescheduleRequest(text: string): RescheduleParse | null {
+export function parseRescheduleRequest(
+  text: string,
+  timeZone: string,
+): RescheduleParse | null {
   const lower = text.toLowerCase();
   if (!/\b(move|reschedule|shift|push)\b/.test(lower)) return null;
   const fromMatch = lower.match(
@@ -733,23 +787,44 @@ export function parseRescheduleRequest(text: string): RescheduleParse | null {
   );
   if (!fromMatch?.[1]) return null;
   const toMatch = lower.match(
-    /\b(?:to|for)\s+(tomorrow|today)?\s*(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/,
+    /\b(?:to|for)\s+(tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)?\s*(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/,
   );
   if (!toMatch?.[2]) return null;
+
   const fromClock = parseClockHint(fromMatch[1]);
+  if (!fromClock.ok) return { ok: false, ask: fromClock.ask };
   const toClock = parseClockHint(toMatch[2]);
-  if (!fromClock || !toClock) return null;
-  const toDayOffset = toMatch[1] === "tomorrow" ? 1 : toMatch[1] === "today" ? 0 : 1;
-  const fromDayOffset = /\btomorrow\b/.test(lower.slice(0, lower.indexOf("to")))
-    ? 1
+  if (!toClock.ok) return { ok: false, ask: toClock.ask };
+
+  const beforeTo = lower.slice(0, Math.max(0, lower.indexOf(" to ")));
+  const fromDayToken = beforeTo.match(
+    /\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/,
+  )?.[1];
+  const fromDayOffset = fromDayToken
+    ? (dayOffsetFromToken(fromDayToken, timeZone) ?? 0)
     : 0;
-  return { fromDayOffset, fromClock, toDayOffset, toClock };
+
+  let toDayOffset = 1;
+  if (toMatch[1]) {
+    const resolved = dayOffsetFromToken(toMatch[1], timeZone);
+    if (resolved === null) return null;
+    toDayOffset = resolved;
+  }
+
+  return {
+    ok: true,
+    fromDayOffset,
+    fromClock: { hour: fromClock.hour, minute: fromClock.minute },
+    toDayOffset,
+    toClock: { hour: toClock.hour, minute: toClock.minute },
+  };
 }
 
 export async function previewReschedule(
   uid: string,
-  parsed: RescheduleParse,
+  parsed: Extract<RescheduleParse, { ok: true }>,
   name: string | null,
+  timeZone: string,
 ): Promise<
   | {
       ok: true;
@@ -770,7 +845,7 @@ export async function previewReschedule(
     };
   }
 
-  const { start, end } = dayBounds(parsed.fromDayOffset);
+  const { start, end } = dayBoundsInZone(timeZone, parsed.fromDayOffset);
   const url = new URL(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
   );
@@ -779,6 +854,7 @@ export async function previewReschedule(
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
   url.searchParams.set("maxResults", "20");
+  url.searchParams.set("timeZone", timeZone);
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -807,7 +883,8 @@ export async function previewReschedule(
       const endAt = item.end?.dateTime
         ? new Date(item.end.dateTime)
         : new Date(startAt.getTime() + 60 * 60 * 1000);
-      const minutes = startAt.getHours() * 60 + startAt.getMinutes();
+      const local = getZonedParts(timeZone, startAt);
+      const minutes = local.hour * 60 + local.minute;
       return {
         id: item.id!,
         title: (item.summary || "Busy").trim(),
@@ -815,17 +892,21 @@ export async function previewReschedule(
         startAt,
         endAt,
         delta: Math.abs(minutes - targetMinutes),
-        timeZone: item.start?.timeZone,
       };
     })
     .filter((item) => item.delta <= 45)
     .sort((a, b) => a.delta - b.delta);
 
   const fromLabel =
-    parsed.fromDayOffset === 1 ? "tomorrow" : "today";
-  const clockLabel = `${((parsed.fromClock.hour + 11) % 12) + 1}${
-    parsed.fromClock.minute ? `:${String(parsed.fromClock.minute).padStart(2, "0")}` : ""
-  } ${parsed.fromClock.hour >= 12 ? "PM" : "AM"}`;
+    parsed.fromDayOffset === 1
+      ? "tomorrow"
+      : parsed.fromDayOffset === 0
+        ? "today"
+        : "that day";
+  const clockLabel = formatClockAmPm(
+    parsed.fromClock.hour,
+    parsed.fromClock.minute,
+  );
 
   if (candidates.length === 0) {
     return {
@@ -838,13 +919,24 @@ export async function previewReschedule(
   }
 
   const hit = candidates[0];
-  const durationMs = Math.max(15 * 60 * 1000, hit.endAt.getTime() - hit.startAt.getTime());
-  const newStart = dayBounds(parsed.toDayOffset).start;
-  newStart.setHours(parsed.toClock.hour, parsed.toClock.minute, 0, 0);
+  const durationMs = Math.max(
+    15 * 60 * 1000,
+    hit.endAt.getTime() - hit.startAt.getTime(),
+  );
+  const toDay = dayBoundsInZone(timeZone, parsed.toDayOffset);
+  const toParts = getZonedParts(timeZone, toDay.start);
+  const newStart = zonedTimeToUtc(
+    timeZone,
+    toParts.year,
+    toParts.month,
+    toParts.day,
+    parsed.toClock.hour,
+    parsed.toClock.minute,
+  );
   const newEnd = new Date(newStart.getTime() + durationMs);
 
-  const oldWhen = formatWhenLabel(hit.startAt);
-  const newWhen = formatWhenLabel(newStart);
+  const oldWhen = formatWhenInZone(hit.startAt, timeZone);
+  const newWhen = formatWhenInZone(newStart, timeZone);
   const preview: AgentReschedulePreview = {
     kind: "reschedule",
     eventId: hit.id,
@@ -859,7 +951,7 @@ export async function previewReschedule(
     ok: true,
     spoken: withName(
       name,
-      `Move ${hit.title} from ${oldWhen} to ${newWhen}?`,
+      `Move '${hit.title}' from ${oldWhen} to ${newWhen}?`,
     ),
     preview,
     payload: {
@@ -997,11 +1089,231 @@ function extractEmail(fromHeader: string): string {
   return fromHeader.trim();
 }
 
+function displayNameFrom(fromHeader: string): string {
+  const withoutAngle = fromHeader.replace(/<[^>]+>/, "").trim();
+  return withoutAngle.replace(/^"|"$/g, "").trim() || extractEmail(fromHeader);
+}
+
+function isNoReplyAddress(email: string): boolean {
+  const local = email.split("@")[0]?.toLowerCase() ?? "";
+  return /^(no[\-_]?reply|noreply|donotreply|do[\-_]?not[\-_]?reply|mailer[\-_]?daemon|notifications?)$/i.test(
+    local,
+  );
+}
+
 function buildReplyBody(intent: string, name: string | null): string {
   const line = intent.replace(/^["']|["']$/g, "").trim();
   const closing = name ? `\n\nThanks,\n${name}` : "\n\nThanks";
   if (/^[A-Z]/.test(line)) return `${line}${closing}`;
   return `Hi,\n\n${line.charAt(0).toUpperCase()}${line.slice(1)}${closing}`;
+}
+
+type DraftCandidate = {
+  messageId: string;
+  threadId: string;
+  to: string;
+  fromLabel: string;
+  subject: string;
+  score: number;
+};
+
+async function fetchMessageMeta(
+  accessToken: string,
+  id: string,
+): Promise<{
+  id: string;
+  threadId: string;
+  from: string;
+  subject: string;
+  listUnsubscribe: string;
+  labelIds: string[];
+} | null> {
+  const msgRes = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=List-Unsubscribe&metadataHeaders=Message-ID`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!msgRes.ok) return null;
+  const msg = (await msgRes.json()) as {
+    id?: string;
+    threadId?: string;
+    labelIds?: string[];
+    payload?: { headers?: Array<{ name?: string; value?: string }> };
+  };
+  if (!msg.id) return null;
+  const headers = msg.payload?.headers;
+  return {
+    id: msg.id,
+    threadId: msg.threadId || "",
+    from: headerValue(headers, "From"),
+    subject: headerValue(headers, "Subject") || "No subject",
+    listUnsubscribe: headerValue(headers, "List-Unsubscribe"),
+    labelIds: msg.labelIds ?? [],
+  };
+}
+
+function scoreDraftCandidate(
+  query: string,
+  from: string,
+  toHeader: string,
+  subject: string,
+): number {
+  const q = query.toLowerCase();
+  const fromLower = from.toLowerCase();
+  const email = extractEmail(from).toLowerCase();
+  const name = displayNameFrom(from).toLowerCase();
+  const subjectLower = subject.toLowerCase();
+  const toLower = toHeader.toLowerCase();
+  let score = 0;
+  if (name.includes(q) || q.includes(name)) score += 8;
+  if (email.includes(q)) score += 8;
+  if (fromLower.includes(q)) score += 5;
+  if (toLower.includes(q)) score += 6;
+  if (subjectLower.includes(q)) score += 2;
+  return score;
+}
+
+function isSkippableMail(meta: {
+  from: string;
+  listUnsubscribe: string;
+  labelIds: string[];
+}): boolean {
+  const email = extractEmail(meta.from);
+  if (!email.includes("@") || isNoReplyAddress(email)) return true;
+  if (meta.listUnsubscribe.trim()) return true;
+  const labels = new Set(meta.labelIds.map((l) => l.toUpperCase()));
+  if (labels.has("CATEGORY_PROMOTIONS") || labels.has("CATEGORY_SOCIAL")) {
+    return true;
+  }
+  return false;
+}
+
+async function searchMessageIds(
+  accessToken: string,
+  query: string,
+): Promise<Array<{ id: string; threadId: string }>> {
+  const listUrl = new URL(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+  );
+  listUrl.searchParams.set("q", query);
+  listUrl.searchParams.set("maxResults", "12");
+  const listRes = await fetch(listUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!listRes.ok) {
+    console.error("[gmail] draft search failed", await listRes.text());
+    return [];
+  }
+  const listData = (await listRes.json()) as {
+    messages?: Array<{ id?: string; threadId?: string }>;
+  };
+  return (listData.messages ?? [])
+    .filter((m): m is { id: string; threadId: string } => Boolean(m.id))
+    .map((m) => ({ id: m.id, threadId: m.threadId || "" }));
+}
+
+async function collectDraftCandidates(
+  accessToken: string,
+  parsed: DraftParse,
+): Promise<DraftCandidate[]> {
+  const safeQuery = parsed.query.replace(/"/g, "").slice(0, 80);
+  const baseExclude =
+    `-in:drafts -in:chats -category:promotions -category:social newer_than:90d`;
+  const inboxHits = await searchMessageIds(
+    accessToken,
+    `${safeQuery} ${baseExclude}`,
+  );
+  const sentHits = await searchMessageIds(
+    accessToken,
+    `${safeQuery} in:sent ${baseExclude}`,
+  );
+
+  const seen = new Set<string>();
+  const candidates: DraftCandidate[] = [];
+
+  for (const hit of [...inboxHits, ...sentHits]) {
+    if (seen.has(hit.id)) continue;
+    seen.add(hit.id);
+    const meta = await fetchMessageMeta(accessToken, hit.id);
+    if (!meta || isSkippableMail(meta)) continue;
+
+    // For sent mail, the person is in To.
+    const detailed = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${hit.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=List-Unsubscribe`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    let toField = "";
+    if (detailed.ok) {
+      const body = (await detailed.json()) as {
+        payload?: { headers?: Array<{ name?: string; value?: string }> };
+        labelIds?: string[];
+      };
+      toField = headerValue(body.payload?.headers, "To");
+      if (isSkippableMail({
+        from: meta.from,
+        listUnsubscribe: headerValue(body.payload?.headers, "List-Unsubscribe"),
+        labelIds: body.labelIds ?? meta.labelIds,
+      })) {
+        continue;
+      }
+    }
+
+    const replyTo = extractEmail(meta.from);
+    const sentTo = extractEmail(toField);
+    const labels = new Set(meta.labelIds.map((l) => l.toUpperCase()));
+    const isSent = labels.has("SENT");
+    const personEmail = isSent && sentTo.includes("@") ? sentTo : replyTo;
+    if (!personEmail.includes("@") || isNoReplyAddress(personEmail)) continue;
+
+    const score = scoreDraftCandidate(
+      parsed.query,
+      isSent ? toField || meta.from : meta.from,
+      toField,
+      meta.subject,
+    );
+    if (score < 2) continue;
+
+    const fromLabel = isSent
+      ? displayNameFrom(toField || meta.from)
+      : displayNameFrom(meta.from);
+    candidates.push({
+      messageId: meta.id,
+      threadId: meta.threadId || hit.threadId,
+      to: personEmail,
+      fromLabel,
+      subject: meta.subject,
+      score,
+    });
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  // Dedupe by email+subject
+  const deduped: DraftCandidate[] = [];
+  const keys = new Set<string>();
+  for (const c of candidates) {
+    const key = `${c.to.toLowerCase()}|${c.subject.toLowerCase()}`;
+    if (keys.has(key)) continue;
+    keys.add(key);
+    deduped.push(c);
+  }
+  return deduped;
+}
+
+function draftPreviewFromCandidate(
+  candidate: DraftCandidate,
+  intent: string,
+  name: string | null,
+): AgentDraftPreview {
+  const subject = /^re:/i.test(candidate.subject)
+    ? candidate.subject
+    : `Re: ${candidate.subject}`;
+  return {
+    kind: "draft_email",
+    threadId: candidate.threadId,
+    messageId: candidate.messageId,
+    to: candidate.to,
+    subject,
+    body: buildReplyBody(intent, name),
+  };
 }
 
 export async function previewDraftReply(
@@ -1010,6 +1322,11 @@ export async function previewDraftReply(
   name: string | null,
 ): Promise<
   | { ok: true; spoken: string; preview: AgentDraftPreview }
+  | {
+      ok: true;
+      spoken: string;
+      preview: AgentDraftChoicesPreview;
+    }
   | { ok: false; spoken: string }
 > {
   if (!isGoogleCalendarConfigured()) {
@@ -1023,76 +1340,115 @@ export async function previewDraftReply(
     };
   }
 
-  const listUrl = new URL(
-    "https://gmail.googleapis.com/gmail/v1/users/me/messages",
-  );
-  listUrl.searchParams.set(
-    "q",
-    `${parsed.query} newer_than:90d -in:drafts -in:chats`,
-  );
-  listUrl.searchParams.set("maxResults", "5");
-
-  const listRes = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!listRes.ok) {
-    console.error("[gmail] draft search failed", await listRes.text());
-    return { ok: false, spoken: "I couldn't search Gmail just now." };
-  }
-  const listData = (await listRes.json()) as {
-    messages?: Array<{ id?: string; threadId?: string }>;
-  };
-  const first = listData.messages?.[0];
-  if (!first?.id) {
+  const candidates = await collectDraftCandidates(accessToken, parsed);
+  if (candidates.length === 0) {
     return {
       ok: false,
       spoken: withName(
         name,
-        `I couldn't find a recent thread about ${parsed.query}. Which one?`,
+        `I couldn't find an email from your ${parsed.query}. Who is it?`,
       ),
     };
   }
 
-  const msgRes = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${first.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=References`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-  if (!msgRes.ok) {
-    return { ok: false, spoken: "I found a thread but couldn't open it." };
+  if (candidates.length > 1) {
+    const top = candidates.slice(0, 3);
+    const lines = top
+      .map((c, i) => `${i + 1}. ${c.fromLabel} — ${c.subject}`)
+      .join(" ");
+    const preview: AgentDraftChoicesPreview = {
+      kind: "draft_choices",
+      query: parsed.query,
+      intent: parsed.intent,
+      choices: top.map((c) => ({
+        messageId: c.messageId,
+        threadId: c.threadId,
+        to: c.to,
+        label: `${c.fromLabel} — ${c.subject}`,
+      })),
+    };
+    return {
+      ok: true,
+      spoken: withName(
+        name,
+        `I found a few matches for ${parsed.query}. Which one? ${lines}`,
+      ),
+      preview,
+    };
   }
-  const msg = (await msgRes.json()) as {
-    id?: string;
-    threadId?: string;
-    payload?: { headers?: Array<{ name?: string; value?: string }> };
-  };
-  const headers = msg.payload?.headers;
-  const from = headerValue(headers, "From");
-  const subjectRaw = headerValue(headers, "Subject") || "No subject";
-  const to = extractEmail(from);
-  if (!to.includes("@")) {
+
+  const hit = candidates[0];
+  if (isNoReplyAddress(hit.to)) {
     return {
       ok: false,
       spoken: withName(
         name,
-        `I couldn't find a recent thread about ${parsed.query}. Which one?`,
+        `I couldn't find an email from your ${parsed.query}. Who is it?`,
       ),
     };
   }
-  const subject = /^re:/i.test(subjectRaw) ? subjectRaw : `Re: ${subjectRaw}`;
-  const body = buildReplyBody(parsed.intent, name);
-  const preview: AgentDraftPreview = {
-    kind: "draft_email",
-    threadId: msg.threadId || first.threadId || "",
-    messageId: msg.id || first.id,
-    to,
-    subject,
-    body,
-  };
+  const preview = draftPreviewFromCandidate(hit, parsed.intent, name);
   return {
     ok: true,
     spoken: withName(
       name,
-      `Here's a draft reply to ${to} about ${subjectRaw}. Edit it, save to Gmail Drafts, or cancel.`,
+      `Here's a draft reply to ${preview.to} about ${hit.subject}. Edit it, save to Gmail Drafts, or cancel.`,
+    ),
+    preview,
+  };
+}
+
+export async function previewDraftFromPick(
+  uid: string,
+  pick: {
+    messageId: string;
+    threadId: string;
+    intent: string;
+    query: string;
+  },
+  name: string | null,
+): Promise<
+  | { ok: true; spoken: string; preview: AgentDraftPreview }
+  | { ok: false; spoken: string }
+> {
+  const accessToken = await getValidAccessToken(uid);
+  if (!accessToken) {
+    return {
+      ok: false,
+      spoken: "Connect Google in Connectors first, then ask again.",
+    };
+  }
+  const meta = await fetchMessageMeta(accessToken, pick.messageId);
+  if (!meta || isSkippableMail(meta)) {
+    return {
+      ok: false,
+      spoken: withName(
+        name,
+        `I couldn't find an email from your ${pick.query}. Who is it?`,
+      ),
+    };
+  }
+  const to = extractEmail(meta.from);
+  if (!to.includes("@") || isNoReplyAddress(to)) {
+    return {
+      ok: false,
+      spoken: withName(name, "That address looks like a no-reply. Pick another."),
+    };
+  }
+  const candidate: DraftCandidate = {
+    messageId: meta.id,
+    threadId: meta.threadId || pick.threadId,
+    to,
+    fromLabel: displayNameFrom(meta.from),
+    subject: meta.subject,
+    score: 10,
+  };
+  const preview = draftPreviewFromCandidate(candidate, pick.intent, name);
+  return {
+    ok: true,
+    spoken: withName(
+      name,
+      `Here's a draft reply to ${preview.to} about ${meta.subject}. Edit it, save to Gmail Drafts, or cancel.`,
     ),
     preview,
   };
