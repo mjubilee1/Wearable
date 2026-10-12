@@ -11,34 +11,14 @@
 #error "Copy include/secrets.h.example to include/secrets.h"
 #endif
 
-struct PendingTool {
-  bool active = false;
-  String tool;
-  String summary;
-  String text;
-  String when;
-};
-
-PendingTool pending;
-
-bool postAgent(const String &text, bool deciding, bool approved) {
+bool postAgent(const String &text) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Wi-Fi dropped.");
     return false;
   }
 
   JsonDocument doc;
-  if (deciding) {
-    JsonObject decision = doc["decision"].to<JsonObject>();
-    decision["tool"] = pending.tool;
-    decision["approved"] = approved;
-    decision["summary"] = pending.summary;
-    JsonObject payload = decision["payload"].to<JsonObject>();
-    if (pending.text.length()) payload["text"] = pending.text;
-    if (pending.when.length()) payload["when"] = pending.when;
-  } else {
-    doc["text"] = text;
-  }
+  doc["text"] = text;
 
   String body;
   serializeJson(doc, body);
@@ -77,18 +57,6 @@ bool postAgent(const String &text, bool deciding, bool approved) {
 
   const char *reply = replyDoc["reply"] | "";
   Serial.println(reply);
-
-  JsonObject pendingJson = replyDoc["pendingTool"].as<JsonObject>();
-  if (!pendingJson.isNull()) {
-    pending.active = true;
-    pending.tool = pendingJson["tool"] | "";
-    pending.summary = pendingJson["summary"] | "";
-    pending.text = pendingJson["payload"]["text"] | "";
-    pending.when = pendingJson["payload"]["when"] | "";
-    Serial.println("Allow this? Type yes or no.");
-  } else {
-    pending.active = false;
-  }
   return true;
 }
 
@@ -121,11 +89,5 @@ void loop() {
   line.trim();
   if (!line.length()) return;
 
-  const bool yes = line.equalsIgnoreCase("yes") || line.equalsIgnoreCase("y");
-  const bool no = line.equalsIgnoreCase("no") || line.equalsIgnoreCase("n");
-  if (pending.active && (yes || no)) {
-    postAgent("", true, yes);
-    return;
-  }
-  postAgent(line, false, false);
+  postAgent(line);
 }

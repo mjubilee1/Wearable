@@ -48,8 +48,8 @@ const DAY = [
   },
   {
     when: "Through the day",
-    title: "It keeps only what you approved.",
-    body: "Context you chose to remember. Tools you chose to allow. Answers that stay short.",
+    title: "It acts when you ask, then stops.",
+    body: "A note, a reminder, or a fact when you ask for one. Short answers. Nothing kept just because you were nearby.",
   },
 ] as const;
 
@@ -64,7 +64,7 @@ const REFUSE = [
   },
   {
     title: "Not a recorder",
-    body: "We don’t quietly capture the room. Tools and memory only run with your say-so.",
+    body: "We don’t quietly capture the room. It acts when you speak to it.",
   },
 ] as const;
 

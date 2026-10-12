@@ -1,32 +1,61 @@
-export type ConnectorId = "google_calendar" | "notes" | "reminders";
+export type ConnectorId =
+  | "google"
+  | "google_calendar"
+  | "google_tasks"
+  | "gmail"
+  | "notes"
+  | "reminders";
 
 export type ConnectorCatalogItem = {
   id: ConnectorId;
   name: string;
   blurb: string;
   kind: "oauth" | "built_in";
+  /** Same Google OAuth session as Calendar / Tasks / Gmail. */
+  googleBundle?: boolean;
 };
 
 export const CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
   {
     id: "google_calendar",
     name: "Google Calendar",
-    blurb: "Read today's events when you allow it in Talk.",
+    blurb: "Read today's events when you ask in Talk.",
     kind: "oauth",
+    googleBundle: true,
+  },
+  {
+    id: "google_tasks",
+    name: "Google Tasks",
+    blurb: "Reminders you speak get added to your default Tasks list.",
+    kind: "oauth",
+    googleBundle: true,
+  },
+  {
+    id: "gmail",
+    name: "Gmail",
+    blurb: "Hear a short unread digest when you ask.",
+    kind: "oauth",
+    googleBundle: true,
   },
   {
     id: "notes",
     name: "Notes",
-    blurb: "Save a short note in Nearby after you allow it.",
-    kind: "built_in",
-  },
-  {
-    id: "reminders",
-    name: "Reminders",
-    blurb: "Set a reminder in Nearby after you allow it.",
+    blurb: "Save a short note in Nearby when you ask.",
     kind: "built_in",
   },
 ];
+
+const LEGACY_FAVORITE_MAP: Record<string, ConnectorId> = {
+  google: "google_calendar",
+  reminders: "google_tasks",
+};
+
+function normalizeFavoriteId(id: string): ConnectorId | null {
+  const mapped = LEGACY_FAVORITE_MAP[id] ?? id;
+  return CONNECTOR_CATALOG.some((item) => item.id === mapped)
+    ? (mapped as ConnectorId)
+    : null;
+}
 
 type SetupPrefs = {
   favorites: ConnectorId[];
@@ -46,12 +75,12 @@ export function readConnectorSetup(uid: string): SetupPrefs {
     if (!raw) return { favorites: [], dismissedAt: null };
     const parsed = JSON.parse(raw) as SetupPrefs;
     const favorites = Array.isArray(parsed.favorites)
-      ? parsed.favorites.filter((id): id is ConnectorId =>
-          CONNECTOR_CATALOG.some((item) => item.id === id),
-        )
+      ? parsed.favorites
+          .map((id) => (typeof id === "string" ? normalizeFavoriteId(id) : null))
+          .filter((id): id is ConnectorId => id !== null)
       : [];
     return {
-      favorites,
+      favorites: Array.from(new Set(favorites)),
       dismissedAt:
         typeof parsed.dismissedAt === "number" ? parsed.dismissedAt : null,
     };
@@ -84,7 +113,7 @@ export async function fetchGoogleCalendarStatus(
   const res = await fetch(`${API_URL}/v1/connectors/google/calendar`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error("Could not load calendar status");
+  if (!res.ok) throw new Error("Could not load Google status");
   return (await res.json()) as GoogleCalendarStatus;
 }
 
@@ -97,7 +126,7 @@ export async function startGoogleCalendarConnect(token: string): Promise<string>
     error?: string;
   };
   if (!res.ok || !body.url) {
-    throw new Error(body.error ?? "Calendar connect isn't configured yet");
+    throw new Error(body.error ?? "Google connect isn't configured yet");
   }
   return body.url;
 }

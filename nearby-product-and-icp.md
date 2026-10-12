@@ -28,7 +28,7 @@ Domain: [nearbyhello.com](https://www.nearbyhello.com) (bought Oct 11 2026 on Na
 | Agent | reasoning, tool selection, orchestration, context and memory | API |
 | Integrations | calendar, reminders, notes, search, other approved tools | API |
 | Device | ESP32-S3 firmware: Wi-Fi, auth, backend calls, BLE, display | mock mic, serial output |
-| Companion | phone and web Talk screen: one turn, spoken reply, permission before a tool | now |
+| Companion | phone and web Talk screen: one turn, spoken reply, the request runs the tool | now |
 
 Key design choice: the agent lives in the API behind one endpoint (for example `POST /v1/agent`). Every input calls the same endpoint: the laptop now, the ESP32 later, the phone after that. Swapping inputs never means rewriting the agent.
 
@@ -46,7 +46,7 @@ Reuse what works. Don't rebuild it.
 
 - Don't put permanent API secrets in firmware. Devices authenticate to the backend; the backend holds the model keys.
 - Short, useful spoken replies.
-- Tools only run with the user's permission. Memory only keeps what the user approved.
+- A spoken request runs the tool in that turn. Nearby does not record the room, and it does not ask again before a note, reminder, memory, or calendar check. A saved fact can be deleted.
 - Log errors and handle them clearly at every layer.
 - Don't optimize the enclosure, industrial design, manufacturing, or battery yet.
 - The color-clip BLE scan is off in the phone and the website. Leave `/v1/matches` and `/v1/ble/sightings` in the API. Don't put the scan UI back.
@@ -65,7 +65,7 @@ Reuse what works. Don't rebuild it.
 ## Milestones
 
 - **M1, working voice agent:** speak through the laptop, the phone, or AirPods and get a spoken answer. Current target. The phone types the turn until the next dev build grows a microphone button. The website can use the laptop microphone.
-- **M2, useful actions:** at least 3 tasks work — Google Calendar (read today after permission), plus in-app note and reminder after permission. Calendar OAuth lives in `apps/api` (`/v1/connectors/google/calendar`).
+- **M2, useful actions:** at least 3 tasks work — Google Calendar (read today), plus an in-app note and reminder. Calendar OAuth lives in `apps/api` (`/v1/connectors/google/calendar`).
 - **M3, ESP32 talks to the backend:** Wi-Fi, a request to the backend, a valid response.
 - **M4, physical voice prototype:** audio from the I²S mic reaches Nearby and gets a response.
 - **M5, wearable interaction:** the round display shows status and output. Evaluate size, power, and portability.
@@ -87,7 +87,7 @@ Reuse what works. Don't rebuild it.
 - **Morning:** today's agenda, meetings and reminders, a short task summary, follow-ups without repeating context.
 - **At work:** capture ideas or notes by voice, create tasks and reminders, ask technical questions, pull info from approved integrations.
 - **Commute or walk:** hands-free through headphones, capture thoughts without opening an app, spoken answers, calendar and reminders.
-- **All day:** remembers the conversation and approved preferences, runs supported tools with permission, keeps answers short.
+- **All day:** remembers facts you asked it to keep, runs a supported tool when you ask, keeps answers short.
 
 ## Market context (scenarios only, Oct 11 2026)
 
@@ -96,11 +96,13 @@ The space is crowded, and several products have failed. Humane's Pin was disable
 ### Lessons from recent failures (design against these)
 
 - **Rabbit R1:** Sold a new shell around a phone job. Demo wow, daily shrug. Slow cloud gimmicks and a worse app in a box. Nearby does not ship hardware until the laptop/AirPods loop is something Montrell actually uses.
-- **Omi:** Wearable as always-on recorder / meeting capture. Privacy creep and "is that thing listening?" in a room. Nearby is not a recorder. Tools and memory only with explicit permission.
+- **Omi:** Wearable as always-on recorder / meeting capture. Privacy creep and "is that thing listening?" in a room. Nearby is not a recorder. It acts when you speak to it, then stops.
 - **Friend:** Companion necklace — chat for its own sake, emotional product, unclear task. Nearby is not a friend in your ear. Short spoken answers for real tasks, then silence.
 - **Shared failure mode:** Marketing a vibe and a form factor before a daily job. Nearby's order is function → voice reliability → useful tools → then a device people might wear.
 
 Public marketing should say what we refuse (phone-in-a-box, companion, recorder) without trash-talking competitors by name on the homepage.
+
+Posted links include the channel so the waitlist `source` shows where the signup came from: `https://www.nearbyhello.com/?utm_source=instagram`, `?utm_source=tiktok`, or `?utm_source=linkedin`. A visit with no `utm_source` is stored as `marketing`.
 
 ## Still to decide
 

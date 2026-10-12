@@ -18,7 +18,12 @@ import {
   type MatchProfile,
   type UserProfile,
 } from "@nearby/shared";
-import { deleteAgentMemory, listAgentMemories, runAgentTurn } from "./agent.js";
+import {
+  deleteAgentMemory,
+  listAgentMemories,
+  listAgentNotes,
+  runAgentTurn,
+} from "./agent.js";
 import { verifyAuth } from "./auth.js";
 import {
   createCheckoutSession,
@@ -299,6 +304,13 @@ app.get("/v1/agent/memories", async (c) => {
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
   const memories = await listAgentMemories(auth.uid);
   return c.json({ memories });
+});
+
+app.get("/v1/agent/notes", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const notes = await listAgentNotes(auth.uid);
+  return c.json({ notes });
 });
 
 app.delete("/v1/agent/memories/:id", async (c) => {

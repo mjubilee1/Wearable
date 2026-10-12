@@ -7,7 +7,7 @@ Product: [`nearby-product-and-icp.md`](nearby-product-and-icp.md) (Sun Oct 11, 2
 ## Layers
 
 1. **Input** — laptop mic on the website, typed turn on the phone (spoken reply). ESP32 serial stand-in until the mic arrives. AirPods do not pair to the board.
-2. **Agent** — `apps/api` `POST /v1/agent`. Tools only with permission. Memory only after you allow it.
+2. **Agent** — `apps/api` `POST /v1/agent`. A spoken request runs the tool in that turn. A saved fact can be deleted.
 3. **Device** — [`firmware/voice-esp32`](firmware/voice-esp32/). Wi-Fi only. The chip on the desk has no BLE, so `NEARBY_HAS_BLE` stays 0. The older color-ring sketches under `firmware/` stay in place and are not extended.
 
 ## Voice firmware
@@ -44,9 +44,9 @@ Copy env files from each app’s `.env.example`. Optional `OPENAI_API_KEY` on th
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /v1/agent` | One spoken turn. A tool waits for `decision`. |
-| `GET /v1/agent/memories` | Facts the user approved |
-| `DELETE /v1/agent/memories/:id` | Drop an approved memory |
+| `POST /v1/agent` | One spoken turn. A selected tool runs in that request. |
+| `GET /v1/agent/memories` | Facts the user asked to keep |
+| `DELETE /v1/agent/memories/:id` | Drop a saved memory |
 | `GET /v1/matches` | Nearby profiles + scores |
 | `POST /v1/facilitate` | Why you vibe + 3 icebreakers |
 

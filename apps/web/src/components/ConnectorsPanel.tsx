@@ -36,7 +36,12 @@ export function ConnectorsPanel() {
       if (user) {
         const prefs = readConnectorSetup(user.uid);
         const next = Array.from(
-          new Set<ConnectorId>([...prefs.favorites, "google_calendar"]),
+          new Set<ConnectorId>([
+            ...prefs.favorites,
+            "google_calendar",
+            "google_tasks",
+            "gmail",
+          ]),
         );
         writeConnectorSetup(user.uid, {
           favorites: next,
@@ -48,13 +53,13 @@ export function ConnectorsPanel() {
       setError(
         params.get("reason") === "no_refresh_token"
           ? "Google didn't return a refresh token. Disconnect the app in your Google account and try again."
-          : "Could not connect Google Calendar.",
+          : "Could not connect Google.",
       );
     }
     window.history.replaceState({}, "", "/connectors");
   }, [queryClient, user]);
 
-  const calendarQuery = useQuery({
+  const googleQuery = useQuery({
     queryKey: ["google-calendar", user?.uid],
     enabled: Boolean(user),
     queryFn: async () => {
@@ -65,7 +70,7 @@ export function ConnectorsPanel() {
     },
   });
 
-  const calendar = calendarQuery.data;
+  const google = googleQuery.data;
 
   function toggleFavorite(id: ConnectorId) {
     if (!user) return;
@@ -82,7 +87,7 @@ export function ConnectorsPanel() {
     });
   }
 
-  async function connectCalendar() {
+  async function connectGoogle() {
     if (!user || busy) return;
     setBusy(true);
     setError(null);
@@ -95,7 +100,7 @@ export function ConnectorsPanel() {
     }
   }
 
-  async function onDisconnectCalendar() {
+  async function onDisconnectGoogle() {
     if (!user || busy) return;
     setBusy(true);
     setError(null);
@@ -109,6 +114,9 @@ export function ConnectorsPanel() {
     }
   }
 
+  const googleItems = CONNECTOR_CATALOG.filter((item) => item.googleBundle);
+  const otherItems = CONNECTOR_CATALOG.filter((item) => !item.googleBundle);
+
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-20 sm:px-8">
       <header className="mb-8">
@@ -119,7 +127,7 @@ export function ConnectorsPanel() {
           Connectors
         </h1>
         <p className="mt-2 max-w-xl text-sm text-muted sm:text-base">
-          Pick what Nearby may use. Tools still ask before they act in Talk.
+          Pick what Nearby may use. A spoken request in Talk runs the tool.
         </p>
       </header>
 
@@ -130,12 +138,86 @@ export function ConnectorsPanel() {
           </p>
         ) : null}
 
-        {CONNECTOR_CATALOG.map((item) => {
-          const isFavorite = favorites.includes(item.id);
-          const isCalendar = item.id === "google_calendar";
-          const connected = isCalendar && calendar?.connected;
-          const configured = !isCalendar || calendar?.configured !== false;
+        <section className="rounded-3xl border border-black/5 bg-card px-5 py-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-bold text-ink">Google</h2>
+                {google?.connected ? (
+                  <span className="rounded-full bg-teal-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-teal">
+                    Connected
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 text-sm text-muted">
+                One connect for Calendar, Tasks, and Gmail read. Reconnect if you
+                linked Calendar before Tasks and Gmail were added.
+              </p>
+              {google?.connected && google.email ? (
+                <p className="mt-1 text-xs text-muted">{google.email}</p>
+              ) : null}
+              {google?.configured === false ? (
+                <p className="mt-1 text-xs text-coral">
+                  Add Google OAuth keys on the API to enable this.
+                </p>
+              ) : null}
+            </div>
+          </div>
 
+          <ul className="mt-4 space-y-3">
+            {googleItems.map((item) => {
+              const isFavorite = favorites.includes(item.id);
+              return (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-surface px-3 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-ink">{item.name}</p>
+                    <p className="mt-0.5 text-xs text-muted">{item.blurb}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleFavorite(item.id)}
+                    className={[
+                      "rounded-full px-3 py-1.5 text-xs font-semibold",
+                      isFavorite
+                        ? "bg-teal-soft text-teal"
+                        : "bg-white text-muted",
+                    ].join(" ")}
+                  >
+                    {isFavorite ? "Favorite" : "Add favorite"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="mt-4">
+            {google?.connected ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void onDisconnectGoogle()}
+                className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
+              >
+                Disconnect Google
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={busy || google?.configured === false}
+                onClick={() => void connectGoogle()}
+                className="rounded-2xl bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                Connect Google
+              </button>
+            )}
+          </div>
+        </section>
+
+        {otherItems.map((item) => {
+          const isFavorite = favorites.includes(item.id);
           return (
             <section
               key={item.id}
@@ -145,25 +227,11 @@ export function ConnectorsPanel() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-base font-bold text-ink">{item.name}</h2>
-                    {connected ? (
-                      <span className="rounded-full bg-teal-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-teal">
-                        Connected
-                      </span>
-                    ) : item.kind === "built_in" ? (
-                      <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
-                        Built in
-                      </span>
-                    ) : null}
+                    <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+                      Built in
+                    </span>
                   </div>
                   <p className="mt-1 text-sm text-muted">{item.blurb}</p>
-                  {connected && calendar?.email ? (
-                    <p className="mt-1 text-xs text-muted">{calendar.email}</p>
-                  ) : null}
-                  {isCalendar && calendar?.configured === false ? (
-                    <p className="mt-1 text-xs text-coral">
-                      Add Google OAuth keys on the API to enable this.
-                    </p>
-                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -178,30 +246,6 @@ export function ConnectorsPanel() {
                   {isFavorite ? "Favorite" : "Add favorite"}
                 </button>
               </div>
-
-              {isCalendar ? (
-                <div className="mt-4">
-                  {connected ? (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void onDisconnectCalendar()}
-                      className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
-                    >
-                      Disconnect
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={busy || !configured}
-                      onClick={() => void connectCalendar()}
-                      className="rounded-2xl bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                    >
-                      Connect Google
-                    </button>
-                  )}
-                </div>
-              ) : null}
             </section>
           );
         })}

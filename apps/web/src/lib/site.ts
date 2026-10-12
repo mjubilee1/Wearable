@@ -14,7 +14,7 @@ export const QUESTIONS = [
   },
   {
     q: "Does it record the room?",
-    a: "No. Nearby does not quietly capture what’s around you. Tools run with your permission, and memory keeps only what you approved.",
+    a: "No. Nearby does not quietly capture what’s around you. It acts when you ask, then stops.",
   },
   {
     q: "Can I buy a device?",
@@ -22,7 +22,7 @@ export const QUESTIONS = [
   },
   {
     q: "What does it remember?",
-    a: "Only what you approve. A conversation is not stored just because it happened near you.",
+    a: "A fact you asked it to remember. A conversation is not stored just because it happened near you. You can delete a saved fact.",
   },
 ] as const;
 
@@ -78,8 +78,8 @@ export function siteJsonLd() {
           "Spoken questions and short spoken answers",
           "Calendar, notes, and reminders",
           "Laptop, phone, or headphones",
-          "Tools run only with permission",
-          "Memory keeps only what you approved",
+          "A spoken request runs the tool",
+          "A saved fact can be deleted",
         ],
         publisher: { "@id": `${SITE_URL}/#organization` },
       },
@@ -106,7 +106,7 @@ export function llmsText() {
 
 > ${SITE_DESCRIPTION} Canonical site: ${SITE_URL}
 
-Nearby (nearbyhello.com) is a voice assistant. You speak from a laptop, phone, or headphones. It handles calendar, notes, and reminders when you allow it, then answers out loud and stops. It is an early proof of concept and is not for sale. Nearby does not record the room. It is not a social network, a location-sharing app, or a chat companion.
+Nearby (nearbyhello.com) is a voice assistant. You speak from a laptop, phone, or headphones. It handles calendar, notes, and reminders when you ask, then answers out loud and stops. It is an early proof of concept and is not for sale. Nearby does not record the room. It is not a social network, a location-sharing app, or a chat companion.
 
 ## Canonical
 
@@ -121,7 +121,7 @@ Nearby (nearbyhello.com) is a voice assistant. You speak from a laptop, phone, o
 - You speak. Nearby handles the task. It answers out loud, then stops.
 - Jobs: calendar, notes, and reminders.
 - Where you can talk: a laptop, a phone, or headphones.
-- Tools run only with permission. Memory keeps only what you approved.
+- A spoken request runs the tool. A saved fact can be deleted.
 
 ## What it does not do
 

@@ -68,8 +68,7 @@ export default function ProfileScreen() {
         <Text style={styles.eyebrow}>Nearby</Text>
         <Text style={styles.title}>Profile</Text>
         <Text style={styles.subtitle}>
-          Your account. Talk only saves a note, reminder, or memory after you
-          allow it.
+          Your account. Connect calendar and other tools under Connectors.
         </Text>
 
         <View style={styles.field}>

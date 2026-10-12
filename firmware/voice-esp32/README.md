@@ -1,6 +1,6 @@
 # Nearby voice firmware (Wi-Fi)
 
-Serial stand-in for the microphone. The board joins Wi-Fi and posts each typed line to `POST /v1/agent`. The reply prints on the serial monitor. If the agent asks permission, type `yes` or `no`.
+Serial stand-in for the microphone. The board joins Wi-Fi and posts each typed line to `POST /v1/agent`. The reply prints on the serial monitor. A note, reminder, memory, or calendar check runs in that same turn.
 
 The chip on the desk has no BLE radio. `NEARBY_HAS_BLE` is `0` in every env, including the ESP32-S3 env, so tomorrow's board can be flashed without turning the radio on. Audio over BLE belongs in `src/ble_audio.cpp` after that board arrives.
 

@@ -17,7 +17,11 @@ export function ConnectorSetupPrompt() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<ConnectorId[]>(["google_calendar"]);
+  const [selected, setSelected] = useState<ConnectorId[]>([
+    "google_calendar",
+    "google_tasks",
+    "gmail",
+  ]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,22 +53,30 @@ export function ConnectorSetupPrompt() {
     setOpen(false);
   }
 
+  const wantsGoogle = selected.some((id) =>
+    ["google_calendar", "google_tasks", "gmail"].includes(id),
+  );
+
   async function saveAndContinue() {
     dismiss(selected);
-    if (selected.includes("google_calendar")) {
+    if (wantsGoogle) {
       router.push("/connectors");
     }
   }
 
-  async function saveAndConnectCalendar() {
+  async function saveAndConnectGoogle() {
     if (!user || busy) return;
     setBusy(true);
     setError(null);
-    dismiss(
-      selected.includes("google_calendar")
-        ? selected
-        : [...selected, "google_calendar"],
+    const withGoogle = Array.from(
+      new Set<ConnectorId>([
+        ...selected,
+        "google_calendar",
+        "google_tasks",
+        "gmail",
+      ]),
     );
+    dismiss(withGoogle);
     try {
       const url = await startGoogleCalendarConnect(await user.getIdToken());
       window.location.href = url;
@@ -93,8 +105,8 @@ export function ConnectorSetupPrompt() {
           Add your favorite connectors
         </h2>
         <p className="mt-2 text-sm text-muted">
-          Choose what Nearby should be ready to use. It still asks before it
-          acts.
+          Choose what Nearby should be ready to use. Google unlocks Calendar,
+          Tasks, and Gmail in one connect.
         </p>
 
         <ul className="mt-5 space-y-2">
@@ -140,14 +152,14 @@ export function ConnectorSetupPrompt() {
         {error ? <p className="mt-3 text-sm text-coral">{error}</p> : null}
 
         <div className="mt-5 flex flex-col gap-2">
-          {selected.includes("google_calendar") ? (
+          {wantsGoogle ? (
             <button
               type="button"
               disabled={busy}
-              onClick={() => void saveAndConnectCalendar()}
+              onClick={() => void saveAndConnectGoogle()}
               className="rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {busy ? "Opening Google…" : "Save & connect Calendar"}
+              {busy ? "Opening Google…" : "Save & connect Google"}
             </button>
           ) : null}
           <button

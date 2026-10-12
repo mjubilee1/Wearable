@@ -440,6 +440,7 @@ export function walkBySignal(input: {
 
 export const AGENT_TOOL_NAMES = [
   "calendar",
+  "gmail",
   "note",
   "reminder",
   "remember",
@@ -451,7 +452,7 @@ export function isAgentToolName(value: string): value is AgentToolName {
   return (AGENT_TOOL_NAMES as readonly string[]).includes(value);
 }
 
-/** One spoken turn. A tool is proposed here and only runs after `decision`. */
+/** One spoken turn. A tool the model selects runs in this same request. */
 export type AgentTurnRequest = {
   text?: string;
   decision?: {
@@ -474,7 +475,7 @@ export type AgentTurnResponse = {
   mode: "openai" | "mock";
 };
 
-/** A fact the user explicitly agreed to keep. */
+/** A fact the user asked to keep. */
 export type AgentMemoryItem = {
   id: string;
   text: string;

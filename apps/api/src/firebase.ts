@@ -88,22 +88,27 @@ export function getFirebaseAdmin(): AdminApp {
     credential: {
       cert: (serviceAccount: object) => unknown;
     };
+    firestore: () => {
+      settings: (settings: { ignoreUndefinedProperties?: boolean }) => void;
+    };
   };
 
-  if (admin.apps.length) {
-    adminApp = admin.apps[0] as AdminApp;
-    return adminApp;
+  if (!admin.apps.length) {
+    const serviceAccount = loadServiceAccount();
+    if (!serviceAccount) {
+      throw new Error("Firebase Admin is not configured");
+    }
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId: process.env.FIREBASE_PROJECT_ID,
+    });
   }
 
-  const serviceAccount = loadServiceAccount();
-  if (!serviceAccount) {
-    throw new Error("Firebase Admin is not configured");
-  }
+  // Notes and reminders omit `when` when there is no time. Firestore throws
+  // if that key is present and undefined.
+  admin.firestore().settings({ ignoreUndefinedProperties: true });
 
-  adminApp = admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    projectId: process.env.FIREBASE_PROJECT_ID,
-  });
-
+  adminApp = admin.apps[0] as AdminApp;
   return adminApp;
 }

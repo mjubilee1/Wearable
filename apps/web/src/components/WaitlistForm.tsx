@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { captureUtmSource } from "@/lib/attribution";
 import { db } from "@/lib/firebase";
 
 function normalizeEmail(raw: string): string | null {
@@ -35,11 +36,12 @@ export function WaitlistForm() {
 
     setStatus("saving");
     try {
+      const source = captureUtmSource();
       await setDoc(
         doc(db, "waitlist", emailDocId(normalized)),
         {
           email: normalized,
-          source: "marketing",
+          source,
           createdAt: Date.now(),
           updatedAt: serverTimestamp(),
         },

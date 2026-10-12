@@ -9,11 +9,7 @@ import {
   View,
 } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  AgentMemoryItem,
-  AgentPendingTool,
-  AgentTurnResponse,
-} from "@nearby/shared";
+import type { AgentMemoryItem, AgentTurnResponse } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
 
@@ -34,7 +30,6 @@ export function TalkPanel() {
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
-  const [pending, setPending] = useState<AgentPendingTool | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -79,41 +74,14 @@ export function TalkPanel() {
     if (!next || busy) return;
     setBusy(true);
     setError(null);
-    setPending(null);
     try {
       const result = await postTurn({ text: next });
       setReply(result.reply);
-      setPending(result.pendingTool);
       setText("");
       speak(result.reply);
+      await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not ask");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function decide(approved: boolean) {
-    if (!pending || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await postTurn({
-        decision: {
-          tool: pending.tool,
-          approved,
-          summary: pending.summary,
-          payload: pending.payload,
-        },
-      });
-      setReply(result.reply);
-      setPending(null);
-      speak(result.reply);
-      if (approved) {
-        await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save that");
     } finally {
       setBusy(false);
     }
@@ -144,8 +112,8 @@ export function TalkPanel() {
       <Text style={styles.eyebrow}>Nearby</Text>
       <Text style={styles.title}>Talk</Text>
       <Text style={styles.subtitle}>
-        One turn, a short answer out loud, then quiet. A note, reminder, or
-        memory only happens if you allow it.
+        One turn, a short answer out loud, then quiet. Ask for a note, a
+        reminder, or a fact, and it saves it.
       </Text>
 
       <View style={styles.card}>
@@ -153,27 +121,6 @@ export function TalkPanel() {
         <Text style={styles.reply}>
           {reply ?? "Type what you would say. The phone speaks the answer."}
         </Text>
-        {pending ? (
-          <View style={styles.pending}>
-            <Text style={styles.pendingText}>{pending.summary}</Text>
-            <View style={styles.row}>
-              <Pressable
-                disabled={busy}
-                onPress={() => void decide(true)}
-                style={[styles.allow, busy && styles.disabled]}
-              >
-                <Text style={styles.allowText}>Allow</Text>
-              </Pressable>
-              <Pressable
-                disabled={busy}
-                onPress={() => void decide(false)}
-                style={[styles.deny, busy && styles.disabled]}
-              >
-                <Text style={styles.denyText}>No</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
 
@@ -198,12 +145,13 @@ export function TalkPanel() {
         )}
       </Pressable>
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>Approved memory</Text>
+        <Text style={styles.cardLabel}>Memory</Text>
         {memoriesQuery.isLoading ? (
           <ActivityIndicator color={colors.teal} style={{ marginTop: 12 }} />
         ) : memories.length === 0 ? (
           <Text style={styles.empty}>
-            Nothing saved. Nearby keeps a fact only after you allow it.
+            Nothing saved. Ask Nearby to remember a fact. You can delete it
+            here.
           </Text>
         ) : (
           memories.map((item) => (
@@ -254,31 +202,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: colors.ink,
   },
-  pending: {
-    marginTop: 14,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    padding: 12,
-    gap: 10,
-  },
-  pendingText: { fontSize: 14, color: colors.ink },
-  row: { flexDirection: "row", gap: 8 },
-  allow: {
-    borderRadius: 16,
-    backgroundColor: colors.teal,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  allowText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  deny: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  denyText: { color: colors.ink, fontWeight: "700", fontSize: 14 },
   error: { marginTop: 10, color: colors.coral, fontSize: 14 },
   input: {
     borderRadius: 16,

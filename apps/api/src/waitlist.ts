@@ -13,6 +13,12 @@ function emailDocId(email: string): string {
   return encodeURIComponent(email);
 }
 
+function waitlistSource(raw: string | undefined): string {
+  const value = raw?.trim().toLowerCase() ?? "";
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(value)) return "marketing";
+  return value;
+}
+
 export async function joinWaitlist(input: {
   email: string;
   source?: string;
@@ -21,7 +27,7 @@ export async function joinWaitlist(input: {
   if (!email) throw new Error("Invalid email");
 
   const createdAt = Date.now();
-  const source = input.source?.trim() || "marketing";
+  const source = waitlistSource(input.source);
   const id = emailDocId(email);
 
   if (!isFirebaseConfigured()) {

@@ -16,11 +16,12 @@ M1: speak through the laptop, the phone, or AirPods and get a spoken answer. One
 ## Rules
 
 - Don't put permanent API secrets in firmware. Devices authenticate; the backend holds model keys.
-- Short spoken replies. Tools only with permission. Memory only what the user approved.
+- Short spoken replies. A spoken request runs the tool in that turn. Nearby does not record the room, and it does not ask again before a note, reminder, memory, or calendar check.
 - Design against recent failures: not a phone-in-a-box (Rabbit), not an always-on recorder (Omi), not a chatty companion (Friend). Prove the daily job on laptop/AirPods before selling a gadget.
 - Leave the color-ring sketches under `firmware/` in place. Don't extend them. The new device project is `firmware/voice-esp32`: Wi-Fi, a serial stand-in for the mic, and `POST /v1/agent`. The chip on the desk has no BLE. `NEARBY_HAS_BLE` stays 0 until the BLE board arrives. AirPods go through the laptop or phone, not the board.
 - The color-clip BLE scan is removed from the phone and the website. Leave `/v1/matches` and `/v1/ble/sightings` in the API. Don't put the scan UI back.
 - First physical form is a necklace / pendant prototype, not a watch. Don't polish enclosure, industrial design, manufacturing, or battery yet.
+- Posted links use `?utm_source=instagram` (or `tiktok`, `linkedin`). The waitlist stores that value so the channel is visible on the signup.
 
 ## Still open
 

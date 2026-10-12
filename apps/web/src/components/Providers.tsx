@@ -1,7 +1,8 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
+import { AttributionCapture } from "@/components/AttributionCapture";
 import { AuthProvider } from "@/lib/auth-context";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -19,6 +20,9 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <Suspense fallback={null}>
+        <AttributionCapture />
+      </Suspense>
       <AuthProvider>{children}</AuthProvider>
     </QueryClientProvider>
   );

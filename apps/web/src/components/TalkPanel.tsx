@@ -3,11 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  AgentMemoryItem,
-  AgentPendingTool,
-  AgentTurnResponse,
-} from "@nearby/shared";
+import type { AgentMemoryItem, AgentTurnResponse } from "@nearby/shared";
 import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
 
@@ -49,12 +45,20 @@ function speak(text: string) {
   window.speechSynthesis.speak(utterance);
 }
 
+function formatNoteTime(ms: number): string {
+  return new Date(ms).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function TalkPanel() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
-  const [pending, setPending] = useState<AgentPendingTool | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
@@ -65,6 +69,8 @@ export function TalkPanel() {
     setCanListen(speechRecognition() !== null);
     return () => window.speechSynthesis?.cancel();
   }, []);
+
+  type AgentNoteItem = { id: string; text: string; createdAt: number };
 
   const memoriesQuery = useQuery({
     queryKey: ["agent-memories", user?.uid],
@@ -78,6 +84,21 @@ export function TalkPanel() {
       if (!res.ok) throw new Error("Could not load memories");
       const body = (await res.json()) as { memories: AgentMemoryItem[] };
       return body.memories ?? [];
+    },
+  });
+
+  const notesQuery = useQuery({
+    queryKey: ["agent-notes", user?.uid],
+    enabled: Boolean(user),
+    queryFn: async () => {
+      if (!user) return [] as AgentNoteItem[];
+      const token = await user.getIdToken();
+      const res = await fetch(`${API_URL}/v1/agent/notes`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Could not load notes");
+      const body = (await res.json()) as { notes: AgentNoteItem[] };
+      return body.notes ?? [];
     },
   });
 
@@ -107,13 +128,13 @@ export function TalkPanel() {
     if (!next || busy) return;
     setBusy(true);
     setError(null);
-    setPending(null);
     try {
       const result = await postTurn({ text: next });
       setReply(result.reply);
-      setPending(result.pendingTool);
       setText("");
       speak(result.reply);
+      await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
+      await queryClient.invalidateQueries({ queryKey: ["agent-notes"] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not ask");
     } finally {
@@ -150,32 +171,6 @@ export function TalkPanel() {
     setListening(false);
   }
 
-  async function decide(approved: boolean) {
-    if (!pending || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await postTurn({
-        decision: {
-          tool: pending.tool,
-          approved,
-          summary: pending.summary,
-          payload: pending.payload,
-        },
-      });
-      setReply(result.reply);
-      setPending(null);
-      speak(result.reply);
-      if (approved) {
-        await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save that");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function forget(id: string) {
     if (!user) return;
     const token = await user.getIdToken();
@@ -191,6 +186,7 @@ export function TalkPanel() {
   }
 
   const memories = memoriesQuery.data ?? [];
+  const notes = notesQuery.data ?? [];
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-20 sm:px-8">
@@ -217,29 +213,6 @@ export function TalkPanel() {
           <p className="mt-3 text-lg font-medium leading-snug text-ink">
             {reply ?? "Tap the microphone, or type what you would say."}
           </p>
-          {pending ? (
-            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
-              <p className="text-sm text-ink">{pending.summary}</p>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void decide(true)}
-                  className="rounded-2xl bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  Allow
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void decide(false)}
-                  className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
-                >
-                  No
-                </button>
-              </div>
-            </div>
-          ) : null}
           {error ? <p className="mt-3 text-sm text-coral">{error}</p> : null}
         </section>
 
@@ -281,11 +254,37 @@ export function TalkPanel() {
 
         <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
-            Approved memory
+            Notes
+          </p>
+          {notes.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">
+              No notes yet. Ask Nearby to take one.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {notes.map((item) => (
+                <li
+                  key={item.id}
+                  className="rounded-2xl bg-surface px-3 py-2"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                    {formatNoteTime(item.createdAt)}
+                  </p>
+                  <p className="mt-1 text-sm text-ink">{item.text}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
+            Memory
           </p>
           {memories.length === 0 ? (
             <p className="mt-3 text-sm text-muted">
-              Nothing saved. Nearby keeps a fact only after you allow it.
+              Nothing saved. Ask Nearby to remember a fact. You can delete it
+              here.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">

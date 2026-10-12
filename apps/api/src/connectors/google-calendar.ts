@@ -1,8 +1,11 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getFirebaseAdmin, isFirebaseConfigured } from "../firebase.js";
 
+/** One Google connect unlocks Calendar, Tasks, and Gmail read. */
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/tasks",
+  "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/userinfo.email",
 ].join(" ");
 
@@ -315,7 +318,7 @@ export async function speakTodaysCalendar(uid: string): Promise<string> {
   }
   const accessToken = await getValidAccessToken(uid);
   if (!accessToken) {
-    return "Connect Google Calendar in Talk first, then ask again.";
+    return "Connect Google in Connectors first, then ask again.";
   }
 
   const start = new Date();
@@ -336,7 +339,7 @@ export async function speakTodaysCalendar(uid: string): Promise<string> {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (res.status === 401) {
-    return "Google Calendar access expired. Connect it again in Talk.";
+    return "Google access expired. Connect it again in Connectors.";
   }
   if (!res.ok) {
     console.error("[calendar] list failed", await res.text());
@@ -373,4 +376,161 @@ export async function speakTodaysCalendar(uid: string): Promise<string> {
 
   if (events.length === 1) return `Today: ${spoken}.`;
   return `Today you have ${events.length} events. ${spoken}.`;
+}
+
+function taskDueRfc3339(when: string | undefined): string | undefined {
+  if (!when?.trim()) return undefined;
+  const raw = when.trim();
+  const parsed = Date.parse(raw);
+  if (!Number.isNaN(parsed)) {
+    return new Date(parsed).toISOString();
+  }
+  const lower = raw.toLowerCase();
+  const base = new Date();
+  base.setSeconds(0, 0);
+  if (lower === "today") {
+    base.setHours(18, 0, 0, 0);
+    return base.toISOString();
+  }
+  if (lower === "tomorrow") {
+    base.setDate(base.getDate() + 1);
+    base.setHours(9, 0, 0, 0);
+    return base.toISOString();
+  }
+  return undefined;
+}
+
+/** Push a reminder into the user's default Google Tasks list. */
+export async function createGoogleTask(
+  uid: string,
+  title: string,
+  when?: string,
+): Promise<{ ok: true; spoken: string } | { ok: false; spoken: string }> {
+  if (!isGoogleCalendarConfigured()) {
+    return { ok: false, spoken: "Google isn't set up on the server yet." };
+  }
+  const accessToken = await getValidAccessToken(uid);
+  if (!accessToken) {
+    return {
+      ok: false,
+      spoken: "Connect Google in Connectors to save tasks there.",
+    };
+  }
+
+  const body: { title: string; due?: string; notes?: string } = {
+    title: title.slice(0, 200),
+  };
+  const due = taskDueRfc3339(when);
+  if (due) body.due = due;
+  if (when && !due) body.notes = `When: ${when}`;
+
+  const res = await fetch(
+    "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  if (res.status === 401) {
+    return {
+      ok: false,
+      spoken: "Google access expired. Connect it again in Connectors.",
+    };
+  }
+  if (!res.ok) {
+    console.error("[tasks] create failed", await res.text());
+    return { ok: false, spoken: "I couldn't add that to Google Tasks." };
+  }
+  if (when) {
+    return {
+      ok: true,
+      spoken: `Added to Google Tasks for ${when}.`,
+    };
+  }
+  return { ok: true, spoken: "Added to Google Tasks." };
+}
+
+function headerValue(
+  headers: Array<{ name?: string; value?: string }> | undefined,
+  name: string,
+): string {
+  const hit = headers?.find(
+    (h) => h.name?.toLowerCase() === name.toLowerCase(),
+  );
+  return (hit?.value ?? "").trim();
+}
+
+/** Speak a short digest of recent unread mail. */
+export async function speakUnreadGmail(uid: string): Promise<string> {
+  if (!isGoogleCalendarConfigured()) {
+    return "Gmail isn't set up on the server yet.";
+  }
+  const accessToken = await getValidAccessToken(uid);
+  if (!accessToken) {
+    return "Connect Google in Connectors first, then ask again.";
+  }
+
+  const listUrl = new URL(
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+  );
+  listUrl.searchParams.set("q", "is:unread newer_than:7d");
+  listUrl.searchParams.set("maxResults", "5");
+
+  const listRes = await fetch(listUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (listRes.status === 401) {
+    return "Google access expired. Connect it again in Connectors.";
+  }
+  if (!listRes.ok) {
+    console.error("[gmail] list failed", await listRes.text());
+    return "I couldn't read Gmail just now.";
+  }
+
+  const listData = (await listRes.json()) as {
+    messages?: Array<{ id?: string }>;
+    resultSizeEstimate?: number;
+  };
+  const ids = (listData.messages ?? [])
+    .map((m) => m.id)
+    .filter((id): id is string => Boolean(id))
+    .slice(0, 5);
+
+  if (ids.length === 0) {
+    return "No unread mail in the last week.";
+  }
+
+  const snippets: string[] = [];
+  for (const id of ids.slice(0, 3)) {
+    const msgRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!msgRes.ok) continue;
+    const msg = (await msgRes.json()) as {
+      payload?: { headers?: Array<{ name?: string; value?: string }> };
+      snippet?: string;
+    };
+    const from = headerValue(msg.payload?.headers, "From")
+      .replace(/<.*>/, "")
+      .trim();
+    const subject = headerValue(msg.payload?.headers, "Subject") || "No subject";
+    const who = from || "someone";
+    snippets.push(`${who}: ${subject}`);
+  }
+
+  if (snippets.length === 0) {
+    return "You have unread mail, but I couldn't read the subjects.";
+  }
+
+  const estimate = listData.resultSizeEstimate ?? ids.length;
+  const head =
+    estimate > snippets.length
+      ? `You have about ${estimate} unread messages. Top ones:`
+      : `You have ${snippets.length} unread.`;
+  return `${head} ${snippets.join(". ")}.`;
 }
