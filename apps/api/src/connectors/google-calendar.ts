@@ -368,6 +368,31 @@ function withName(name: string | null, sentence: string): string {
   return `${name}, ${spoken}`;
 }
 
+const ZONED_CLOCK: Intl.DateTimeFormatOptions = {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+};
+
+/** Wall clock in `timeZone`. Same formatter the calendar read uses for "3:00 PM". */
+export function zonedClock(
+  date: Date,
+  timeZone: string,
+): { hour: number; minute: number } | null {
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    ...ZONED_CLOCK,
+    timeZone,
+  }).formatToParts(date);
+  const hour12 = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  const period = parts.find((part) => part.type === "dayPeriod")?.value?.toLowerCase() ?? "";
+  if (!Number.isFinite(hour12) || !Number.isFinite(minute)) return null;
+  let hour = hour12 % 12;
+  if (period.startsWith("pm")) hour += 12;
+  return { hour, minute };
+}
+
 function formatEventTime(
   raw: string | undefined,
   allDay: boolean,
@@ -377,12 +402,7 @@ function formatEventTime(
   if (allDay) return "all day";
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("en-US", {
-    timeZone,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return date.toLocaleTimeString("en-US", { ...ZONED_CLOCK, timeZone });
 }
 
 export async function fetchPrimaryCalendarTimeZone(
@@ -935,8 +955,8 @@ function clockMatches(
   timeZone: string,
   clock: { hour: number; minute: number },
 ): boolean {
-  const local = getZonedParts(timeZone, startAt);
-  return local.hour === clock.hour && local.minute === clock.minute;
+  const local = zonedClock(startAt, timeZone);
+  return local?.hour === clock.hour && local.minute === clock.minute;
 }
 
 function titleMatches(title: string, words: string[]): boolean {

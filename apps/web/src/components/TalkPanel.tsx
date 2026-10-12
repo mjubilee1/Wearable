@@ -482,7 +482,21 @@ export function TalkPanel() {
         if (noteLimit(result)) return;
         throw new Error(result?.error ?? "Could not finish that");
       }
-      applyTurn(result, lastRequest ?? pending.summary);
+      if (!approved && historyId && user) {
+        queryClient.setQueryData(
+          ["agent-history", user.uid],
+          (current: { history: AgentHistoryItem[]; usage: AgentUsageStatus | null } | undefined) => {
+            if (!current) return current;
+            return {
+              ...current,
+              history: current.history.map((item) =>
+                item.id === historyId ? { ...item, status: "cancelled" as const } : item,
+              ),
+            };
+          },
+        );
+      }
+      applyTurn(result, approved ? (lastRequest ?? pending.summary) : undefined);
       setPending(null);
       setPreview(null);
       setDraftEdit(null);

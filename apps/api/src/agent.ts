@@ -393,22 +393,29 @@ async function appendHistory(
   return { usage: await statusFor(uid, state, timeZone), historyId: item.id };
 }
 
+/** Mark the preview row cancelled. Never inserts a Cancel turn. */
+export function cancelHistoryItems(
+  history: AgentHistoryItem[],
+  historyId?: string,
+): AgentHistoryItem[] {
+  if (historyId) {
+    return history.map((item) =>
+      item.id === historyId ? { ...item, status: "cancelled" as const } : item,
+    );
+  }
+  if (history[0] && history[0].status !== "cancelled") {
+    return [{ ...history[0], status: "cancelled" }, ...history.slice(1)];
+  }
+  return history;
+}
+
 async function markHistoryCancelled(
   uid: string,
   historyId: string | undefined,
   timeZone: string,
 ): Promise<AgentUsageStatus> {
   const state = await readState(uid);
-  if (historyId) {
-    state.history = state.history.map((item) =>
-      item.id === historyId ? { ...item, status: "cancelled" as const } : item,
-    );
-  } else if (state.history[0] && state.history[0].status !== "cancelled") {
-    state.history = [
-      { ...state.history[0], status: "cancelled" },
-      ...state.history.slice(1),
-    ];
-  }
+  state.history = cancelHistoryItems(state.history, historyId);
   await writeState(uid, state);
   return statusFor(uid, state, timeZone);
 }
