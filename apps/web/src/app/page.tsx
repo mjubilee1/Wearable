@@ -18,16 +18,16 @@ export const metadata: Metadata = {
 
 const TASKS = [
   {
-    title: "Tomorrow's first meeting",
-    body: "What's my first meeting tomorrow?",
+    title: "Before closing",
+    body: "What's on my calendar before my 4 PM closing?",
   },
   {
-    title: "Move something",
-    body: "Move my 3 PM to tomorrow at 10.",
+    title: "Move a showing",
+    body: "Move my 2 PM showing to tomorrow at 10.",
   },
   {
     title: "Draft the reply",
-    body: "Draft a reply to the lender saying I'll send docs Friday.",
+    body: "Draft a reply to the lender asking for the updated pre-approval.",
   },
 ] as const;
 
@@ -47,7 +47,8 @@ export default function HomePage() {
             Talk. It does it.
           </h1>
           <p className="mx-auto mt-5 max-w-md text-base text-muted sm:text-lg">
-            Speak a calendar change. Get a short answer and a Done receipt.
+            Your assistant between showings. Talk to it, and it handles your
+            calendar, follow-ups, and emails.
           </p>
           <Link
             href="/signup"

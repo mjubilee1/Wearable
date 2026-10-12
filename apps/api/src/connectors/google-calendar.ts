@@ -1301,18 +1301,25 @@ export type DraftParse = {
   intent: string;
 };
 
-/** Parse "Draft a reply to the lender saying I'll send docs Friday". */
+/** Parse "Draft a reply to the lender asking for the updated pre-approval". */
 export function parseDraftRequest(text: string): DraftParse | null {
   const lower = text.toLowerCase();
   if (!/\b(draft|compose)\b/.test(lower) || !/\b(reply|email|e-mail|message)\b/.test(lower)) {
     return null;
   }
+  const intentBreak = String.raw`\s+saying|\s+asking(?:\s+for)?|\s+about|\s+that\b|,|\.|$`;
   const toMatch =
     text.match(
-      /\b(?:to|for)\s+(?:the\s+)?(.+?)(?:\s+saying|\s+about|\s+that\b|,|\.|$)/i,
-    ) ?? text.match(/\breply\s+to\s+(?:the\s+)?(.+?)(?:\s+saying|\s+about|,|\.|$)/i);
+      new RegExp(
+        String.raw`\b(?:to|for)\s+(?:the\s+)?(.+?)(?:${intentBreak})`,
+        "i",
+      ),
+    ) ??
+    text.match(
+      new RegExp(String.raw`\breply\s+to\s+(?:the\s+)?(.+?)(?:${intentBreak})`, "i"),
+    );
   const sayingMatch = text.match(
-    /\b(?:saying|that|about)\s+(.+)$/i,
+    /\b(?:saying|asking(?:\s+for)?|that|about)\s+(.+)$/i,
   );
   const query = (toMatch?.[1] ?? "").replace(/\s+/g, " ").trim();
   const intent = (sayingMatch?.[1] ?? "").replace(/\s+/g, " ").trim();

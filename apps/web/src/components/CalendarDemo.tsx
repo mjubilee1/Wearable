@@ -6,12 +6,12 @@ export function CalendarDemo() {
           You
         </p>
         <p className="mt-3 text-xl font-semibold leading-snug tracking-[-0.03em] sm:text-2xl">
-          “Move my 3 PM to tomorrow at 10.”
+          “Move my 2 PM showing to tomorrow at 10.”
         </p>
         <div className="nearby-demo-receipt mt-6 rounded-2xl bg-teal-soft px-4 py-3">
           <p className="text-sm text-ink">
-            <span className="font-semibold text-teal">Done:</span> Moved standup
-            to tomorrow at 10:00 AM
+            <span className="font-semibold text-teal">Done:</span> Moved 2 PM
+            showing to tomorrow at 10:00 AM
           </p>
         </div>
       </div>

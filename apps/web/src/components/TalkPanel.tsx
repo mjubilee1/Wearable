@@ -38,28 +38,33 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 const EXAMPLES = [
   {
-    id: "calendar",
-    text: "What's my first meeting tomorrow?",
+    id: "reschedule",
+    text: "Move my 2 PM showing to tomorrow at 10",
     needsGoogle: true,
   },
   {
     id: "tasks",
-    text: "Add 'call the lender' to my tasks",
-    needsGoogle: true,
-  },
-  {
-    id: "gmail",
-    text: "Summarize my last 3 unread emails",
-    needsGoogle: true,
-  },
-  {
-    id: "reschedule",
-    text: "Move my 3 PM to tomorrow at 10",
+    text: "Remind me to follow up with the Johnsons Friday",
     needsGoogle: true,
   },
   {
     id: "draft",
-    text: "Draft a reply to the lender saying I'll send docs Friday",
+    text: "Draft a reply to the lender asking for the updated pre-approval",
+    needsGoogle: true,
+  },
+  {
+    id: "calendar",
+    text: "What's on my calendar before my 4 PM closing?",
+    needsGoogle: true,
+  },
+  {
+    id: "gmail",
+    text: "Summarize unread emails from title and escrow",
+    needsGoogle: true,
+  },
+  {
+    id: "calendar-today",
+    text: "What's on my calendar today?",
     needsGoogle: true,
   },
 ] as const;
