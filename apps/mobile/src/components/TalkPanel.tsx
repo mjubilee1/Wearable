@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentMemoryItem, AgentTurnResponse } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
+import { VoiceMemoPanel } from "@/components/VoiceMemoPanel";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -152,6 +153,7 @@ export function TalkPanel() {
           <Text style={styles.askText}>Ask</Text>
         )}
       </Pressable>
+      <VoiceMemoPanel />
       <View style={styles.card}>
         <Text style={styles.cardLabel}>Memory</Text>
         {memoriesQuery.isLoading ? (

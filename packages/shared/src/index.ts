@@ -27,6 +27,8 @@ export const PRO_TRIAL_DAYS = 7;
 export const FREE_DAILY_REQUESTS = 20;
 export const FREE_DAILY_RESCHEDULES = 3;
 export const FREE_DAILY_DRAFTS = 3;
+export const VOICE_MEMO_MONTHLY_MINUTES = 300;
+export const VOICE_MEMO_MAX_SECONDS = 5 * 60;
 
 export type LimitFeature = "requests" | "reschedule" | "draft_email";
 
@@ -692,6 +694,47 @@ export type AgentMemoryItem = {
   id: string;
   text: string;
   createdAt: number;
+};
+
+export const VOICE_MEMO_ACTION_TYPES = [
+  "reminder",
+  "calendar_event",
+  "email_draft",
+] as const;
+
+export type VoiceMemoActionType = (typeof VOICE_MEMO_ACTION_TYPES)[number];
+export type VoiceMemoActionStatus = "proposed" | "confirmed" | "skipped";
+
+export type VoiceMemoAction = {
+  id: string;
+  type: VoiceMemoActionType;
+  details: Record<string, string>;
+  status: VoiceMemoActionStatus;
+  receipt?: AgentActionReceipt | null;
+};
+
+export type VoiceMemo = {
+  id: string;
+  transcript: string;
+  /** Markdown-style string containing 3–5 short bullet lines. */
+  recap: string;
+  actions: VoiceMemoAction[];
+  createdAt: number;
+  durationSeconds: number;
+};
+
+export type VoiceMemoUsage = {
+  plan: "free" | "pro";
+  limitMinutes: number;
+  usedMinutes: number;
+  remainingMinutes: number;
+  month: string;
+  resetAt: string;
+};
+
+export type VoiceMemoListResponse = {
+  memos: VoiceMemo[];
+  usage: VoiceMemoUsage;
 };
 
 export function mockFacilitate(

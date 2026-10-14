@@ -50,6 +50,13 @@ import {
 } from "./connectors/google-calendar.js";
 import { listClipSightingsForUser, recordClipSighting } from "./sightings.js";
 import { joinWaitlist } from "./waitlist.js";
+import {
+  VoiceMemoAccessError,
+  createVoiceMemo,
+  decideVoiceMemoAction,
+  deleteVoiceMemo,
+  listVoiceMemos,
+} from "./voice-memos.js";
 
 // Load apps/api/.env whether started from repo root or apps/api
 const apiDir = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -379,6 +386,89 @@ app.get("/v1/agent/usage", async (c) => {
   return c.json({
     usage: await getAgentUsage(auth.uid, c.req.query("timeZone") ?? undefined),
   });
+});
+
+app.get("/v1/voice-memos", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  return c.json(await listVoiceMemos(auth.uid));
+});
+
+app.post("/v1/voice-memos", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const form = await c.req.formData();
+    const audio = form.get("audio");
+    if (!(audio instanceof File)) {
+      return c.json({ error: "Audio file required" }, 400);
+    }
+    const claimedDurationSeconds = Number(form.get("durationSeconds"));
+    const timeZone = String(form.get("timeZone") ?? "");
+    return c.json(
+      await createVoiceMemo(auth.uid, {
+        audio,
+        claimedDurationSeconds,
+        timeZone,
+      }),
+      201,
+    );
+  } catch (error) {
+    if (error instanceof VoiceMemoAccessError) {
+      return c.json(
+        {
+          code: error.code,
+          error: error.message,
+          pricingUrl: "/pricing",
+        },
+        error.code === "pro_required" ? 403 : 429,
+      );
+    }
+    const message = error instanceof Error ? error.message : "Voice memo failed";
+    console.error("[voice-memo]", message);
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.patch("/v1/voice-memos/:memoId/actions/:actionId", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    decision?: string;
+    details?: unknown;
+    timeZone?: string;
+  } | null;
+  if (body?.decision !== "confirm" && body?.decision !== "skip") {
+    return c.json({ error: "Decision must be confirm or skip" }, 400);
+  }
+  try {
+    const action = await decideVoiceMemoAction(auth.uid, {
+      memoId: c.req.param("memoId"),
+      actionId: c.req.param("actionId"),
+      decision: body.decision,
+      details: body.details,
+      timeZone: body.timeZone,
+    });
+    return c.json({ action });
+  } catch (error) {
+    if (error instanceof VoiceMemoAccessError) {
+      return c.json(
+        { code: error.code, error: error.message, pricingUrl: "/pricing" },
+        403,
+      );
+    }
+    const message = error instanceof Error ? error.message : "Action failed";
+    return c.json({ error: message }, 400);
+  }
+});
+
+app.delete("/v1/voice-memos/:memoId", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const deleted = await deleteVoiceMemo(auth.uid, c.req.param("memoId"));
+  return deleted
+    ? c.json({ ok: true })
+    : c.json({ error: "Voice memo not found" }, 404);
 });
 
 app.delete("/v1/agent/memories/:id", async (c) => {

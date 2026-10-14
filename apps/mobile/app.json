@@ -55,7 +55,8 @@
           ],
           "bluetoothAlwaysPermission": "Nearby uses Bluetooth to connect a wearable when that radio is available."
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "extra": {
       "router": {},
