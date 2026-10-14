@@ -33,6 +33,7 @@ import {
 } from "@/lib/connectors";
 import { updateUserProfile } from "@/lib/users";
 import { trackFunnel } from "@/lib/funnel";
+import { VoiceMemoPanel } from "@/components/VoiceMemoPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -931,6 +932,8 @@ export function TalkPanel() {
             {busy ? "Asking…" : "Ask"}
           </button>
         </form>
+
+        <VoiceMemoPanel />
 
         <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
           <div className="flex items-start justify-between gap-3">

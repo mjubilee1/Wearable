@@ -668,6 +668,73 @@ export async function createGoogleTask(
   };
 }
 
+/** Create a calendar event after the user confirms a voice-memo proposal. */
+export async function createGoogleCalendarEvent(
+  uid: string,
+  input: {
+    title: string;
+    start: string;
+    end?: string;
+    description?: string;
+    timeZone: string;
+  },
+): Promise<GoogleToolResult> {
+  if (!isGoogleCalendarConfigured()) {
+    return { spoken: "Calendar isn't set up on the server yet.", receipt: null };
+  }
+  const accessToken = await getValidAccessToken(uid);
+  if (!accessToken) {
+    return {
+      spoken: "Connect Google in Connectors first, then try again.",
+      receipt: null,
+    };
+  }
+
+  const startAt = new Date(input.start);
+  if (!input.title.trim() || Number.isNaN(startAt.getTime())) {
+    return { spoken: "That calendar suggestion needs a title and valid start time.", receipt: null };
+  }
+  const suppliedEnd = input.end ? new Date(input.end) : null;
+  const endAt =
+    suppliedEnd && !Number.isNaN(suppliedEnd.getTime()) && suppliedEnd > startAt
+      ? suppliedEnd
+      : new Date(startAt.getTime() + 60 * 60 * 1000);
+
+  const res = await fetch(
+    "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        summary: input.title.trim().slice(0, 200),
+        description: input.description?.trim().slice(0, 2000) || undefined,
+        start: { dateTime: startAt.toISOString(), timeZone: input.timeZone },
+        end: { dateTime: endAt.toISOString(), timeZone: input.timeZone },
+      }),
+    },
+  );
+  if (!res.ok) {
+    console.error("[calendar] create event failed", await res.text());
+    return { spoken: "I couldn't create that calendar event.", receipt: null };
+  }
+  const created = (await res.json().catch(() => ({}))) as {
+    htmlLink?: string;
+    summary?: string;
+  };
+  const title = created.summary?.trim() || input.title.trim();
+  return {
+    spoken: `Added ${title} to your calendar.`,
+    receipt: {
+      action: `Added ${title} to calendar`,
+      href: httpsHref(created.htmlLink),
+      linkLabel: "Open event",
+    },
+  };
+}
+
 function headerValue(
   headers: Array<{ name?: string; value?: string }> | undefined,
   name: string,

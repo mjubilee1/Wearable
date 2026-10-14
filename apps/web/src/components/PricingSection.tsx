@@ -19,6 +19,7 @@ const FREE = [
 const PRO = [
   "Unlimited requests",
   "Unlimited reschedules and drafts",
+  "Voice memo recaps that turn into follow-ups.",
   "7-day free trial, card required",
   "Cancel anytime",
 ];
