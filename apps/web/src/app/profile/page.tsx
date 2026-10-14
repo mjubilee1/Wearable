@@ -79,6 +79,19 @@ export default function ProfilePage() {
         <ReferralCard />
 
         <Link
+          href="/settings"
+          className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
+        >
+          <div>
+            <p className="text-sm font-bold text-ink">Memory settings</p>
+            <p className="mt-1 text-sm text-muted">
+              Search, review, and delete saved memories
+            </p>
+          </div>
+          <span className="text-sm font-semibold text-teal">Open</span>
+        </Link>
+
+        <Link
           href="/connectors"
           className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
         >

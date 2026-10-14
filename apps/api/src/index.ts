@@ -39,8 +39,10 @@ import {
   stripeCustomerIdForProfile,
 } from "./billing.js";
 import { LimitReachedError } from "./limits.js";
+import { consumeDemoTry, runDemoTurn } from "./demo.js";
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
+import { deleteAllMemories } from "./memories.js";
 import {
   buildGoogleAuthUrl,
   disconnectGoogleCalendar,
@@ -326,9 +328,33 @@ app.delete("/v1/connectors/google/calendar", async (c) => {
 });
 
 app.post("/v1/agent", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (body && typeof body === "object" && (body as { demo?: unknown }).demo === true) {
+    const text = (body as { text?: unknown }).text;
+    if (typeof text !== "string" || !text.trim()) {
+      return c.json({ error: "Say or type a task first" }, 400);
+    }
+    const forwarded = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
+    const identifier =
+      forwarded ||
+      c.req.header("cf-connecting-ip") ||
+      c.req.header("x-real-ip") ||
+      "local-demo";
+    const limit = await consumeDemoTry(identifier);
+    if (!limit.allowed) {
+      return c.json(
+        {
+          code: "demo_limit_reached",
+          error: "Connect your Google to make it real",
+          remaining: 0,
+        },
+        429,
+      );
+    }
+    return c.json({ ...runDemoTurn(text), remaining: limit.remaining });
+  }
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
-  const body = await c.req.json().catch(() => null);
   try {
     return c.json(await runAgentTurn(auth.uid, body));
   } catch (error) {
@@ -351,7 +377,7 @@ app.post("/v1/agent", async (c) => {
 app.get("/v1/agent/memories", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
-  const memories = await listAgentMemories(auth.uid);
+  const memories = await listAgentMemories(auth.uid, c.req.query("q") ?? "");
   return c.json({ memories });
 });
 
@@ -477,6 +503,13 @@ app.delete("/v1/agent/memories/:id", async (c) => {
   const id = c.req.param("id").trim();
   if (!id) return c.json({ error: "Missing memory id" }, 400);
   await deleteAgentMemory(auth.uid, id);
+  return c.json({ ok: true });
+});
+
+app.delete("/v1/agent/memories", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  await deleteAllMemories(auth.uid);
   return c.json({ ok: true });
 });
 

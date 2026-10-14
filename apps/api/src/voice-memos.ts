@@ -18,6 +18,7 @@ import {
 } from "./connectors/google-calendar.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 import { isValidTimeZone } from "./timezone.js";
+import { saveMemory } from "./memories.js";
 
 const MAX_MEMOS = 50;
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -342,6 +343,7 @@ export async function createVoiceMemo(
     durationSeconds,
   };
   const savedState = await persistNewMemo(uid, memo, plan);
+  await saveMemory(uid, memo.transcript, "voice_memo");
   // Audio only exists in this request's memory and is never persisted.
   return { memo, usage: usageFor(plan, savedState) };
 }

@@ -29,6 +29,8 @@ export const FREE_DAILY_RESCHEDULES = 3;
 export const FREE_DAILY_DRAFTS = 3;
 export const VOICE_MEMO_MONTHLY_MINUTES = 300;
 export const VOICE_MEMO_MAX_SECONDS = 5 * 60;
+export const FREE_MEMORY_RETENTION_DAYS = 7;
+export const DEMO_TRY_LIMIT = 3;
 
 export type LimitFeature = "requests" | "reschedule" | "draft_email";
 
@@ -689,11 +691,16 @@ export type AgentTurnResponse = {
   historyId?: string | null;
 };
 
-/** A fact the user asked to keep. */
+/** A spoken command or voice memo retained for later recall. */
 export type AgentMemoryItem = {
   id: string;
+  userId: string;
   text: string;
+  summary: string;
+  people: string[];
+  dates: string[];
   createdAt: number;
+  source: "command" | "voice_memo" | "remember";
 };
 
 export const VOICE_MEMO_ACTION_TYPES = [
