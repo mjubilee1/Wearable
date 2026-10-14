@@ -1,4 +1,10 @@
-export function CalendarDemo() {
+export function CalendarDemo({
+  request,
+  receipt,
+}: {
+  request: string;
+  receipt: string;
+}) {
   return (
     <figure className="mx-auto w-full max-w-md">
       <div className="overflow-hidden rounded-[28px] bg-white px-5 py-6 shadow-[0_30px_80px_-36px_rgba(17,24,39,0.45)] ring-1 ring-black/[0.04] sm:px-7 sm:py-8">
@@ -6,12 +12,11 @@ export function CalendarDemo() {
           You
         </p>
         <p className="mt-3 text-xl font-semibold leading-snug tracking-[-0.03em] sm:text-2xl">
-          “Move my 2 PM showing to tomorrow at 10.”
+          “{request}”
         </p>
         <div className="nearby-demo-receipt mt-6 rounded-2xl bg-teal-soft px-4 py-3">
           <p className="text-sm text-ink">
-            <span className="font-semibold text-teal">Done:</span> Moved 2 PM
-            showing to tomorrow at 10:00 AM
+            <span className="font-semibold text-teal">Done:</span> {receipt}
           </p>
         </div>
       </div>
