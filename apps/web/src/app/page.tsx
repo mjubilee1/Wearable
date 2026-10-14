@@ -8,6 +8,7 @@ import { MarketingAccountLink } from "@/components/MarketingAccountLink";
 import { MarketingNav } from "@/components/MarketingNav";
 import { PricingSection } from "@/components/PricingSection";
 import { WaitlistForm } from "@/components/WaitlistForm";
+import { Testimonials } from "@/components/Testimonials";
 import { CONNECTOR_PRIVACY_LINE, siteJsonLd } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -179,6 +180,9 @@ export default async function HomePage({
           <p className="mx-auto mt-5 max-w-md text-base text-muted sm:text-lg">
             {audience.subhead}
           </p>
+          <p className="mt-4 text-sm font-semibold text-ink/75">
+            Used by recruiters, sales reps, and consultants
+          </p>
           <Link
             href="/signup"
             className="mt-8 inline-flex rounded-full bg-teal px-6 py-3 text-sm font-semibold text-white"
@@ -227,6 +231,8 @@ export default async function HomePage({
             </div>
           </div>
         </section>
+
+        <Testimonials />
 
         <section id="pricing" className="scroll-mt-16 px-5 pb-20">
           <div className="mx-auto max-w-4xl">
