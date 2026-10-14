@@ -16,30 +16,151 @@ export const metadata: Metadata = {
   },
 };
 
-const TASKS = [
-  {
-    title: "Before closing",
-    body: "What's on my calendar before my 4 PM closing?",
+const AUDIENCES = {
+  general: {
+    subhead:
+      "Your voice assistant for busy days. Talk to it, and it handles your calendar, follow-ups, and emails.",
+    examples: [
+      { title: "Move a call", body: "Move my 2 PM call to tomorrow at 10." },
+      {
+        title: "Draft a follow-up",
+        body: "Draft a follow-up to Sarah about the proposal.",
+      },
+      {
+        title: "Set a reminder",
+        body: "Remind me to send the candidate feedback Friday.",
+      },
+      {
+        title: "Check the day",
+        body: "What's on my calendar before my 4 PM meeting?",
+      },
+    ],
+    demo: {
+      request: "Move my 2 PM call to tomorrow at 10.",
+      receipt: "Moved 2 PM call to tomorrow at 10:00 AM",
+    },
   },
-  {
-    title: "Move a showing",
-    body: "Move my 2 PM showing to tomorrow at 10.",
+  recruiters: {
+    subhead:
+      "Your voice assistant for packed interview days. Talk to it, and it handles your calendar, candidate follow-ups, and emails.",
+    examples: [
+      {
+        title: "Move an interview",
+        body: "Move my 2 PM candidate call to tomorrow at 10.",
+      },
+      {
+        title: "Draft a follow-up",
+        body: "Draft a follow-up to Sarah about the product role.",
+      },
+      {
+        title: "Set a reminder",
+        body: "Remind me to send the candidate feedback Friday.",
+      },
+      {
+        title: "Check the day",
+        body: "What's on my calendar before my 4 PM interview?",
+      },
+    ],
+    demo: {
+      request: "Move my 2 PM candidate call to tomorrow at 10.",
+      receipt: "Moved 2 PM candidate call to tomorrow at 10:00 AM",
+    },
   },
-  {
-    title: "Draft the reply",
-    body: "Draft a reply to the lender asking for the updated pre-approval.",
+  sales: {
+    subhead:
+      "Your voice assistant for back-to-back sales calls. Talk to it, and it handles your calendar, follow-ups, and emails.",
+    examples: [
+      {
+        title: "Move a demo",
+        body: "Move my 2 PM prospect call to tomorrow at 10.",
+      },
+      {
+        title: "Draft a follow-up",
+        body: "Draft a follow-up to Sarah about the proposal.",
+      },
+      {
+        title: "Set a reminder",
+        body: "Remind me to send the pricing recap Friday.",
+      },
+      {
+        title: "Check the day",
+        body: "What's on my calendar before my 4 PM demo?",
+      },
+    ],
+    demo: {
+      request: "Move my 2 PM prospect call to tomorrow at 10.",
+      receipt: "Moved 2 PM prospect call to tomorrow at 10:00 AM",
+    },
   },
-  {
-    title: "Client follow-up",
-    body: "Remind me to follow up with the Johnsons Friday",
+  consultants: {
+    subhead:
+      "Your voice assistant for client-heavy days. Talk to it, and it handles your calendar, follow-ups, and emails.",
+    examples: [
+      {
+        title: "Move a client call",
+        body: "Move my 2 PM client call to tomorrow at 10.",
+      },
+      {
+        title: "Draft a follow-up",
+        body: "Draft a follow-up to Sarah about the proposal.",
+      },
+      {
+        title: "Set a reminder",
+        body: "Remind me to send the workshop notes Friday.",
+      },
+      {
+        title: "Check the day",
+        body: "What's on my calendar before my 4 PM meeting?",
+      },
+    ],
+    demo: {
+      request: "Move my 2 PM client call to tomorrow at 10.",
+      receipt: "Moved 2 PM client call to tomorrow at 10:00 AM",
+    },
   },
-  {
-    title: "Add a task",
-    body: "Add pick up dry cleaning to my tasks",
+  agents: {
+    subhead:
+      "Your voice assistant between showings. Talk to it, and it handles your calendar, follow-ups, and emails.",
+    examples: [
+      {
+        title: "Move a showing",
+        body: "Move my 2 PM showing to tomorrow at 10.",
+      },
+      {
+        title: "Draft a follow-up",
+        body: "Draft a follow-up to Sarah about the offer.",
+      },
+      {
+        title: "Set a reminder",
+        body: "Remind me to send the inspection notes Friday.",
+      },
+      {
+        title: "Check the day",
+        body: "What's on my calendar before my 4 PM closing?",
+      },
+    ],
+    demo: {
+      request: "Move my 2 PM showing to tomorrow at 10.",
+      receipt: "Moved 2 PM showing to tomorrow at 10:00 AM",
+    },
   },
-] as const;
+} as const;
 
-export default function HomePage() {
+type AudienceKey = keyof typeof AUDIENCES;
+
+function audienceFrom(value: string | string[] | undefined): AudienceKey {
+  const key = Array.isArray(value) ? value[0] : value;
+  return key && key in AUDIENCES ? (key as AudienceKey) : "general";
+}
+
+const PROFESSIONS = ["Recruiters", "Sales reps", "Consultants", "Real estate agents"];
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ for?: string | string[] }>;
+}) {
+  const audience = AUDIENCES[audienceFrom((await searchParams).for)];
   return (
     <div id="top" className="min-h-dvh text-ink">
       <script
@@ -55,8 +176,7 @@ export default function HomePage() {
             Talk. It does it.
           </h1>
           <p className="mx-auto mt-5 max-w-md text-base text-muted sm:text-lg">
-            Your assistant between showings. Talk to it, and it handles your
-            calendar, follow-ups, and emails.
+            {audience.subhead}
           </p>
           <Link
             href="/signup"
@@ -67,12 +187,15 @@ export default function HomePage() {
         </section>
 
         <section className="px-5 pb-16" aria-label="Calendar request demo">
-          <CalendarDemo />
+          <CalendarDemo
+            request={audience.demo.request}
+            receipt={audience.demo.receipt}
+          />
         </section>
 
         <section className="px-5 pb-16">
-          <div className="mx-auto grid max-w-4xl gap-3 sm:grid-cols-3">
-            {TASKS.map((task) => (
+          <div className="mx-auto grid max-w-4xl gap-3 sm:grid-cols-2">
+            {audience.examples.map((task) => (
               <div
                 key={task.title}
                 className="rounded-[28px] bg-white p-5 ring-1 ring-black/5"
@@ -81,6 +204,24 @@ export default function HomePage() {
                 <p className="mt-2 text-sm text-muted">“{task.body}”</p>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="px-5 pb-20" aria-labelledby="calls-heading">
+          <div className="mx-auto max-w-4xl rounded-[28px] bg-teal-soft/60 px-6 py-7 text-center ring-1 ring-teal/20">
+            <h2 id="calls-heading" className="text-xl font-bold tracking-tight text-ink">
+              Built for people who live on calls
+            </h2>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {PROFESSIONS.map((profession) => (
+                <span
+                  key={profession}
+                  className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-ink ring-1 ring-black/5"
+                >
+                  {profession}
+                </span>
+              ))}
+            </div>
           </div>
         </section>
 

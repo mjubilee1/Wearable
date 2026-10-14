@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 
 export const SITE_URL = "https://www.nearbyhello.com";
 export const SITE_NAME = "Nearby";
-export const SITE_TITLE = "Nearby: your voice assistant between showings";
+export const SITE_TITLE = "Nearby: voice assistant for busy professionals";
 export const SITE_DESCRIPTION =
-  "Talk to Nearby between showings. It moves your calendar, sets follow-ups, and drafts emails to lenders and clients. Pro $29/mo with a 7-day free trial.";
+  "Your voice assistant for busy days. Talk to Nearby, and it handles your calendar, follow-ups, and emails.";
 export const SITE_TAGLINE = "Speak, and it answers out loud.";
 export const CONNECTOR_PRIVACY_LINE =
   "Nearby only uses a connector when you ask. You can disconnect anytime.";
@@ -109,7 +109,7 @@ export function llmsText() {
 
 > ${SITE_DESCRIPTION}
 
-Nearby is a paid voice and type assistant for real estate agents and busy professionals. Use it from a laptop, phone, or headphones to handle work between showings. The pendant is coming soon.
+Nearby is a voice and type assistant for busy professionals who live on calls, including recruiters, sales reps, consultants, and real estate agents. Use it from a laptop, phone, or headphones to handle calendar changes, follow-ups, and email drafts throughout the day. The pendant is coming soon.
 
 ## Canonical
 
