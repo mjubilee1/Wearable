@@ -11,6 +11,19 @@
 #error "Copy include/secrets.h.example to include/secrets.h"
 #endif
 
+constexpr char WAKE_PHRASE[] = "hello nearby";
+constexpr uint32_t WAKE_TIMEOUT_MS = 15000;
+
+bool waitingForCommand = false;
+uint32_t activatedAt = 0;
+
+bool isWordCharacter(char value) {
+  return (value >= 'a' && value <= 'z') ||
+         (value >= 'A' && value <= 'Z') ||
+         (value >= '0' && value <= '9') ||
+         value == '_';
+}
+
 bool postAgent(const String &text) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Wi-Fi dropped.");
@@ -60,10 +73,46 @@ bool postAgent(const String &text) {
   return true;
 }
 
+String commandAfterWakePhrase(const String &spoken) {
+  String normalized = spoken;
+  normalized.trim();
+  normalized.toLowerCase();
+  const String wake = WAKE_PHRASE;
+  if (!normalized.startsWith(wake)) return "";
+  if (normalized.length() > wake.length()) {
+    const char boundary = normalized.charAt(wake.length());
+    if (isWordCharacter(boundary)) return "";
+  }
+
+  String command = spoken.substring(wake.length());
+  command.trim();
+  while (
+    command.length() &&
+    (command.charAt(0) == ',' || command.charAt(0) == ':' ||
+     command.charAt(0) == '-' || command.charAt(0) == '.')
+  ) {
+    command.remove(0, 1);
+    command.trim();
+  }
+  return command;
+}
+
+bool hasWakePhrase(const String &spoken) {
+  String normalized = spoken;
+  normalized.trim();
+  normalized.toLowerCase();
+  const String wake = WAKE_PHRASE;
+  if (!normalized.startsWith(wake)) return false;
+  return normalized.length() == wake.length() ||
+         !isWordCharacter(normalized.charAt(wake.length()));
+}
+
 void setup() {
   Serial.begin(115200);
   delay(800);
-  Serial.println("Nearby voice. Wi-Fi only. Type a line and press enter.");
+  Serial.println(
+    "Nearby voice. Wi-Fi only. Type \"Hello Nearby\" to activate."
+  );
   ble_audio_setup();
 
   WiFi.mode(WIFI_STA);
@@ -84,10 +133,36 @@ void setup() {
 }
 
 void loop() {
+  if (
+    waitingForCommand &&
+    static_cast<uint32_t>(millis() - activatedAt) >= WAKE_TIMEOUT_MS
+  ) {
+    waitingForCommand = false;
+    Serial.println("Nearby went idle. Say \"Hello Nearby\" to activate.");
+  }
   if (!Serial.available()) return;
   String line = Serial.readStringUntil('\n');
   line.trim();
   if (!line.length()) return;
 
-  postAgent(line);
+  if (waitingForCommand) {
+    waitingForCommand = false;
+    postAgent(line);
+    return;
+  }
+
+  if (!hasWakePhrase(line)) {
+    Serial.println("Idle. Say \"Hello Nearby\" first.");
+    return;
+  }
+
+  const String command = commandAfterWakePhrase(line);
+  if (command.length()) {
+    postAgent(command);
+    return;
+  }
+
+  waitingForCommand = true;
+  activatedAt = millis();
+  Serial.println("Listening. Say one command.");
 }
