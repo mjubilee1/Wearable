@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarDemo } from "@/components/CalendarDemo";
 import { LandingView } from "@/components/LandingView";
+import { HomepageLiveDemo } from "@/components/HomepageLiveDemo";
 import { MarketingAccountLink } from "@/components/MarketingAccountLink";
 import { MarketingNav } from "@/components/MarketingNav";
 import { PricingSection } from "@/components/PricingSection";
@@ -185,6 +186,8 @@ export default async function HomePage({
             Start free
           </Link>
         </section>
+
+        <HomepageLiveDemo />
 
         <section className="px-5 pb-16" aria-label="Calendar request demo">
           <CalendarDemo
