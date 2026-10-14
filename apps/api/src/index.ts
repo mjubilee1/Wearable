@@ -41,6 +41,7 @@ import {
 import { LimitReachedError } from "./limits.js";
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
+import { deleteAllMemories } from "./memories.js";
 import {
   buildGoogleAuthUrl,
   disconnectGoogleCalendar,
@@ -326,9 +327,9 @@ app.delete("/v1/connectors/google/calendar", async (c) => {
 });
 
 app.post("/v1/agent", async (c) => {
+  const body = await c.req.json().catch(() => null);
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
-  const body = await c.req.json().catch(() => null);
   try {
     return c.json(await runAgentTurn(auth.uid, body));
   } catch (error) {
@@ -351,7 +352,7 @@ app.post("/v1/agent", async (c) => {
 app.get("/v1/agent/memories", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
-  const memories = await listAgentMemories(auth.uid);
+  const memories = await listAgentMemories(auth.uid, c.req.query("q") ?? "");
   return c.json({ memories });
 });
 
@@ -477,6 +478,13 @@ app.delete("/v1/agent/memories/:id", async (c) => {
   const id = c.req.param("id").trim();
   if (!id) return c.json({ error: "Missing memory id" }, 400);
   await deleteAgentMemory(auth.uid, id);
+  return c.json({ ok: true });
+});
+
+app.delete("/v1/agent/memories", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  await deleteAllMemories(auth.uid);
   return c.json({ ok: true });
 });
 

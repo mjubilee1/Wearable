@@ -9,12 +9,14 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { isEmailLikeName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { updateUserProfile } from "@/lib/users";
 import { colors } from "@/lib/theme";
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { profile, signOut, refreshProfile } = useAuth();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -71,6 +73,19 @@ export default function ProfileScreen() {
         <Text style={styles.subtitle}>
           Your account. Connect calendar and other tools under Connectors.
         </Text>
+
+        <Pressable
+          onPress={() => router.push("/settings")}
+          style={styles.settingsCard}
+        >
+          <View>
+            <Text style={styles.settingsTitle}>Memory settings</Text>
+            <Text style={styles.settingsCopy}>
+              Search, review, and delete saved memories
+            </Text>
+          </View>
+          <Text style={styles.settingsOpen}>Open</Text>
+        </Pressable>
 
         <View style={styles.field}>
           <Text style={styles.label}>First name</Text>
@@ -150,6 +165,22 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   muted: { fontSize: 14, color: colors.muted },
+  settingsCard: {
+    marginTop: 16,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  settingsTitle: { fontSize: 14, fontWeight: "700", color: colors.ink },
+  settingsCopy: { marginTop: 4, fontSize: 13, color: colors.muted },
+  settingsOpen: { fontSize: 13, fontWeight: "700", color: colors.teal },
   field: { marginTop: 16, gap: 6 },
   label: { fontSize: 12, fontWeight: "600", color: colors.ink },
   input: {

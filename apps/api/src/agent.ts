@@ -11,7 +11,6 @@ import {
   type AgentConfirmPreview,
   type AgentFeatureUsage,
   type AgentHistoryItem,
-  type AgentMemoryItem,
   type AgentPendingTool,
   type AgentToolName,
   type AgentTurnRequest,
@@ -35,6 +34,12 @@ import {
 } from "./connectors/google-calendar.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 import { LimitReachedError } from "./limits.js";
+import {
+  deleteMemory,
+  listMemories,
+  saveMemory,
+  searchMemories,
+} from "./memories.js";
 import {
   dayBoundsInZone,
   formatClockAmPm,
@@ -60,8 +65,14 @@ type UsageDay = {
   drafts: number;
 };
 
+type LegacyMemory = {
+  id: string;
+  text: string;
+  createdAt: number;
+};
+
 type AgentState = {
-  memories: AgentMemoryItem[];
+  memories: LegacyMemory[];
   notes: StoredAction[];
   reminders: StoredAction[];
   history: AgentHistoryItem[];
@@ -75,7 +86,7 @@ function emptyState(): AgentState {
 }
 
 
-function asMemory(value: unknown): AgentMemoryItem | null {
+function asMemory(value: unknown): LegacyMemory | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   if (typeof row.id !== "string" || typeof row.text !== "string") return null;
@@ -183,7 +194,7 @@ async function readState(uid: string): Promise<AgentState> {
   const data = snap.data() ?? {};
   return {
     memories: Array.isArray(data.memories)
-      ? data.memories.map(asMemory).filter((row): row is AgentMemoryItem => row !== null)
+      ? data.memories.map(asMemory).filter((row): row is LegacyMemory => row !== null)
       : [],
     notes: Array.isArray(data.notes)
       ? data.notes.map(asAction).filter((row): row is StoredAction => row !== null)
@@ -508,6 +519,34 @@ function wantsNoteRead(lower: string): boolean {
     /\b(what('s| is)|whats)\b.*\bnotes?\b/.test(lower) ||
     /\bnotes?\b.*\b(i saved|i took|again)\b/.test(lower)
   );
+}
+
+function wantsMemoryRecall(text: string): boolean {
+  return (
+    /\bwhat did\b/i.test(text) ||
+    /\bwhat (?:have|did) i (?:say|promise|tell|mention|agree)\b/i.test(text) ||
+    /\b(?:recall|remember)\b.*\b(?:said|promised|proposal|client|memo)\b/i.test(text)
+  );
+}
+
+async function recallMemory(
+  uid: string,
+  text: string,
+  plan: "free" | "pro",
+  timeZone: string,
+): Promise<string | null> {
+  if (!wantsMemoryRecall(text)) return null;
+  const matches = await searchMemories(uid, text, plan);
+  const source = matches.find((memory) => memory.text.toLowerCase() !== text.toLowerCase());
+  if (!source) return "I couldn't find that in your saved memories.";
+  const date = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(source.createdAt));
+  const label = source.source === "voice_memo" ? "voice memo" : "command";
+  return `${source.summary} Source: ${label} from ${date}.`;
 }
 
 function visibleNotes(notes: StoredAction[]): StoredAction[] {
@@ -976,6 +1015,7 @@ async function applyDecision(
         ...state.memories,
       ].slice(0, 50);
       await writeState(uid, state);
+      await saveMemory(uid, text, "remember");
       return finish(spokenConfirmation(decision.tool, true, payload, name));
     }
     if (decision.tool === "note") {
@@ -1130,7 +1170,7 @@ async function beginConfirmTurn(
   return null;
 }
 
-export async function runAgentTurn(
+async function runAgentTurnCore(
   uid: string,
   body: unknown,
 ): Promise<AgentTurnResponse> {
@@ -1247,6 +1287,20 @@ export async function runAgentTurn(
   if (gated) assertWithinLimit(state, timeZone, gated, plan);
   assertWithinLimit(state, timeZone, "requests", plan);
 
+  const recalled = await recallMemory(uid, text, plan, timeZone);
+  if (recalled) {
+    const saved = await appendHistory(
+      uid,
+      { request: text, reply: recalled, receipt: null },
+      true,
+      timeZone,
+    );
+    return answered(recalled, mode, {
+      usage: saved.usage,
+      historyId: saved.historyId,
+    });
+  }
+
   const confirm = await beginConfirmTurn(uid, text, name, timeZone);
   if (confirm) return confirm;
 
@@ -1301,9 +1355,23 @@ export async function runAgentTurn(
   );
 }
 
-export async function listAgentMemories(uid: string): Promise<AgentMemoryItem[]> {
-  const state = await readState(uid);
-  return state.memories;
+export async function runAgentTurn(
+  uid: string,
+  body: unknown,
+): Promise<AgentTurnResponse> {
+  const response = await runAgentTurnCore(uid, body);
+  const request = body && typeof body === "object" ? body as AgentTurnRequest : null;
+  if (typeof request?.text === "string" && request.text.trim()) {
+    await saveMemory(uid, request.text, "command");
+  }
+  return response;
+}
+
+export async function listAgentMemories(
+  uid: string,
+  query = "",
+) {
+  return listMemories(uid, await readPlan(uid), query);
 }
 
 export async function listAgentNotes(uid: string): Promise<StoredAction[]> {
@@ -1323,9 +1391,7 @@ export async function deleteAgentNote(uid: string, id: string): Promise<void> {
 }
 
 export async function deleteAgentMemory(uid: string, id: string): Promise<void> {
-  const state = await readState(uid);
-  state.memories = state.memories.filter((item) => item.id !== id);
-  await writeState(uid, state);
+  await deleteMemory(uid, id);
 }
 
 export async function listAgentHistory(uid: string): Promise<AgentHistoryItem[]> {
