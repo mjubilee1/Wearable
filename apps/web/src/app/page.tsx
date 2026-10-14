@@ -150,9 +150,26 @@ const AUDIENCES = {
 
 type AudienceKey = keyof typeof AUDIENCES;
 
+const AUDIENCE_ALIASES: Record<string, AudienceKey> = {
+  general: "general",
+  recruiter: "recruiters",
+  recruiters: "recruiters",
+  consultant: "consultants",
+  consultants: "consultants",
+  sale: "sales",
+  sales: "sales",
+  manager: "sales",
+  managers: "sales",
+  realtor: "agents",
+  realtors: "agents",
+  agent: "agents",
+  agents: "agents",
+  "real-estate": "agents",
+};
+
 function audienceFrom(value: string | string[] | undefined): AudienceKey {
   const key = Array.isArray(value) ? value[0] : value;
-  return key && key in AUDIENCES ? (key as AudienceKey) : "general";
+  return key ? (AUDIENCE_ALIASES[key.toLowerCase()] ?? "general") : "general";
 }
 
 const PROFESSIONS = ["Recruiters", "Sales reps", "Consultants", "Real estate agents"];
@@ -181,7 +198,7 @@ export default async function HomePage({
             {audience.subhead}
           </p>
           <p className="mt-4 text-sm font-semibold text-ink/75">
-            Used by recruiters, sales reps, and consultants
+            Built for recruiters, sales reps, and consultants.
           </p>
           <Link
             href="/signup"
