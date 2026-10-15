@@ -2,8 +2,10 @@
 
 import { Suspense, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { clientNeedsEmailVerification } from "@nearby/shared";
 import { ConnectorSetupPrompt } from "@/components/ConnectorSetupPrompt";
 import { TrialBanner } from "@/components/TrialBanner";
+import { VerifyEmailScreen } from "@/components/VerifyEmailScreen";
 import { useAuth } from "@/lib/auth-context";
 
 const AUTH_PATHS = new Set(["/login", "/signup", "/forgot-password"]);
@@ -19,12 +21,22 @@ function afterAuthPath(): string {
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, emailVerified } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const isMarketing = pathname === "/" || pathname === "/pricing";
   const isAuthScreen = AUTH_PATHS.has(pathname);
   const isPublic = isMarketing || isAuthScreen;
+  const createdAtMs = user
+    ? Date.parse(user.metadata.creationTime ?? "") || 0
+    : 0;
+  const needsEmail = user
+    ? clientNeedsEmailVerification({
+        emailVerified,
+        providerIds: user.providerData.map((provider) => provider.providerId),
+        createdAtMs,
+      })
+    : false;
 
   useEffect(() => {
     if (loading) return;
@@ -32,10 +44,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
-    if (user && isAuthScreen) {
+    if (user && isAuthScreen && !needsEmail) {
       router.replace(afterAuthPath());
     }
-  }, [user, loading, isPublic, isAuthScreen, router]);
+  }, [user, loading, isPublic, isAuthScreen, needsEmail, router]);
 
   if (loading && !isPublic) {
     return (
@@ -50,6 +62,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!user && !isPublic) return null;
+  if (user && needsEmail && !isMarketing) return <VerifyEmailScreen />;
   if (user && isAuthScreen) return null;
 
   return (

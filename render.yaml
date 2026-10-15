@@ -35,6 +35,9 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      # Tavily key for the read-only web_search tool. Dashboard → Environment.
+      - key: SEARCH_API_KEY
+        sync: false
       - key: OPENAI_BASE_URL
         value: https://api.openai.com/v1
       - key: OPENAI_MODEL

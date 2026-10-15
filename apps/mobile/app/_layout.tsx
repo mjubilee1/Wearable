@@ -3,17 +3,29 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clientNeedsEmailVerification } from "@nearby/shared";
+import { VerifyEmailScreen } from "@/components/VerifyEmailScreen";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
 
 function AuthGate({ children }: { children: ReactNode }) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, emailVerified } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   const root = segments[0];
   const inAuthGroup = root === "(auth)";
   const onIndex = root === undefined || root === "index";
+  const createdAtMs = user
+    ? Date.parse(user.metadata.creationTime ?? "") || 0
+    : 0;
+  const needsEmail = user
+    ? clientNeedsEmailVerification({
+        emailVerified,
+        providerIds: user.providerData.map((provider) => provider.providerId),
+        createdAtMs,
+      })
+    : false;
 
   useEffect(() => {
     if (loading) return;
@@ -22,14 +34,15 @@ function AuthGate({ children }: { children: ReactNode }) {
       return;
     }
     if (!user) return;
+    if (needsEmail) return;
     if (!profile) return;
 
     if (inAuthGroup || onIndex) {
       router.replace("/(tabs)/activity");
     }
-  }, [user, profile, loading, inAuthGroup, onIndex, router]);
+  }, [user, profile, loading, needsEmail, inAuthGroup, onIndex, router]);
 
-  if (loading || (user && !profile)) {
+  if (loading || (user && !profile && !needsEmail)) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={colors.teal} size="large" />
@@ -37,6 +50,7 @@ function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
+  if (user && needsEmail) return <VerifyEmailScreen />;
   if (!user && !inAuthGroup) return null;
   if (user && (inAuthGroup || onIndex)) return null;
 

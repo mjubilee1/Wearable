@@ -28,7 +28,11 @@ import {
   listAgentNotes,
   runAgentTurn,
 } from "./agent.js";
-import { verifyAuth } from "./auth.js";
+import {
+  accountAccessFromHeader,
+  isEmailVerificationExempt,
+  verifyAuth,
+} from "./auth.js";
 import {
   createCheckoutSession,
   createPortalSession,
@@ -147,6 +151,16 @@ app.use(
   }),
 );
 
+app.use("*", async (c, next) => {
+  if (!c.req.path.startsWith("/v1/")) return next();
+  const block = await accountAccessFromHeader(
+    c.req.header("Authorization"),
+    isEmailVerificationExempt(c.req.method, c.req.path),
+  );
+  if (!block) return next();
+  return c.json({ error: block.error }, block.status);
+});
+
 app.get("/health", (c) =>
   c.json({
     ok: true,
@@ -206,6 +220,7 @@ app.post("/v1/billing/webhook", async (c) => {
   }
 });
 
+/** Checkout is not verification-exempt. Unverified password accounts get 403. */
 app.post("/v1/billing/checkout", async (c) => {
   if (!isStripeConfigured()) {
     return c.json({ error: "Billing not configured" }, 503);

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { isEmailLikeName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { captureAttribution } from "@/lib/attribution";
@@ -13,7 +12,6 @@ const ONBOARDING_FLAG = "nearby_onboarding";
 
 export default function SignupPage() {
   const { signUp } = useAuth();
-  const router = useRouter();
   const [foundingOffer, setFoundingOffer] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -63,11 +61,6 @@ export default function SignupPage() {
         utmCampaign: touch.utm_campaign,
         referredByCode: storedReferralCode(),
       });
-      trackFunnel("signup_complete", { plan: "free" }, {
-        scope: "session",
-        key: "signup_complete",
-      });
-      router.replace("/onboarding");
     } catch (err) {
       try {
         sessionStorage.removeItem(ONBOARDING_FLAG);

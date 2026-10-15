@@ -9,14 +9,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Link, useRouter } from "expo-router";
+import { Link } from "expo-router";
 import { isEmailLikeName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
 
 export default function SignupScreen() {
   const { signUp } = useAuth();
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,7 +37,6 @@ export default function SignupScreen() {
         password,
         name: trimmed,
       });
-      router.replace("/(tabs)/activity");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create account");
     } finally {

@@ -47,8 +47,14 @@ import {
   isValidTimeZone,
   zonedDayKey,
 } from "./timezone.js";
+import { answerWithWebSearch } from "./web-search.js";
 
 const HISTORY_LIMIT = 20;
+
+/** Told to the model so web_search stays off calendar, mail, and task turns. */
+export const WEB_SEARCH_GUIDANCE =
+  "If they need current public information from the internet, such as weather, business hours, sports scores, news, or nearby places, set tool name to web_search with payload query set to a short search query. Do not use web_search for calendar, email, tasks, notes, reminders, or memories. web_search is read-only: it only returns public titles, links, and snippets, and it cannot log in, click, buy, or submit a form. The server searches and replaces reply with the spoken answer.";
+
 const DEFAULT_TIME_ZONE = "America/New_York";
 
 type StoredAction = {
@@ -396,7 +402,8 @@ async function appendHistory(
     createdAt: Date.now(),
   };
   state.history = [item, ...state.history].slice(0, HISTORY_LIMIT);
-  const countsTowardLimit = consumeQuota && !/\bi couldn't find\b/i.test(entry.reply);
+  const countsTowardLimit =
+    consumeQuota && !/\bi couldn't (?:find|search)\b/i.test(entry.reply);
   if (countsTowardLimit) {
     const day = zonedDayKey(timeZone);
     const same = state.usage && state.usage.day === day ? state.usage : null;
@@ -820,7 +827,9 @@ async function modelTurn(
             content:
               "You are Nearby, a voice assistant. The user spoke one turn. Reply in one or two short sentences meant to be spoken aloud. No markdown, lists, or emoji. " +
               nameLine(name) +
-              "You can already see their saved notes, local reminders, and memories below with timestamps — when they ask what they saved, answer in chronological order (oldest to newest) and mention when each was saved in plain speech. Do not claim you cannot access notes. If they want to create a note, set a reminder (pushed to Google Tasks when connected), remember a fact, check the calendar, or read unread Gmail, set tool and do not ask permission — the server runs it in this turn and replaces reply. Otherwise tool is null and reply is the spoken answer. Return JSON only: {\"reply\":string,\"tool\":null|{name:\"calendar\"|\"gmail\"|\"note\"|\"reminder\"|\"remember\",summary:string,payload:object}}. Payload keys: note text; reminder text and when; remember text; calendar when (today or tomorrow) and first (1 for the first event only); gmail when and limit.\n\n" +
+              "You can already see their saved notes, local reminders, and memories below with timestamps — when they ask what they saved, answer in chronological order (oldest to newest) and mention when each was saved in plain speech. Do not claim you cannot access notes. If they want to create a note, set a reminder (pushed to Google Tasks when connected), remember a fact, check the calendar, or read unread Gmail, set tool and do not ask permission — the server runs it in this turn and replaces reply. " +
+              WEB_SEARCH_GUIDANCE +
+              " Otherwise tool is null and reply is the spoken answer. Return JSON only: {\"reply\":string,\"tool\":null|{name:\"calendar\"|\"gmail\"|\"note\"|\"reminder\"|\"remember\"|\"web_search\",summary:string,payload:object}}. Payload keys: note text; reminder text and when; remember text; calendar when (today or tomorrow) and first (1 for the first event only); gmail when and limit; web_search query.\n\n" +
               contextBlock(state, timeZone),
           },
           { role: "user", content: text },
@@ -1004,6 +1013,30 @@ async function applyDecision(
       name,
     });
     return finish(clip(result.spoken, 520), { receipt: result.receipt });
+  }
+
+  if (decision.tool === "web_search") {
+    const direct = explicitTool(requestText);
+    if (direct) {
+      return applyDecision(
+        uid,
+        {
+          tool: direct.tool,
+          approved: decision.approved,
+          summary: direct.summary,
+          payload: direct.payload,
+        },
+        name,
+        requestText,
+        options,
+      );
+    }
+    const searched = await answerWithWebSearch({
+      question: requestText || summary || payload.query || "",
+      query: payload.query || requestText || summary,
+      name,
+    });
+    return finish(searched.reply, { receipt: searched.receipt });
   }
 
   const state = await readState(uid);

@@ -42,6 +42,7 @@ const PRIVATE_PATHS = [
   "/onboarding",
   "/nearby",
   "/connections",
+  "/app",
 ];
 
 export const PRIVATE_ROBOTS_PATHS = PRIVATE_PATHS;

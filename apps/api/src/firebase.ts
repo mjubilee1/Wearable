@@ -39,9 +39,15 @@ type FirestoreCollection = FirestoreQuery & {
 
 type AdminApp = {
   auth: () => {
-    verifyIdToken: (
-      token: string,
-    ) => Promise<{ uid: string; email?: string }>;
+    verifyIdToken: (token: string) => Promise<{
+      uid: string;
+      email?: string;
+      email_verified?: boolean;
+      firebase?: { sign_in_provider?: string };
+    }>;
+    getUser: (uid: string) => Promise<{
+      metadata: { creationTime: string };
+    }>;
   };
   firestore: () => {
     collection: (name: string) => FirestoreCollection;

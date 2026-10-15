@@ -196,6 +196,62 @@ export function firstNameFrom(name: string, email?: string | null): string | nul
   return first || null;
 }
 
+/** Where the verification email returns the person after they confirm. */
+export const EMAIL_VERIFICATION_CONTINUE_URL = "https://nearbyhello.com/app";
+
+/**
+ * Password accounts created at or after this instant must verify email.
+ * Earlier accounts keep working without a verification email.
+ * 10:00 AM US Eastern on Oct 15, 2026.
+ */
+export const EMAIL_VERIFICATION_REQUIRED_AFTER_MS = Date.UTC(2026, 9, 15, 14, 0, 0);
+
+export const JUNK_EMAIL_MESSAGE = "Please use your regular email address";
+
+/** Gmail addresses with 3 or more dots in the local part are signup junk. */
+export function isDottedJunkEmail(email: string): boolean {
+  const trimmed = email.trim().toLowerCase();
+  const at = trimmed.indexOf("@");
+  if (at <= 0 || at !== trimmed.lastIndexOf("@")) return false;
+  const local = trimmed.slice(0, at);
+  const domain = trimmed.slice(at + 1);
+  if (domain !== "gmail.com" && domain !== "googlemail.com") return false;
+  let dots = 0;
+  for (const char of local) {
+    if (char === ".") dots += 1;
+  }
+  return dots >= 3;
+}
+
+/** Password sign-in must verify. Google sign-in and older accounts do not. */
+export function passwordUserNeedsEmailVerification(input: {
+  emailVerified: boolean;
+  providerId: string | null;
+  createdAtMs: number;
+}): boolean {
+  if (input.emailVerified) return false;
+  if (input.providerId === "google.com") return false;
+  if (input.providerId !== "password") return false;
+  return input.createdAtMs >= EMAIL_VERIFICATION_REQUIRED_AFTER_MS;
+}
+
+/** Same rule from a Firebase user: Google wins if that provider is linked. */
+export function clientNeedsEmailVerification(input: {
+  emailVerified: boolean;
+  providerIds: string[];
+  createdAtMs: number;
+}): boolean {
+  if (input.providerIds.includes("google.com")) return false;
+  const providerId = input.providerIds.includes("password")
+    ? "password"
+    : (input.providerIds[0] ?? null);
+  return passwordUserNeedsEmailVerification({
+    emailVerified: input.emailVerified,
+    providerId,
+    createdAtMs: input.createdAtMs,
+  });
+}
+
 /** Seed copy that should never appear in the notes list. */
 export function isPlaceholderNote(text: string): boolean {
   const normalized = text
@@ -566,6 +622,7 @@ export const AGENT_TOOL_NAMES = [
   "remember",
   "reschedule",
   "draft_email",
+  "web_search",
 ] as const;
 
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
