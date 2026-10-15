@@ -9,22 +9,26 @@ export const SITE_TAGLINE = "Speak, and it answers out loud.";
 export const CONNECTOR_PRIVACY_LINE =
   "Nearby only uses a connector when you ask. You can disconnect anytime.";
 
-export const QUESTIONS = [
+export const PRICING_FAQ = [
   {
-    q: "What does Nearby do?",
-    a: "You speak, it handles the task, and it answers out loud. The jobs it’s for are the ones that interrupt a day: calendar, notes, and reminders.",
+    q: "What is included in the Free tier?",
+    a: "Free includes 20 requests a day, 3 reschedules a day, 3 email drafts a day, and access to calendar, tasks, mail, and notes.",
   },
   {
-    q: "Does it record the room?",
-    a: "No. Nearby does not quietly capture what’s around you. It acts when you ask, then stops.",
+    q: "How much is Pro?",
+    a: "Pro is $29 a month or $249 a year, with a 7-day free trial. Cancel anytime.",
   },
   {
-    q: "Can I buy a device?",
-    a: "Not yet. This is an early proof of concept. The loop runs on a laptop or headphones first. A wearable comes after that loop is worth using every day.",
+    q: "What does Pro include?",
+    a: "Pro includes unlimited requests, unlimited reschedules and drafts, and voice memo recaps that turn into follow-ups.",
   },
   {
-    q: "What does it remember?",
-    a: "A fact you asked it to remember. A conversation is not stored just because it happened near you. You can delete a saved fact.",
+    q: "Does Nearby send emails on its own?",
+    a: "No. Nearby drafts replies for you to review, and it never sends without your OK.",
+  },
+  {
+    q: "Which Google apps does Nearby work with?",
+    a: "Nearby works with Google Calendar, Gmail, and Google Tasks.",
   },
 ] as const;
 
@@ -80,10 +84,32 @@ export function siteJsonLd() {
         description: SITE_DESCRIPTION,
         featureList: [
           "Spoken questions and short spoken answers",
-          "Calendar, notes, and reminders",
+          "Google Calendar, Gmail, and Google Tasks",
           "Laptop, phone, or headphones",
-          "A spoken request runs the tool",
-          "A saved fact can be deleted",
+          "Email drafts are sent only with your approval",
+          "Voice memo recaps that turn into follow-ups",
+        ],
+        offers: [
+          {
+            "@type": "Offer",
+            name: "Free",
+            price: "0",
+            priceCurrency: "USD",
+            url: `${SITE_URL}/pricing`,
+          },
+          {
+            "@type": "Offer",
+            name: "Pro",
+            price: "29",
+            priceCurrency: "USD",
+            url: `${SITE_URL}/pricing`,
+            priceSpecification: {
+              "@type": "UnitPriceSpecification",
+              price: "29",
+              priceCurrency: "USD",
+              unitText: "MONTH",
+            },
+          },
         ],
         publisher: { "@id": `${SITE_URL}/#organization` },
       },
@@ -91,7 +117,7 @@ export function siteJsonLd() {
         "@type": "FAQPage",
         "@id": `${SITE_URL}/#faq`,
         url: `${SITE_URL}/#questions`,
-        mainEntity: QUESTIONS.map((item) => ({
+        mainEntity: PRICING_FAQ.map((item) => ({
           "@type": "Question",
           name: item.q,
           acceptedAnswer: {
