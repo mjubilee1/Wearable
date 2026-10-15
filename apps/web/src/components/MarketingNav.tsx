@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { MarketingAccountLink } from "@/components/MarketingAccountLink";
 
@@ -15,15 +16,21 @@ export function MarketingNav() {
     <header className="sticky top-0 z-50 border-b border-ink/15 bg-paper text-ink">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-5">
         <div className="flex items-baseline gap-8">
-          <a href="/" className="font-display text-2xl italic leading-none text-ink">
+          <Link href="/" className="font-display text-2xl italic leading-none text-ink">
             nearby
-          </a>
+          </Link>
           <nav className="hidden items-center gap-6 text-sm text-muted md:flex">
-            {LINKS.map((link) => (
-              <a key={link.href} href={link.href} className="hover:text-ink">
-                {link.label}
-              </a>
-            ))}
+            {LINKS.map((link) =>
+              link.href.startsWith("#") ? (
+                <a key={link.href} href={link.href} className="hover:text-ink">
+                  {link.label}
+                </a>
+              ) : (
+                <Link key={link.href} href={link.href} className="hover:text-ink">
+                  {link.label}
+                </Link>
+              ),
+            )}
           </nav>
         </div>
         {loading ? (
@@ -35,12 +42,12 @@ export function MarketingNav() {
           />
         ) : (
           <div className="flex items-center gap-5">
-            <a href="/login" className="text-sm text-muted hover:text-ink">
+            <Link href="/login" className="text-sm text-muted hover:text-ink">
               Sign in
-            </a>
-            <a href="/signup" className="bg-ink px-3 py-2 text-sm font-semibold text-white">
+            </Link>
+            <Link href="/signup" className="bg-ink px-3 py-2 text-sm font-semibold text-white">
               Sign up
-            </a>
+            </Link>
           </div>
         )}
       </div>
