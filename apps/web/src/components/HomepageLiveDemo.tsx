@@ -158,86 +158,84 @@ export function HomepageLiveDemo() {
   }
 
   return (
-    <section className="px-5 pb-16 text-center" aria-labelledby="live-demo-title">
-      <div className="mx-auto max-w-xl rounded-[32px] bg-white px-5 py-8 shadow-[0_30px_80px_-36px_rgba(17,24,39,0.35)] ring-1 ring-black/5 sm:px-8">
-        <h2 id="live-demo-title" className="text-2xl font-bold tracking-tight">
-          Try it — say a task.
-        </h2>
-        <p className="mt-2 text-sm text-muted">
-          No signup. This sandbox uses a fake calendar and inbox.
-        </p>
-
+    <section className="px-5 pb-16" aria-labelledby="live-demo-title">
+      <div className="mx-auto grid max-w-5xl gap-8 border border-ink/20 bg-white px-5 py-6 sm:grid-cols-[auto_1fr] sm:items-center sm:px-8">
         {!exhausted ? (
-          <>
-            <button
-              type="button"
-              onClick={startListening}
-              disabled={loading || listening}
-              aria-label={listening ? "Listening" : "Start voice demo"}
-              className="mx-auto mt-6 flex size-28 items-center justify-center rounded-full bg-teal text-white shadow-[0_18px_45px_-15px_rgba(13,148,136,0.8)] transition hover:scale-[1.03] disabled:opacity-60"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="size-11 fill-none stroke-current stroke-2">
-                <rect x="9" y="3" width="6" height="11" rx="3" />
-                <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6" />
-              </svg>
-            </button>
-            <p className="mt-3 text-xs font-semibold text-muted">
-              {listening ? "Listening…" : loading ? "Doing it…" : `${DEMO_TRY_LIMIT - tries} demo ${DEMO_TRY_LIMIT - tries === 1 ? "try" : "tries"} left`}
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowText(true)}
-              className="mt-3 text-sm font-semibold text-teal underline-offset-4 hover:underline"
-            >
-              Type instead
-            </button>
-            {showText && (
-              <form onSubmit={submit} className="mx-auto mt-4 flex max-w-md gap-2">
-                <label htmlFor="demo-task" className="sr-only">Task</label>
-                <input
-                  id="demo-task"
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  placeholder="e.g. Check my unread inbox"
-                  className="min-w-0 flex-1 rounded-2xl border border-black/10 px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
-                />
-                <button
-                  type="submit"
-                  disabled={!text.trim() || loading}
-                  className="rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  Run
-                </button>
-              </form>
-            )}
-          </>
+          <button
+            type="button"
+            onClick={startListening}
+            disabled={loading || listening}
+            aria-label={listening ? "Listening" : "Start voice demo"}
+            className="flex size-16 items-center justify-center bg-ink text-white disabled:opacity-60"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="size-7 fill-none stroke-current stroke-2">
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6" />
+            </svg>
+          </button>
         ) : (
-          <div className="mt-7 rounded-3xl bg-teal-soft px-5 py-6">
-            <p className="font-bold text-ink">Connect your Google to make it real</p>
-            <Link
-              href="/signup"
-              className="mt-4 inline-flex rounded-full bg-teal px-5 py-3 text-sm font-semibold text-white"
-            >
-              Sign up
-            </Link>
-          </div>
+          <div className="size-16 bg-teal-soft" aria-hidden />
         )}
-
-        {error && <p className="mt-4 text-sm text-coral" role="alert">{error}</p>}
-        {(reply || receipt) && (
-          <div className="mt-6 text-left" aria-live="polite">
-            {heard && <p className="text-sm text-muted">You: “{heard}”</p>}
-            {reply && <p className="mt-3 text-base font-semibold text-ink">{reply}</p>}
-            {receipt && (
-              <div className="mt-4 rounded-2xl bg-teal-soft px-4 py-3">
-                <p className="text-sm text-ink">
-                  <span className="font-semibold text-teal">Done:</span>{" "}
-                  {receipt.action}
+        <div>
+          <h2 id="live-demo-title" className="font-display text-3xl font-medium leading-none">
+            Try it. Say a task.
+          </h2>
+          <p className="mt-2 max-w-md text-sm text-muted">
+            No signup. This sandbox uses a fake calendar and inbox.
+          </p>
+          {!exhausted ? (
+            <>
+              <p className="mt-3 text-sm text-ink">
+                {listening ? "Listening…" : loading ? "Doing it…" : `${DEMO_TRY_LIMIT - tries} demo ${DEMO_TRY_LIMIT - tries === 1 ? "try" : "tries"} left`}
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowText(true)}
+                className="mt-2 text-sm text-ink underline decoration-teal decoration-2 underline-offset-4"
+              >
+                Type instead
+              </button>
+              {showText && (
+                <form onSubmit={submit} className="mt-4 flex max-w-md gap-2">
+                  <label htmlFor="demo-task" className="sr-only">Task</label>
+                  <input
+                    id="demo-task"
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    placeholder="e.g. Check my unread inbox"
+                    className="min-w-0 flex-1 border border-ink/20 bg-paper px-3 py-2.5 text-sm outline-none focus:border-ink"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!text.trim() || loading}
+                    className="bg-ink px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    Run
+                  </button>
+                </form>
+              )}
+            </>
+          ) : (
+            <div className="mt-4">
+              <p className="text-ink">Connect your Google to make it real</p>
+              <Link href="/signup" className="mt-3 inline-flex bg-ink px-4 py-2.5 text-sm font-semibold text-white">
+                Sign up
+              </Link>
+            </div>
+          )}
+          {error && <p className="mt-4 text-sm text-coral" role="alert">{error}</p>}
+          {(reply || receipt) && (
+            <div className="mt-5 border-t border-ink/10 pt-4" aria-live="polite">
+              {heard && <p className="font-display text-lg italic text-ink">“{heard}”</p>}
+              {reply && <p className="mt-2 text-sm text-ink">{reply}</p>}
+              {receipt && (
+                <p className="mt-3 text-sm text-ink">
+                  <span className="font-semibold">Done.</span> {receipt.action}
                 </p>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

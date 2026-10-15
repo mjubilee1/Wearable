@@ -59,7 +59,7 @@ export function WaitlistForm() {
 
   if (status === "done") {
     return (
-      <p className="rounded-2xl bg-teal-soft px-4 py-3 text-center text-sm font-medium text-teal">
+      <p className="border border-ink/15 bg-white px-4 py-3 text-sm text-ink">
         You&apos;re on the list. We&apos;ll email when there&apos;s something
         to try.
       </p>
@@ -79,19 +79,19 @@ export function WaitlistForm() {
         placeholder="Email address"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="w-full rounded-full border border-teal/20 bg-white px-5 py-3.5 text-sm text-ink outline-none ring-teal/30 placeholder:text-muted focus:ring-2"
+        className="w-full border border-ink/20 bg-white px-3 py-2.5 text-sm text-ink outline-none placeholder:text-muted focus:border-ink"
       />
       <button
         type="submit"
         disabled={status === "saving"}
-        className="w-full rounded-full bg-teal px-5 py-3.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+        className="w-full bg-ink px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
       >
         {status === "saving" ? "Joining…" : "Get updates"}
       </button>
       {error ? (
         <p className="text-center text-sm text-coral">{error}</p>
       ) : null}
-      <p className="text-center text-xs text-muted">
+      <p className="text-xs text-muted">
         No spam. A note when there’s something to try.
       </p>
     </form>

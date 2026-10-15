@@ -29,10 +29,10 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal">
-        Nearby
-      </p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">
+      <Link href="/" className="font-display text-3xl italic text-ink">
+        nearby
+      </Link>
+      <h1 className="font-display mt-6 text-4xl font-medium leading-none text-ink">
         Welcome back
       </h1>
       <p className="mt-2 text-sm text-muted">
@@ -48,7 +48,7 @@ export default function LoginPage() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
+            className="w-full border border-ink/20 bg-white px-3 py-2.5 text-sm outline-none focus:border-ink"
           />
         </label>
         <label className="block space-y-1.5">
@@ -68,12 +68,12 @@ export default function LoginPage() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
+            className="w-full border border-ink/20 bg-white px-3 py-2.5 text-sm outline-none focus:border-ink"
           />
         </label>
 
         {error && (
-          <p className="rounded-2xl bg-coral-soft px-3 py-2 text-sm text-coral">
+          <p className="border border-coral/30 bg-coral-soft px-3 py-2 text-sm text-coral">
             {error}
           </p>
         )}
@@ -81,7 +81,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+          className="w-full bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
         >
           {submitting ? "Signing in…" : "Sign in"}
         </button>
@@ -89,7 +89,7 @@ export default function LoginPage() {
 
       <p className="mt-6 text-center text-sm text-muted">
         New here?{" "}
-        <Link href="/signup" className="font-semibold text-teal">
+        <Link href="/signup" className="font-semibold text-ink underline decoration-teal decoration-2 underline-offset-4">
           Create an account
         </Link>
       </p>

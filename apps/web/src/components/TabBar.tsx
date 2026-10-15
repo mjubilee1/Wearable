@@ -13,12 +13,12 @@ type TabId = (typeof TABS)[number]["id"];
 export function TabBar({ active }: { active: TabId }) {
   return (
     <nav
-      className="fixed inset-x-0 top-0 z-40 border-b border-black/5 bg-white/80 backdrop-blur-md"
+      className="fixed inset-x-0 top-0 z-40 border-b border-ink/15 bg-paper"
       aria-label="Primary"
     >
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 py-3 sm:gap-6 sm:px-8">
-        <Link href="/activity" className="shrink-0 text-sm font-bold tracking-tight text-ink">
-          Nearby
+        <Link href="/activity" className="font-display shrink-0 text-xl italic leading-none text-ink">
+          nearby
         </Link>
         <ul className="flex min-w-0 items-center gap-0.5 sm:gap-1">
           {TABS.map((tab) => {

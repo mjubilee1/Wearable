@@ -58,17 +58,14 @@ export function PricingSection({
   return (
     <div>
       {showHeading ? (
-        <>
-          <p className="text-sm font-semibold text-teal">Pricing</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-[-0.03em] sm:text-4xl">
-            Free to start. Pro when you want unlimited.
-          </h2>
-        </>
+        <h2 className="font-display text-4xl font-medium leading-none sm:text-5xl">
+          Free to start. Pro when you want unlimited.
+        </h2>
       ) : null}
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        <div className="rounded-[28px] bg-white p-6 ring-1 ring-black/5">
-          <p className="text-sm font-bold text-ink">Free</p>
-          <p className="mt-1 text-3xl font-bold tracking-tight">$0</p>
+        <div className="border border-ink/20 bg-white p-6">
+          <p className="text-sm text-muted">Free</p>
+          <p className="font-display mt-2 text-5xl font-medium leading-none">$0</p>
           <ul className="mt-4 space-y-2 text-sm text-muted">
             {FREE.map((item) => (
               <li key={item}>{item}</li>
@@ -76,16 +73,16 @@ export function PricingSection({
           </ul>
           <Link
             href="/signup"
-            className="mt-6 inline-flex w-full items-center justify-center rounded-2xl border border-black/10 px-4 py-3 text-sm font-semibold text-ink"
+            className="mt-6 inline-flex w-full items-center justify-center border border-ink/20 px-4 py-3 text-sm font-semibold text-ink"
           >
             Start free
           </Link>
         </div>
-        <div className="rounded-[28px] bg-teal-soft/70 p-6 ring-1 ring-teal/30">
-          <p className="text-sm font-bold text-ink">Pro</p>
-          <p className="mt-1 text-3xl font-bold tracking-tight">
+        <div className="border border-ink bg-white p-6">
+          <p className="text-sm text-teal">Pro</p>
+          <p className="font-display mt-2 text-5xl font-medium leading-none">
             ${foundingOffer ? 19 : PRO_MONTHLY_USD}
-            <span className="text-base font-semibold text-muted">/mo</span>
+            <span className="font-sans text-base font-medium text-muted">/mo</span>
           </p>
           <p className="mt-1 text-sm text-muted">
             or ${PRO_YEARLY_USD}/year · save ~28% · {PRO_TRIAL_DAYS} days free
@@ -101,7 +98,7 @@ export function PricingSection({
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void onTrial("month")}
-                className="w-full rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                className="w-full bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {busy === "month"
                   ? "Opening checkout…"
@@ -111,7 +108,7 @@ export function PricingSection({
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void onTrial("year")}
-                className="w-full rounded-2xl border border-teal/40 bg-white px-4 py-3 text-sm font-semibold text-ink disabled:opacity-60"
+                className="w-full border border-ink/20 bg-white px-4 py-3 text-sm font-semibold text-ink disabled:opacity-60"
               >
                 {busy === "year"
                   ? "Opening checkout…"
@@ -121,7 +118,7 @@ export function PricingSection({
           ) : (
             <Link
               href={user ? "/profile" : "/signup"}
-              className="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white"
+              className="mt-6 inline-flex w-full items-center justify-center bg-ink px-4 py-3 text-sm font-semibold text-white"
             >
               {pro ? "Manage plan" : "Start free"}
             </Link>

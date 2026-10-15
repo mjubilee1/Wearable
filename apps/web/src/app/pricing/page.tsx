@@ -15,8 +15,7 @@ export default function PricingPage() {
     <div className="min-h-dvh text-ink">
       <MarketingNav />
       <main className="mx-auto max-w-3xl px-5 py-16 sm:py-24">
-        <p className="text-sm font-semibold text-teal">Pricing</p>
-        <h1 className="mt-3 text-4xl font-bold tracking-[-0.035em] sm:text-5xl">
+        <h1 className="font-display text-5xl font-medium leading-none sm:text-6xl">
           Talk. It does it.
         </h1>
         <p className="mt-4 max-w-xl text-base text-muted">

@@ -6,19 +6,18 @@ export function CalendarDemo({
   receipt: string;
 }) {
   return (
-    <figure className="mx-auto w-full max-w-md">
-      <div className="overflow-hidden rounded-[28px] bg-white px-5 py-6 shadow-[0_30px_80px_-36px_rgba(17,24,39,0.45)] ring-1 ring-black/[0.04] sm:px-7 sm:py-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-          You
+    <figure className="w-full border border-ink/20 bg-white">
+      <div className="flex items-baseline justify-between border-b border-ink/10 px-4 py-2">
+        <p className="text-xs text-muted">You said</p>
+        <p className="font-display text-sm italic text-teal">nearby</p>
+      </div>
+      <p className="font-display px-4 py-5 text-2xl italic leading-snug text-ink">
+        “{request}”
+      </p>
+      <div className="nearby-demo-receipt border-t border-ink/10 px-4 py-3">
+        <p className="text-sm text-ink">
+          <span className="font-semibold">Done.</span> {receipt}
         </p>
-        <p className="mt-3 text-xl font-semibold leading-snug tracking-[-0.03em] sm:text-2xl">
-          “{request}”
-        </p>
-        <div className="nearby-demo-receipt mt-6 rounded-2xl bg-teal-soft px-4 py-3">
-          <p className="text-sm text-ink">
-            <span className="font-semibold text-teal">Done:</span> {receipt}
-          </p>
-        </div>
       </div>
       <figcaption className="sr-only">
         A calendar request followed by a Done receipt.

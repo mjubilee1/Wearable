@@ -252,85 +252,77 @@ export default async function HomePage({
       <LandingView />
       <MarketingNav />
       <main>
-        <section className="px-5 pb-8 pt-16 text-center sm:pt-24">
-          <p className="text-sm font-semibold text-teal">Nearby</p>
-          <h1 className="mx-auto mt-4 max-w-3xl text-5xl font-bold leading-[1.02] tracking-[-0.04em] sm:text-7xl">
-            Talk. It does it.
-          </h1>
-          <p className="mx-auto mt-5 max-w-md text-base text-muted sm:text-lg">
-            {audience.subhead}
-          </p>
-          <p className="mt-4 text-sm font-semibold text-ink/75">
-            {audience.builtFor}
-          </p>
-          <Link
-            href="/signup"
-            className="mt-8 inline-flex rounded-full bg-teal px-6 py-3 text-sm font-semibold text-white"
-          >
-            Start free
-          </Link>
-        </section>
-
-        <HomepageLiveDemo />
-
-        <section className="px-5 pb-16" aria-label="Calendar request demo">
+        <section className="mx-auto grid max-w-5xl items-end gap-10 px-5 pb-16 pt-12 sm:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] sm:pt-16">
+          <div>
+            <h1 className="font-display max-w-[8ch] text-6xl font-medium leading-[0.9] text-ink sm:text-8xl">
+              Talk. It does it.
+            </h1>
+            <p className="mt-6 max-w-sm text-lg leading-snug text-ink">
+              {audience.subhead}
+            </p>
+            <p className="mt-3 text-sm text-muted">{audience.builtFor}</p>
+            <Link
+              href="/signup"
+              className="mt-8 inline-flex bg-ink px-5 py-3 text-sm font-semibold text-white"
+            >
+              Start free
+            </Link>
+          </div>
           <CalendarDemo
             request={audience.demo.request}
             receipt={audience.demo.receipt}
           />
         </section>
 
-        <section className="px-5 pb-16">
-          <div className="mx-auto grid max-w-4xl gap-3 sm:grid-cols-2">
-            {audience.examples.map((task) => (
-              <div
+        <HomepageLiveDemo />
+
+        <section className="px-5 pb-16" aria-label="Example requests">
+          <ol className="mx-auto max-w-5xl border-t border-ink/15">
+            {audience.examples.map((task, index) => (
+              <li
                 key={task.title}
-                className="rounded-[28px] bg-white p-5 ring-1 ring-black/5"
+                className="grid gap-1 border-b border-ink/15 py-5 sm:grid-cols-[3.5rem_11rem_1fr] sm:items-baseline sm:gap-6"
               >
+                <span className="font-display text-lg text-teal">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
                 <p className="text-sm font-semibold text-ink">{task.title}</p>
-                <p className="mt-2 text-sm text-muted">“{task.body}”</p>
-              </div>
+                <p className="font-display text-xl italic leading-snug text-ink">
+                  “{task.body}”
+                </p>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
         <section className="px-5 pb-20" aria-labelledby="calls-heading">
-          <div className="mx-auto max-w-4xl rounded-[28px] bg-teal-soft/60 px-6 py-7 text-center ring-1 ring-teal/20">
-            <h2 id="calls-heading" className="text-xl font-bold tracking-tight text-ink">
+          <div className="mx-auto max-w-5xl border-t border-ink/15 pt-8">
+            <h2 id="calls-heading" className="text-sm text-muted">
               Built for people who live on calls
             </h2>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {PROFESSIONS.map((profession) => (
-                <span
-                  key={profession}
-                  className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-ink ring-1 ring-black/5"
-                >
-                  {profession}
-                </span>
-              ))}
-            </div>
+            <p className="font-display mt-3 max-w-2xl text-3xl font-medium leading-tight text-ink sm:text-4xl">
+              {`${PROFESSIONS.join(", ")}.`}
+            </p>
           </div>
         </section>
 
         <Testimonials />
 
         <section id="pricing" className="scroll-mt-16 px-5 pb-20">
-          <div className="mx-auto max-w-4xl">
+          <div className="mx-auto max-w-5xl">
             <PricingSection />
-            <p className="mt-4 text-center text-sm text-muted">
-              <Link href="/pricing" className="font-semibold text-teal">
+            <p className="mt-4 text-sm text-muted">
+              <Link href="/pricing" className="text-ink underline decoration-teal decoration-2 underline-offset-4">
                 Pricing details
               </Link>
             </p>
           </div>
         </section>
       </main>
-      <footer className="border-t border-black/10 px-5 py-12">
-        <div className="mx-auto flex max-w-4xl flex-col gap-8 sm:flex-row sm:justify-between">
+      <footer className="border-t border-ink/15 px-5 py-12">
+        <div className="mx-auto flex max-w-5xl flex-col gap-8 sm:flex-row sm:justify-between">
           <div>
-            <p className="text-2xl font-extrabold tracking-[-0.04em] text-teal">
-              nearby
-            </p>
+            <p className="font-display text-3xl italic text-ink">nearby</p>
             <p className="mt-2 max-w-xs text-sm text-muted">Talk. It does it.</p>
           </div>
           <div className="flex gap-10 text-sm">
@@ -354,7 +346,7 @@ export default async function HomePage({
           <p className="mb-3 text-sm text-muted">Get updates</p>
           <WaitlistForm />
         </div>
-        <p className="mx-auto mt-10 max-w-4xl text-xs leading-relaxed text-muted">
+        <p className="mx-auto mt-10 max-w-5xl text-xs leading-relaxed text-muted">
           {CONNECTOR_PRIVACY_LINE} Nearby does not record the room.
         </p>
       </footer>

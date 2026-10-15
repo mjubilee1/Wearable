@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-newsreader), Georgia, "Iowan Old Style", serif;
   --color-teal: #0d9488;
   --color-teal-soft: #ccfbf1;
   --color-coral: #f97066;
@@ -11,6 +12,7 @@
   --color-surface: #f3f4f6;
   --color-card: #ffffff;
   --color-amber-glow: #f59e0b;
+  --color-paper: #f3efe6;
 }
 
 * {
@@ -26,10 +28,7 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   color: var(--color-ink);
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, #ccfbf1 0%, transparent 55%),
-    radial-gradient(ellipse 60% 40% at 100% 0%, #fee4e2 0%, transparent 45%),
-    #f8fafc;
+  background: var(--color-paper);
 }
 
 @keyframes pulse-glow {
