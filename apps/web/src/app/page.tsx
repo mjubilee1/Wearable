@@ -20,6 +20,7 @@ export const metadata: Metadata = {
 
 const AUDIENCES = {
   general: {
+    builtFor: "Built for recruiters, sales reps, and consultants.",
     subhead:
       "Your voice assistant for busy days. Talk to it, and it handles your calendar, follow-ups, and emails.",
     examples: [
@@ -43,6 +44,7 @@ const AUDIENCES = {
     },
   },
   recruiters: {
+    builtFor: "Built for recruiters.",
     subhead:
       "Your voice assistant for packed interview days. Talk to it, and it handles your calendar, candidate follow-ups, and emails.",
     examples: [
@@ -69,6 +71,7 @@ const AUDIENCES = {
     },
   },
   sales: {
+    builtFor: "Built for sales reps.",
     subhead:
       "Your voice assistant for back-to-back sales calls. Talk to it, and it handles your calendar, follow-ups, and emails.",
     examples: [
@@ -95,6 +98,7 @@ const AUDIENCES = {
     },
   },
   consultants: {
+    builtFor: "Built for consultants.",
     subhead:
       "Your voice assistant for client-heavy days. Talk to it, and it handles your calendar, follow-ups, and emails.",
     examples: [
@@ -121,6 +125,7 @@ const AUDIENCES = {
     },
   },
   agents: {
+    builtFor: "Built for real estate agents.",
     subhead:
       "Your voice assistant between showings. Talk to it, and it handles your calendar, follow-ups, and emails.",
     examples: [
@@ -164,6 +169,7 @@ const AUDIENCE_ALIASES: Record<string, AudienceKey> = {
   realtors: "agents",
   agent: "agents",
   agents: "agents",
+  realestate: "agents",
   "real-estate": "agents",
 };
 
@@ -198,7 +204,7 @@ export default async function HomePage({
             {audience.subhead}
           </p>
           <p className="mt-4 text-sm font-semibold text-ink/75">
-            Built for recruiters, sales reps, and consultants.
+            {audience.builtFor}
           </p>
           <Link
             href="/signup"
