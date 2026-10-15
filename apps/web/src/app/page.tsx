@@ -9,14 +9,12 @@ import { MarketingNav } from "@/components/MarketingNav";
 import { PricingSection } from "@/components/PricingSection";
 import { WaitlistForm } from "@/components/WaitlistForm";
 import { Testimonials } from "@/components/Testimonials";
-import { CONNECTOR_PRIVACY_LINE, siteJsonLd } from "@/lib/site";
-
-export const metadata: Metadata = {
-  alternates: {
-    canonical: "/",
-    types: { "text/plain": "/llms.txt" },
-  },
-};
+import {
+  CONNECTOR_PRIVACY_LINE,
+  SITE_DESCRIPTION,
+  SITE_TITLE,
+  siteJsonLd,
+} from "@/lib/site";
 
 const AUDIENCES = {
   general: {
@@ -124,7 +122,34 @@ const AUDIENCES = {
       receipt: "Moved 2 PM client call to tomorrow at 10:00 AM",
     },
   },
-  agents: {
+  managers: {
+    builtFor: "Built for managers.",
+    subhead:
+      "Your voice assistant for meeting-heavy days. Talk to it, and it handles your calendar, team follow-ups, and emails.",
+    examples: [
+      {
+        title: "Move a meeting",
+        body: "Move my 2 PM team meeting to tomorrow at 10.",
+      },
+      {
+        title: "Draft a follow-up",
+        body: "Draft a follow-up to Sarah about the project.",
+      },
+      {
+        title: "Set a reminder",
+        body: "Remind me to send the team recap Friday.",
+      },
+      {
+        title: "Check the day",
+        body: "What's on my calendar before my 4 PM meeting?",
+      },
+    ],
+    demo: {
+      request: "Move my 2 PM team meeting to tomorrow at 10.",
+      receipt: "Moved 2 PM team meeting to tomorrow at 10:00 AM",
+    },
+  },
+  realestate: {
     builtFor: "Built for real estate agents.",
     subhead:
       "Your voice assistant between showings. Talk to it, and it handles your calendar, follow-ups, and emails.",
@@ -163,14 +188,14 @@ const AUDIENCE_ALIASES: Record<string, AudienceKey> = {
   consultants: "consultants",
   sale: "sales",
   sales: "sales",
-  manager: "sales",
-  managers: "sales",
-  realtor: "agents",
-  realtors: "agents",
-  agent: "agents",
-  agents: "agents",
-  realestate: "agents",
-  "real-estate": "agents",
+  manager: "managers",
+  managers: "managers",
+  realtor: "realestate",
+  realtors: "realestate",
+  agent: "realestate",
+  agents: "realestate",
+  realestate: "realestate",
+  "real-estate": "realestate",
 };
 
 function audienceFrom(value: string | string[] | undefined): AudienceKey {
@@ -178,12 +203,44 @@ function audienceFrom(value: string | string[] | undefined): AudienceKey {
   return key ? (AUDIENCE_ALIASES[key.toLowerCase()] ?? "general") : "general";
 }
 
+type HomeSearchParams = Promise<{ for?: string | string[] }>;
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: HomeSearchParams;
+}): Promise<Metadata> {
+  const audienceKey = audienceFrom((await searchParams).for);
+  const audience = AUDIENCES[audienceKey];
+  const title = audienceKey === "general" ? SITE_TITLE : audience.builtFor;
+  const description =
+    audienceKey === "general" ? SITE_DESCRIPTION : audience.subhead;
+
+  return {
+    title: { absolute: title },
+    description,
+    alternates: {
+      canonical: "/",
+      types: { "text/plain": "/llms.txt" },
+    },
+    openGraph: {
+      url: "/",
+      title,
+      description,
+    },
+    twitter: {
+      title,
+      description,
+    },
+  };
+}
+
 const PROFESSIONS = ["Recruiters", "Sales reps", "Consultants", "Real estate agents"];
 
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ for?: string | string[] }>;
+  searchParams: HomeSearchParams;
 }) {
   const audience = AUDIENCES[audienceFrom((await searchParams).for)];
   return (
