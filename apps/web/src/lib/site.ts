@@ -99,16 +99,10 @@ export function siteJsonLd() {
           },
           {
             "@type": "Offer",
-            name: "Pro",
+            name: "Pro monthly",
             price: "29",
             priceCurrency: "USD",
             url: `${SITE_URL}/pricing`,
-            priceSpecification: {
-              "@type": "UnitPriceSpecification",
-              price: "29",
-              priceCurrency: "USD",
-              unitText: "MONTH",
-            },
           },
         ],
         publisher: { "@id": `${SITE_URL}/#organization` },
