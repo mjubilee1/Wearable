@@ -5,12 +5,7 @@ It does not change the phone app or the older color-ring firmware.
 
 ## Current repository flow vs. this project
 
-Before this folder, there was no mic-to-phone audio flow:
-
-- `firmware/voice-esp32` accepts typed serial text, sends it to `/v1/agent`
-  over Wi-Fi, and has a BLE stub that is compiled off.
-- The XIAO projects use Bluefruit for BLE advertising, scanning, or a small
-  writable LED characteristic. Their onboard microphone is unused.
+Before this folder, the XIAO projects used Bluefruit for BLE advertising, scanning, or a small writable LED characteristic. Their onboard microphone was unused. This folder is the voice firmware for the board on the desk.
 
 This project adds the missing device-side path:
 
