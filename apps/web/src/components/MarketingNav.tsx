@@ -4,10 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { MarketingAccountLink } from "@/components/MarketingAccountLink";
 
-const LINKS = [
-  { href: "/pricing", label: "Pricing" },
-  { href: "#pricing", label: "Plans" },
-] as const;
+const LINKS = [{ href: "/pricing", label: "Pricing" }] as const;
 
 export function MarketingNav() {
   const { loading, user } = useAuth();
@@ -20,17 +17,11 @@ export function MarketingNav() {
             nearby
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-muted md:flex">
-            {LINKS.map((link) =>
-              link.href.startsWith("#") ? (
-                <a key={link.href} href={link.href} className="hover:text-ink">
-                  {link.label}
-                </a>
-              ) : (
-                <Link key={link.href} href={link.href} className="hover:text-ink">
-                  {link.label}
-                </Link>
-              ),
-            )}
+            {LINKS.map((link) => (
+              <Link key={link.href} href={link.href} className="hover:text-ink">
+                {link.label}
+              </Link>
+            ))}
           </nav>
         </div>
         {loading ? (
