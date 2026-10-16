@@ -2,24 +2,23 @@
 
 A voice-first wearable AI assistant. You speak, it uses tools, and it answers out loud. Current target is a spoken turn through the laptop, the phone, or AirPods (`POST /v1/agent`). Domain: [nearbyhello.com](https://www.nearbyhello.com).
 
-Product: [`nearby-product-and-icp.md`](nearby-product-and-icp.md) (Sun Oct 11, 2026). The Oct 9 color-clip brief is retired. The social hello layer is later.
+Product: [`nearby-product-and-icp.md`](nearby-product-and-icp.md) (Fri Oct 16, 2026). The Oct 9 color-clip brief is retired. The social hello layer is later.
 
 ## Layers
 
-1. **Input** — laptop mic on the website, typed turn on the phone (spoken reply). ESP32 serial stand-in until the mic arrives. AirPods do not pair to the board.
+1. **Input** — laptop mic on the website, typed turn on the phone (spoken reply). The XIAO mic stays on the board until "hello nearby" or the D1 button. AirPods do not pair to the board.
 2. **Agent** — `apps/api` `POST /v1/agent`. A spoken request runs the tool in that turn. A saved fact can be deleted.
-3. **Device** — [`firmware/voice-esp32`](firmware/voice-esp32/). Wi-Fi only. The chip on the desk has no BLE, so `NEARBY_HAS_BLE` stays 0. The older color-ring sketches under `firmware/` stay in place and are not extended.
+3. **Device** — The board on the desk is a Seeed XIAO nRF52840 Sense. Flash [`firmware/wakeword`](firmware/wakeword/) with `-e xiaoblesense`. The older color-ring sketches under `firmware/` stay in place and are not extended. Omi under `third_party/omi` is a read-only reference.
 
 ## Voice firmware
 
-```bash
-cd firmware/voice-esp32
-cp include/secrets.h.example include/secrets.h
-pio run -e qtpy-s2 -t upload
-pio device monitor -e qtpy-s2
-```
+XIAO nRF52840 Sense (the board on the desk):
 
-Default board is the Adafruit QT Py ESP32-S2. Use `-e qtpy-s3` or `-e esp32dev` if the silkscreen matches those instead. BLE audio is still off in every env.
+```bash
+cd firmware/wakeword
+pio run -e xiaoblesense -t upload
+pio device monitor -e xiaoblesense -b 115200
+```
 
 ## Apps
 

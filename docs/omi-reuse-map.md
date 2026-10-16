@@ -6,7 +6,7 @@ Commit file: `third_party/OMI_COMMIT.txt`
 
 **Rules for this tree:** read-only. Never edit `third_party/omi`. After approval, copy only selected files into `src/vendor/omi/<piece>/` with MIT headers; keep Nearby code outside `third_party/` and `vendor/`, calling vendored code through a thin wrapper. Do not pull Omi Firebase, cloud keys, or its full app/backend services.
 
-**Nearby context:** voice-first assistant. M1 = laptop / AirPods → `POST /v1/agent`. Later = Adafruit QT Py ESP32-S3 (I²S mic, GC9A01) streaming audio to the phone over BLE. Omi firmware is **nRF5340 + Zephyr / nRF Connect SDK** and a **PDM** mic — not ESP32, not Arduino, not I²S.
+**Nearby context:** voice-first assistant. M1 = laptop / AirPods → `POST /v1/agent`. The desk board is a Seeed XIAO nRF52840 Sense; its firmware is `firmware/wakeword`. Omi firmware is **nRF5340 + Zephyr / nRF Connect SDK** and a **PDM** mic.
 
 Port difficulty key: **Easy** / **Medium** / **Hard** / **Rewrite** (reuse ideas only).
 

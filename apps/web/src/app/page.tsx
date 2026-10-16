@@ -4,7 +4,6 @@ import Link from "next/link";
 import { CalendarDemo } from "@/components/CalendarDemo";
 import { LandingView } from "@/components/LandingView";
 import { HomepageLiveDemo } from "@/components/HomepageLiveDemo";
-import { MarketingAccountLink } from "@/components/MarketingAccountLink";
 import { MarketingNav } from "@/components/MarketingNav";
 import { PricingSection } from "@/components/PricingSection";
 import { WaitlistForm } from "@/components/WaitlistForm";
@@ -338,7 +337,9 @@ export default async function HomePage({
               </Link>
             </div>
             <div className="flex flex-col gap-2">
-              <MarketingAccountLink className="text-muted hover:text-ink" />
+              <Link href="/login" className="text-muted hover:text-ink">
+                Sign in
+              </Link>
             </div>
           </div>
         </div>

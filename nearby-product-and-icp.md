@@ -1,6 +1,6 @@
 # Nearby (nearbyhello.com): current product
 
-Last updated Sun Oct 11, 2026. Paste into Cursor as context. This replaces the Oct 9 color-clip brief. Those color-clip locks no longer apply.
+Last updated Fri Oct 16, 2026. Paste into Cursor as context. This replaces the Oct 9 color-clip brief. Those color-clip locks no longer apply.
 
 ## What Nearby is now
 
@@ -12,7 +12,7 @@ Domain: [nearbyhello.com](https://www.nearbyhello.com) (bought Oct 11 2026 on Na
 
 ## Hardware
 
-- Chip on the desk: Wi-Fi only, no BLE. A BLE board is expected next. Until then, firmware is `firmware/voice-esp32` with `NEARBY_HAS_BLE` left at 0.
+- Desk board (Oct 16 2026): Seeed XIAO nRF52840 Sense. The Mac reports USB `2886:8045`. This is the same module Omi's devkit firmware targets (`seeed_xiao_nrf52840_sense`). Flash `firmware/wakeword` with `-e xiaoblesense`. The onboard PDM mic stays local until "hello nearby" or the D1 button. The old QT Py Wi-Fi sketch is removed.
 - On order (Amazon): I²S MEMS microphone module, 1.28" round GC9A01 SPI display, plus parts for assembly. Confirm the exact models and pinouts before writing wiring.
 - Have: laptop, AirPods / Bluetooth headphones, breadboard.
 - Constraint: the ESP32-S3 cannot connect to AirPods as a Bluetooth Classic audio headset. Design around it: AirPods go through the laptop or phone, not the board.
@@ -27,7 +27,7 @@ Domain: [nearbyhello.com](https://www.nearbyhello.com) (bought Oct 11 2026 on Na
 | Voice | wake word, speech-to-text, text-to-speech | laptop |
 | Agent | reasoning, tool selection, orchestration, context and memory | API |
 | Integrations | calendar, reminders, notes, search, other approved tools | API |
-| Device | ESP32-S3 firmware: Wi-Fi, auth, backend calls, BLE, display | mock mic, serial output |
+| Device | XIAO nRF52840 Sense wake word | `firmware/wakeword` on the desk board |
 | Companion | phone and web Talk screen: one turn, spoken reply, the request runs the tool | now |
 
 Key design choice: the agent lives in the API behind one endpoint (for example `POST /v1/agent`). Every input calls the same endpoint: the laptop now, the ESP32 later, the phone after that. Swapping inputs never means rewriting the agent.
@@ -50,7 +50,8 @@ Reuse what works. Don't rebuild it.
 - Log errors and handle them clearly at every layer.
 - Don't optimize the enclosure, industrial design, manufacturing, or battery yet.
 - The color-clip BLE scan is off in the phone and the website. Leave `/v1/matches` and `/v1/ble/sightings` in the API. Don't put the scan UI back.
-- New device code is `firmware/voice-esp32` only. Leave the color-ring sketches alone. BLE audio stays off until the BLE board is here.
+- Leave the color-ring sketches alone. New XIAO voice code goes in `firmware/wakeword`.
+- Third-party software is a reference. `third_party/omi` is read-only. Borrow a pinout or idea only after it passes the Nearby rules: no room recording, no model keys in firmware, one spoken turn, color-ring sketches left in place. Omi's always-on capture, Opus stream, SD storage, and devkit speaker do not get copied in as the firmware to flash. Use `.cursor/skills/third-party-nearby/SKILL.md`.
 
 ## Priorities (in order)
 

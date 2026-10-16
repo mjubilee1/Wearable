@@ -1,14 +1,8 @@
-"use client";
-
 import Link from "next/link";
-import { useAuth } from "@/lib/auth-context";
-import { MarketingAccountLink } from "@/components/MarketingAccountLink";
 
 const LINKS = [{ href: "/pricing", label: "Pricing" }] as const;
 
 export function MarketingNav() {
-  const { loading, user } = useAuth();
-
   return (
     <header className="sticky top-0 z-50 border-b border-ink/15 bg-paper text-ink">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-5">
@@ -24,23 +18,14 @@ export function MarketingNav() {
             ))}
           </nav>
         </div>
-        {loading ? (
-          <span className="h-9 w-28" aria-hidden />
-        ) : user ? (
-          <MarketingAccountLink
-            className="bg-ink px-3 py-2 text-sm font-semibold text-white"
-            signedInLabel="Open the app"
-          />
-        ) : (
-          <div className="flex items-center gap-5">
-            <Link href="/login" className="text-sm text-muted hover:text-ink">
-              Sign in
-            </Link>
-            <Link href="/signup" className="bg-ink px-3 py-2 text-sm font-semibold text-white">
-              Sign up
-            </Link>
-          </div>
-        )}
+        <div className="flex items-center gap-5">
+          <Link href="/login" className="text-sm text-muted hover:text-ink">
+            Sign in
+          </Link>
+          <Link href="/signup" className="bg-ink px-3 py-2 text-sm font-semibold text-white">
+            Sign up
+          </Link>
+        </div>
       </div>
     </header>
   );

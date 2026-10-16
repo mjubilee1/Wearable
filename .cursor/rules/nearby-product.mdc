@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Nearby product decision
 
-Source of truth: `nearby-product-and-icp.md` (Sun Oct 11, 2026). The Oct 9 color-clip brief is retired. Do not apply those locks, and do not extend the color-ring demo.
+Source of truth: `nearby-product-and-icp.md` (Fri Oct 16, 2026). The Oct 9 color-clip brief is retired. Do not apply those locks, and do not extend the color-ring demo.
 
 Nearby is a voice-first wearable AI assistant. You speak, it uses tools, and it answers out loud. Domain: nearbyhello.com. The social "say hello" layer is later and out of scope for this phase.
 
@@ -18,7 +18,9 @@ M1: speak through the laptop, the phone, or AirPods and get a spoken answer. One
 - Don't put permanent API secrets in firmware. Devices authenticate; the backend holds model keys.
 - Short spoken replies. A spoken request runs the tool in that turn. Nearby does not record the room, and it does not ask again before a note, reminder, memory, or calendar check.
 - Design against recent failures: not a phone-in-a-box (Rabbit), not an always-on recorder (Omi), not a chatty companion (Friend). Prove the daily job on laptop/AirPods before selling a gadget.
-- Leave the color-ring sketches under `firmware/` in place. Don't extend them. The new device project is `firmware/voice-esp32`: Wi-Fi, a serial stand-in for the mic, and `POST /v1/agent`. The chip on the desk has no BLE. `NEARBY_HAS_BLE` stays 0 until the BLE board arrives. AirPods go through the laptop or phone, not the board.
+- Leave the color-ring sketches under `firmware/` in place. Don't extend them. AirPods go through the laptop or phone, not the board.
+- Desk board (Oct 16 2026): Seeed XIAO nRF52840 Sense, the same module Omi's devkit uses. USB identity `2886:8045`. Flash `firmware/wakeword` with `-e xiaoblesense`. The old QT Py sketch is gone.
+- Third-party trees such as `third_party/omi` are read-only references. Before copying any of that code into `firmware/`, follow `.cursor/skills/third-party-nearby/SKILL.md` and keep every Nearby rule below. Omi's always-on recorder does not become Nearby firmware.
 - The color-clip BLE scan is removed from the phone and the website. Leave `/v1/matches` and `/v1/ble/sightings` in the API. Don't put the scan UI back.
 - First physical form is a necklace / pendant prototype, not a watch. Don't polish enclosure, industrial design, manufacturing, or battery yet.
 - Posted links use `?utm_source=instagram` (or `tiktok`, `linkedin`). The waitlist stores that value so the channel is visible on the signup.
