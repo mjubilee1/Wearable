@@ -1,8 +1,35 @@
 import { Tabs } from "expo-router";
-import { Text } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { Text, type ColorValue } from "react-native";
 import { ConnectorSetupPrompt } from "@/components/ConnectorSetupPrompt";
 import { PendantProvider } from "@/components/PendantSession";
 import { colors } from "@/lib/theme";
+
+const TAB_ICONS = {
+  activity: { outline: "mic-outline", filled: "mic" },
+  messages: { outline: "chatbubble-outline", filled: "chatbubble" },
+  connectors: { outline: "git-network-outline", filled: "git-network" },
+  profile: { outline: "person-outline", filled: "person" },
+} as const;
+
+function TabIcon({
+  name,
+  color,
+  focused,
+}: {
+  name: keyof typeof TAB_ICONS;
+  color: ColorValue;
+  focused: boolean;
+}) {
+  const icon = TAB_ICONS[name];
+  return (
+    <Ionicons
+      name={focused ? icon.filled : icon.outline}
+      size={22}
+      color={color}
+    />
+  );
+}
 
 function TabLabel({
   label,
@@ -45,6 +72,9 @@ export default function TabsLayout() {
         name="activity"
         options={{
           title: "Talk",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="activity" color={color} focused={focused} />
+          ),
           tabBarLabel: ({ focused }) => (
             <TabLabel label="Talk" focused={focused} />
           ),
@@ -54,6 +84,9 @@ export default function TabsLayout() {
         name="messages"
         options={{
           title: "Messages",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="messages" color={color} focused={focused} />
+          ),
           tabBarLabel: ({ focused }) => (
             <TabLabel label="Messages" focused={focused} />
           ),
@@ -63,6 +96,9 @@ export default function TabsLayout() {
         name="connectors"
         options={{
           title: "Connectors",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="connectors" color={color} focused={focused} />
+          ),
           tabBarLabel: ({ focused }) => (
             <TabLabel label="Connectors" focused={focused} />
           ),
@@ -72,6 +108,9 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: "Profile",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="profile" color={color} focused={focused} />
+          ),
           tabBarLabel: ({ focused }) => (
             <TabLabel label="Profile" focused={focused} />
           ),
