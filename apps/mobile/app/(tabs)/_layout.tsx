@@ -1,5 +1,7 @@
 import { Tabs } from "expo-router";
 import { Text } from "react-native";
+import { ConnectorSetupPrompt } from "@/components/ConnectorSetupPrompt";
+import { PendantProvider } from "@/components/PendantSession";
 import { colors } from "@/lib/theme";
 
 function TabLabel({
@@ -24,6 +26,7 @@ function TabLabel({
 
 export default function TabsLayout() {
   return (
+    <PendantProvider>
     <Tabs
       initialRouteName="activity"
       screenOptions={{
@@ -48,6 +51,24 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="messages"
+        options={{
+          title: "Messages",
+          tabBarLabel: ({ focused }) => (
+            <TabLabel label="Messages" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="connectors"
+        options={{
+          title: "Connectors",
+          tabBarLabel: ({ focused }) => (
+            <TabLabel label="Connectors" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
@@ -57,5 +78,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    <ConnectorSetupPrompt />
+    </PendantProvider>
   );
 }

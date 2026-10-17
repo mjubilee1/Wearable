@@ -24,7 +24,7 @@ service cloud.firestore {
     function profileFieldsOnly() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         'name', 'age', 'role', 'interests', 'photoUrl', 'bio', 'lookingFor',
-        'prompts', 'vibes', 'deviceId', 'updatedAt', 'initials', 'avatarHue',
+        'prompts', 'vibes', 'deviceId', 'pendantId', 'updatedAt', 'initials', 'avatarHue',
         'email', 'connectorSetupDismissedAt', 'timeZone'
       ]);
     }
@@ -142,6 +142,10 @@ service cloud.firestore {
     }
 
     match /rateLimits/{limitId} {
+      allow read, write: if false;
+    }
+
+    match /inviteCodes/{code} {
       allow read, write: if false;
     }
 

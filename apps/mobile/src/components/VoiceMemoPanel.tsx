@@ -234,12 +234,34 @@ export function VoiceMemoPanel() {
   const data = memosQuery.data;
   const isPro = data?.usage.plan === "pro";
   const atLimit = data?.usage.remainingMinutes === 0;
+  const memos = data?.memos ?? [];
+  const expanded = recorderState.isRecording || memos.length > 0;
+
+  if (!expanded) {
+    return (
+      <View style={styles.quiet}>
+        <Text style={styles.quietLabel}>Voice memo</Text>
+        {!memosQuery.isLoading && !isPro ? (
+          <Pressable onPress={() => void Linking.openURL("https://nearbyhello.com/pricing")}>
+            <Text style={styles.upgrade}>Upgrade</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            disabled={busy || atLimit || memosQuery.isLoading}
+            onPress={() => void startRecording()}
+          >
+            <Text style={styles.upgrade}>{busy ? "Creating recap…" : "Record"}</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.section}>
       <View style={styles.heading}>
         <View style={styles.headingCopy}>
-          <Text style={styles.label}>Voice memo recap</Text>
+          <Text style={styles.label}>Voice memo</Text>
           <Text style={styles.help}>
             Record up to 5 minutes. Nearby creates a recap and follow-ups for you to confirm.
           </Text>
@@ -288,7 +310,7 @@ export function VoiceMemoPanel() {
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {(data?.memos ?? []).map((memo) => (
+      {memos.map((memo) => (
         <View key={memo.id} style={styles.memo}>
           <Text style={styles.recap}>{memo.recap}</Text>
           <Text style={styles.transcriptLabel}>Transcript</Text>
@@ -378,6 +400,12 @@ export function VoiceMemoPanel() {
 }
 
 const styles = StyleSheet.create({
+  quiet: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  quietLabel: { fontSize: 14, color: colors.muted },
   section: {
     marginTop: 8,
     borderRadius: 24,

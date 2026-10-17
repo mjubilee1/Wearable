@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, usePathname, useRouter, useSegments } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clientNeedsEmailVerification, INVITE_STORAGE_KEY, inviteCodeFromPath } from "@nearby/shared";
+import { acceptInvite } from "@/lib/phone-messaging";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { clientNeedsEmailVerification } from "@nearby/shared";
 import { VerifyEmailScreen } from "@/components/VerifyEmailScreen";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
@@ -13,10 +15,12 @@ function AuthGate({ children }: { children: ReactNode }) {
   const segments = useSegments();
   const router = useRouter();
 
+  const pathname = usePathname();
   const root = segments[0];
   const inAuthGroup = root === "(auth)";
   const onIndex = root === undefined || root === "index";
   const onOnboarding = root === "onboarding";
+  const onInvite = root === "invite";
   const createdAtMs = user
     ? Date.parse(user.metadata.creationTime ?? "") || 0
     : 0;
@@ -29,15 +33,35 @@ function AuthGate({ children }: { children: ReactNode }) {
     : false;
 
   useEffect(() => {
+    const code = inviteCodeFromPath(pathname);
+    if (!code) return;
+    void AsyncStorage.setItem(INVITE_STORAGE_KEY, code);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    void AsyncStorage.getItem(INVITE_STORAGE_KEY).then((code) => {
+      if (cancelled || !code) return;
+      return user.getIdToken().then((token) => acceptInvite(token, code)).then(() => {
+        if (!cancelled) return AsyncStorage.removeItem(INVITE_STORAGE_KEY);
+      });
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
     if (loading) return;
-    if (!user && !inAuthGroup) {
+    if (!user && !inAuthGroup && !onInvite) {
       router.replace("/(auth)/login");
       return;
     }
     if (!user) return;
     if (needsEmail) return;
     if (!profile) return;
-    if (profile.phoneOnboardingRequired && !onOnboarding) {
+    if (profile.phoneOnboardingRequired && !onOnboarding && !onInvite) {
       router.replace("/onboarding");
       return;
     }
@@ -45,7 +69,7 @@ function AuthGate({ children }: { children: ReactNode }) {
     if ((inAuthGroup || onIndex) && !profile.phoneOnboardingRequired) {
       router.replace("/(tabs)/activity");
     }
-  }, [user, profile, loading, needsEmail, inAuthGroup, onIndex, onOnboarding, router]);
+  }, [user, profile, loading, needsEmail, inAuthGroup, onIndex, onOnboarding, onInvite, router]);
 
   if (loading || (user && !profile && !needsEmail)) {
     return (
@@ -56,7 +80,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (user && needsEmail) return <VerifyEmailScreen />;
-  if (!user && !inAuthGroup) return null;
+  if (!user && !inAuthGroup && !onInvite) return null;
   if (user && (inAuthGroup || onIndex)) return null;
 
   return <>{children}</>;

@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DEFAULT_PHONE_COUNTRY, toE164Phone, type PhoneCountryCode } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
+import { PhoneNumberField } from "@/components/PhoneNumberField";
 import {
   checkPhoneVerification,
   getPhone,
@@ -22,6 +24,7 @@ export function PhoneSetup({
   const [status, setStatus] = useState<PhoneStatus | null>(null);
   const [quote, setQuote] = useState<PhoneQuote | null>(null);
   const [choice, setChoice] = useState<"personal" | "assigned" | null>(null);
+  const [country, setCountry] = useState<PhoneCountryCode>(DEFAULT_PHONE_COUNTRY);
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
@@ -47,8 +50,14 @@ export function PhoneSetup({
   async function sendCode() {
     setBusy(true);
     setError(null);
+    const e164 = toE164Phone(country, phone);
+    if (!e164) {
+      setError("Enter a valid mobile number for this country.");
+      setBusy(false);
+      return;
+    }
     try {
-      await startPhoneVerification(await token(), phone);
+      await startPhoneVerification(await token(), e164);
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send code");
@@ -155,17 +164,14 @@ export function PhoneSetup({
         <div className="mt-5 space-y-3">
           {!sent ? (
             <>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold text-ink">Mobile number</span>
-                <input
-                  type="tel"
-                  autoComplete="tel"
-                  placeholder="+1 415 555 0123"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  className="w-full rounded-2xl border border-black/10 px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
-                />
-              </label>
+              <PhoneNumberField
+                country={country}
+                national={phone}
+                onChange={(next) => {
+                  setCountry(next.country);
+                  setPhone(next.national);
+                }}
+              />
               <button type="button" disabled={busy} onClick={sendCode} className="w-full rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-60">
                 {busy ? "Sending…" : "Send verification code"}
               </button>

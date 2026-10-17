@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Message } from "@nearby/shared";
+import { groupChatMessages, messageClock, type Message } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import {
   blockConversation,
@@ -23,12 +23,16 @@ import {
 } from "@/lib/phone-messaging";
 import { colors } from "@/lib/theme";
 
+type Row =
+  | { kind: "day"; id: string; label: string }
+  | { kind: "bubble"; id: string; message: Message; mine: boolean; last: boolean };
+
 export default function ChatScreen() {
   const { conversationId: rawId } = useLocalSearchParams<{ conversationId: string }>();
   const conversationId = String(rawId);
   const router = useRouter();
   const queryClient = useQueryClient();
-  const listRef = useRef<FlatList<Message>>(null);
+  const listRef = useRef<FlatList<Row>>(null);
   const { user } = useAuth();
   const [content, setContent] = useState("");
   const token = () => user!.getIdToken();
@@ -44,18 +48,56 @@ export default function ChatScreen() {
     queryFn: async () => getMessages(await token(), conversationId).then((r) => r.messages),
   });
   const send = useMutation({
-    mutationFn: async () => postMessage(await token(), conversationId, content),
-    onSuccess: async () => {
+    mutationFn: async (text: string) => postMessage(await token(), conversationId, text),
+    onMutate: async (text) => {
       setContent("");
+      await queryClient.cancelQueries({ queryKey: ["messages", conversationId] });
+      const previous = queryClient.getQueryData<Message[]>(["messages", conversationId]);
+      const optimistic: Message = {
+        id: `pending-${Date.now()}`,
+        conversationId,
+        senderId: user?.uid ?? "",
+        recipientId: "",
+        content: text,
+        messageType: "TEXT",
+        deliveryStatus: "SENT",
+        createdAt: Date.now(),
+      };
+      queryClient.setQueryData<Message[]>(["messages", conversationId], [
+        ...(previous ?? []),
+        optimistic,
+      ]);
+      return { previous, text };
+    },
+    onError: (_error, _text, context) => {
+      if (context?.text) setContent(context.text);
+      if (context?.previous) {
+        queryClient.setQueryData(["messages", conversationId], context.previous);
+      }
+    },
+    onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
       await queryClient.invalidateQueries({ queryKey: ["conversations", user?.uid] });
     },
   });
   const other = conversations.data?.find((row) => row.id === conversationId)?.other;
+  const rows: Row[] = groupChatMessages(messages.data ?? []).flatMap((group) => {
+    const day: Row = { kind: "day", id: `day-${group.day}`, label: group.day };
+    const bubbles = group.clusters.flatMap((cluster) =>
+      cluster.messages.map((message, index) => ({
+        kind: "bubble" as const,
+        id: message.id,
+        message,
+        mine: message.senderId === user?.uid,
+        last: index === cluster.messages.length - 1,
+      })),
+    );
+    return [day, ...bubbles];
+  });
 
   useEffect(() => {
-    if (messages.data?.length) listRef.current?.scrollToEnd({ animated: true });
-  }, [messages.data?.length]);
+    if (rows.length) listRef.current?.scrollToEnd({ animated: true });
+  }, [rows.length]);
 
   function confirmBlock() {
     Alert.alert("Block this person?", "They will no longer be able to message you.", [
@@ -85,29 +127,66 @@ export default function ChatScreen() {
     ]);
   }
 
+  function openActions() {
+    Alert.alert(other?.name ?? "Conversation", undefined, [
+      { text: "Report", onPress: confirmReport },
+      { text: "Block", style: "destructive", onPress: confirmBlock },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}><Text style={styles.link}>Back</Text></Pressable>
-        <View style={styles.heading}><Text style={styles.name}>{other?.name ?? "Conversation"}</Text><Text style={styles.muted}>Nearby message</Text></View>
-        <View style={styles.actions}>
-          <Pressable onPress={confirmReport}><Text style={styles.smallAction}>Report</Text></Pressable>
-          <Pressable onPress={confirmBlock}><Text style={styles.block}>Block</Text></Pressable>
+        <Pressable onPress={() => router.back()} hitSlop={8}>
+          <Text style={styles.back}>‹</Text>
+        </Pressable>
+        <View style={[styles.avatar, { backgroundColor: `hsl(${other?.avatarHue ?? 168}, 55%, 42%)` }]}>
+          <Text style={styles.avatarText}>{other?.initials ?? "•"}</Text>
         </View>
+        <View style={styles.heading}>
+          <Text numberOfLines={1} style={styles.name}>{other?.name ?? "Conversation"}</Text>
+          <Text style={styles.muted}>Message</Text>
+        </View>
+        <Pressable onPress={openActions} hitSlop={8}>
+          <Text style={styles.more}>···</Text>
+        </Pressable>
       </View>
       <FlatList
         ref={listRef}
-        data={messages.data ?? []}
+        data={rows}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messages}
-        ListEmptyComponent={<Text style={messages.error ? styles.error : styles.empty}>{messages.error?.message ?? (messages.isLoading ? "Loading messages…" : "Say hello to start the conversation.")}</Text>}
+        ListEmptyComponent={
+          <Text style={messages.error ? styles.error : styles.empty}>
+            {messages.error?.message ??
+              (messages.isLoading ? "Loading messages…" : "Say hello to start the conversation.")}
+          </Text>
+        }
         renderItem={({ item }) => {
-          const mine = item.senderId === user?.uid;
+          if (item.kind === "day") {
+            return <Text style={styles.day}>{item.label}</Text>;
+          }
+          const pending = item.message.id.startsWith("pending-");
           return (
-            <View style={[styles.bubbleRow, mine ? styles.mineRow : styles.theirRow]}>
-              <View style={[styles.bubble, mine ? styles.mineBubble : styles.theirBubble]}>
-                <Text style={mine ? styles.mineText : styles.theirText}>{item.content}</Text>
-                <Text style={mine ? styles.mineTime : styles.theirTime}>{new Date(item.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</Text>
+            <View style={[styles.bubbleRow, item.mine ? styles.mineRow : styles.theirRow, pending && styles.pending]}>
+              <View
+                style={[
+                  styles.bubble,
+                  item.mine ? styles.mineBubble : styles.theirBubble,
+                  item.last
+                    ? item.mine
+                      ? styles.mineTail
+                      : styles.theirTail
+                    : null,
+                ]}
+              >
+                <Text style={item.mine ? styles.mineText : styles.theirText}>{item.message.content}</Text>
+                {item.last ? (
+                  <Text style={item.mine ? styles.mineTime : styles.theirTime}>
+                    {pending ? "Sending…" : messageClock(item.message.createdAt)}
+                  </Text>
+                ) : null}
               </View>
             </View>
           );
@@ -115,8 +194,22 @@ export default function ChatScreen() {
       />
       {send.error ? <Text style={styles.sendError}>{send.error.message}</Text> : null}
       <View style={styles.composer}>
-        <TextInput value={content} onChangeText={setContent} maxLength={2_000} placeholder="Message" placeholderTextColor={colors.muted} style={styles.input} />
-        <Pressable disabled={!content.trim() || send.isPending} onPress={() => send.mutate()} style={[styles.send, (!content.trim() || send.isPending) && styles.disabled]}><Text style={styles.sendText}>Send</Text></Pressable>
+        <TextInput
+          value={content}
+          onChangeText={setContent}
+          maxLength={2_000}
+          placeholder="Message"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          multiline
+        />
+        <Pressable
+          disabled={!content.trim() || send.isPending}
+          onPress={() => send.mutate(content.trim())}
+          style={[styles.send, (!content.trim() || send.isPending) && styles.disabled]}
+        >
+          <Text style={styles.sendText}>↑</Text>
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
@@ -124,31 +217,79 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
-  header: { paddingTop: 52, paddingHorizontal: 14, paddingBottom: 12, flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  link: { fontSize: 13, fontWeight: "700", color: colors.teal },
+  header: {
+    paddingTop: 52,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.card,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  back: { fontSize: 28, fontWeight: "600", color: colors.teal, lineHeight: 30 },
+  avatar: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  avatarText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   heading: { flex: 1 },
-  name: { fontSize: 15, fontWeight: "700", color: colors.ink },
-  muted: { fontSize: 11, color: colors.muted },
-  actions: { flexDirection: "row", gap: 10 },
-  smallAction: { fontSize: 11, fontWeight: "700", color: colors.muted },
-  block: { fontSize: 11, fontWeight: "700", color: colors.coral },
-  messages: { flexGrow: 1, padding: 14, gap: 8, justifyContent: "flex-end" },
-  bubbleRow: { flexDirection: "row" },
+  name: { fontSize: 16, fontWeight: "700", color: colors.ink },
+  muted: { fontSize: 12, color: colors.muted },
+  more: { fontSize: 20, color: colors.muted, fontWeight: "700" },
+  messages: { flexGrow: 1, padding: 12, gap: 4, justifyContent: "flex-end" },
+  day: {
+    alignSelf: "center",
+    marginVertical: 8,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.muted,
+  },
+  bubbleRow: { flexDirection: "row", marginBottom: 2 },
   mineRow: { justifyContent: "flex-end" },
   theirRow: { justifyContent: "flex-start" },
-  bubble: { maxWidth: "80%", borderRadius: 22, paddingHorizontal: 14, paddingVertical: 9 },
+  pending: { opacity: 0.7 },
+  bubble: { maxWidth: "80%", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
   mineBubble: { backgroundColor: colors.teal },
   theirBubble: { backgroundColor: colors.card },
-  mineText: { fontSize: 14, color: "#fff" },
-  theirText: { fontSize: 14, color: colors.ink },
-  mineTime: { marginTop: 3, fontSize: 9, color: "rgba(255,255,255,0.7)" },
-  theirTime: { marginTop: 3, fontSize: 9, color: colors.muted },
-  empty: { textAlign: "center", fontSize: 13, color: colors.muted },
-  error: { textAlign: "center", fontSize: 13, color: colors.coral },
+  mineTail: { borderBottomRightRadius: 6 },
+  theirTail: { borderBottomLeftRadius: 6 },
+  mineText: { fontSize: 16, color: "#fff" },
+  theirText: { fontSize: 16, color: colors.ink },
+  mineTime: { marginTop: 3, fontSize: 10, color: "rgba(255,255,255,0.7)" },
+  theirTime: { marginTop: 3, fontSize: 10, color: colors.muted },
+  empty: { textAlign: "center", marginTop: 40, fontSize: 14, color: colors.muted },
+  error: { textAlign: "center", marginTop: 40, fontSize: 14, color: colors.coral },
   sendError: { backgroundColor: colors.coralSoft, paddingHorizontal: 14, paddingVertical: 6, color: colors.coral },
-  composer: { flexDirection: "row", gap: 8, padding: 12, backgroundColor: colors.card, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  input: { flex: 1, borderRadius: 24, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 16, paddingVertical: 11, color: colors.ink },
-  send: { borderRadius: 24, backgroundColor: colors.teal, paddingHorizontal: 18, justifyContent: "center" },
-  sendText: { fontSize: 14, fontWeight: "700", color: "#fff" },
-  disabled: { opacity: 0.5 },
+  composer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    padding: 10,
+    backgroundColor: colors.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  input: {
+    flex: 1,
+    maxHeight: 120,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: colors.ink,
+    fontSize: 16,
+  },
+  send: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.teal,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendText: { fontSize: 18, fontWeight: "700", color: "#fff" },
+  disabled: { opacity: 0.4 },
 });

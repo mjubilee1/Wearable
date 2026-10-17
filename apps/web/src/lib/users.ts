@@ -71,6 +71,10 @@ function mapUser(id: string, data: DocumentData): UserProfile {
       data.deviceId === undefined || data.deviceId === null
         ? null
         : String(data.deviceId),
+    pendantId:
+      data.pendantId === undefined || data.pendantId === null
+        ? null
+        : String(data.pendantId),
     plan: normalizePlan(data.plan),
     subscriptionStatus: (typeof data.subscriptionStatus === "string"
       ? data.subscriptionStatus
@@ -168,6 +172,7 @@ export async function createUserProfile(input: {
     prompts: [],
     vibes: [],
     deviceId: null,
+    pendantId: null,
     plan: "free",
     subscriptionStatus: "none",
     stripeCustomerId: null,
@@ -217,6 +222,7 @@ export async function updateUserProfile(
   if (patch.prompts !== undefined) updates.prompts = patch.prompts;
   if (patch.vibes !== undefined) updates.vibes = patch.vibes;
   if (patch.deviceId !== undefined) updates.deviceId = patch.deviceId;
+  if (patch.pendantId !== undefined) updates.pendantId = patch.pendantId;
   if (patch.connectorSetupDismissedAt !== undefined) {
     updates.connectorSetupDismissedAt = patch.connectorSetupDismissedAt;
   }

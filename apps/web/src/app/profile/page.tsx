@@ -2,7 +2,7 @@
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { isEmailLikeName } from "@nearby/shared";
+import { isEmailLikeName, pendantDisplayName } from "@nearby/shared";
 import { PlansCard } from "@/components/PlansCard";
 import { ReferralCard } from "@/components/ReferralCard";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
@@ -101,6 +101,15 @@ export default function ProfilePage() {
           </div>
           <span className="text-sm font-semibold text-teal">Open</span>
         </Link>
+
+        <section className="mb-6 rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm">
+          <p className="text-sm font-bold text-ink">Pendant</p>
+          <p className="mt-1 text-sm text-muted">
+            {profile.pendantId
+              ? `${pendantDisplayName(profile.pendantId)} is on this account. The phone app connects to it.`
+              : "Not added yet. Sign in on the phone and tap Add pendant."}
+          </p>
+        </section>
 
         <Link
           href="/connectors"

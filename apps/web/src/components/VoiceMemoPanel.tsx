@@ -22,6 +22,48 @@ function timeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
 }
 
+function RecordingNotice({
+  onContinue,
+  onCancel,
+}: {
+  onContinue: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="recording-notice-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+    >
+      <div className="w-full max-w-md rounded-3xl bg-card p-6 shadow-xl">
+        <h2 id="recording-notice-title" className="text-lg font-bold text-ink">
+          Before you record
+        </h2>
+        <p className="mt-3 text-sm leading-6 text-muted">
+          Only record others with their permission. You&apos;re responsible for following local recording laws.
+        </p>
+        <div className="mt-5 flex gap-2">
+          <button
+            type="button"
+            onClick={onContinue}
+            className="rounded-2xl bg-teal px-4 py-2 text-sm font-semibold text-white"
+          >
+            Continue
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-2xl border border-black/10 px-4 py-2 text-sm font-semibold text-ink"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function actionTitle(action: VoiceMemoAction): string {
   if (action.type === "reminder") return "Reminder";
   if (action.type === "calendar_event") return "Calendar event";
@@ -222,13 +264,73 @@ export function VoiceMemoPanel() {
   const data = memosQuery.data;
   const isPro = data?.usage.plan === "pro";
   const atLimit = data?.usage.remainingMinutes === 0;
+  const memos = data?.memos ?? [];
+  const expanded = recording || memos.length > 0;
+
+  const recordControl =
+    !memosQuery.isLoading && !isPro ? (
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          className="rounded-2xl border border-teal/30 bg-teal-soft px-5 py-3 text-sm font-semibold text-teal"
+          onClick={() => setError("Voice Memo Recap is a Pro feature.")}
+        >
+          Record
+        </button>
+        <Link href="/pricing" className="text-sm font-semibold text-teal underline">
+          Upgrade to Pro
+        </Link>
+      </div>
+    ) : (
+      <button
+        type="button"
+        disabled={busy || Boolean(atLimit) || memosQuery.isLoading}
+        onClick={recording ? stopRecording : () => void beginRecording()}
+        className={`rounded-2xl px-5 py-3 text-sm font-semibold text-white disabled:opacity-60 ${
+          recording ? "bg-coral" : "bg-teal"
+        }`}
+      >
+        {recording ? `Stop · ${clock(elapsed)}` : busy ? "Creating recap…" : "Record"}
+      </button>
+    );
+
+  if (!expanded) {
+    return (
+      <>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted">Voice memo</p>
+          {!memosQuery.isLoading && !isPro ? (
+            <Link href="/pricing" className="text-sm font-semibold text-teal">
+              Upgrade
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled={busy || Boolean(atLimit) || memosQuery.isLoading}
+              onClick={() => void beginRecording()}
+              className="text-sm font-semibold text-teal disabled:opacity-60"
+            >
+              {busy ? "Creating recap…" : "Record"}
+            </button>
+          )}
+        </div>
+        {error ? <p className="text-sm text-coral">{error}</p> : null}
+        {noticeOpen ? (
+          <RecordingNotice
+            onContinue={acceptNotice}
+            onCancel={() => setNoticeOpen(false)}
+          />
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
-            Voice memo recap
+            Voice memo
           </p>
           <p className="mt-2 text-sm text-muted">
             Record up to 5 minutes. Nearby creates a recap and follow-ups for you to confirm.
@@ -241,31 +343,7 @@ export function VoiceMemoPanel() {
         ) : null}
       </div>
 
-      {!memosQuery.isLoading && !isPro ? (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="rounded-2xl border border-teal/30 bg-teal-soft px-5 py-3 text-sm font-semibold text-teal"
-            onClick={() => setError("Voice Memo Recap is a Pro feature.")}
-          >
-            Record
-          </button>
-          <Link href="/pricing" className="text-sm font-semibold text-teal underline">
-            Upgrade to Pro
-          </Link>
-        </div>
-      ) : (
-        <button
-          type="button"
-          disabled={busy || Boolean(atLimit)}
-          onClick={recording ? stopRecording : () => void beginRecording()}
-          className={`mt-4 rounded-2xl px-5 py-3 text-sm font-semibold text-white disabled:opacity-60 ${
-            recording ? "bg-coral" : "bg-teal"
-          }`}
-        >
-          {recording ? `Stop · ${clock(elapsed)}` : busy ? "Creating recap…" : "Record"}
-        </button>
-      )}
+      <div className="mt-4">{recordControl}</div>
       {atLimit ? (
         <p className="mt-3 text-sm text-muted">
           You&apos;ve used this month&apos;s 300 voice memo minutes. Your minutes reset next month.
@@ -273,8 +351,9 @@ export function VoiceMemoPanel() {
       ) : null}
       {error ? <p className="mt-3 text-sm text-coral">{error}</p> : null}
 
+      {memos.length > 0 ? (
       <div className="mt-5 space-y-4">
-        {(data?.memos ?? []).map((memo) => (
+        {memos.map((memo) => (
           <article key={memo.id} className="rounded-2xl bg-surface p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -402,39 +481,13 @@ export function VoiceMemoPanel() {
           </article>
         ))}
       </div>
+      ) : null}
 
       {noticeOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="recording-notice-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        >
-          <div className="w-full max-w-md rounded-3xl bg-card p-6 shadow-xl">
-            <h2 id="recording-notice-title" className="text-lg font-bold text-ink">
-              Before you record
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-muted">
-              Only record others with their permission. You&apos;re responsible for following local recording laws.
-            </p>
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                onClick={acceptNotice}
-                className="rounded-2xl bg-teal px-4 py-2 text-sm font-semibold text-white"
-              >
-                Continue
-              </button>
-              <button
-                type="button"
-                onClick={() => setNoticeOpen(false)}
-                className="rounded-2xl border border-black/10 px-4 py-2 text-sm font-semibold text-ink"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <RecordingNotice
+          onContinue={acceptNotice}
+          onCancel={() => setNoticeOpen(false)}
+        />
       ) : null}
     </section>
   );

@@ -1,6 +1,9 @@
 import Link from "next/link";
 
-const LINKS = [{ href: "/pricing", label: "Pricing" }] as const;
+const LINKS = [
+  { href: "/#messages", label: "Messages" },
+  { href: "/pricing", label: "Pricing" },
+] as const;
 
 export function MarketingNav() {
   return (

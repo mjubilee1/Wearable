@@ -46,6 +46,7 @@ import { LimitReachedError } from "./limits.js";
 import { consumeDemoTry, runDemoTurn } from "./demo.js";
 import { facilitateMatch } from "./facilitate.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
+import { acceptInvite, createInvite, InviteError } from "./invites.js";
 import { deleteAllMemories } from "./memories.js";
 import {
   buildGoogleAuthUrl,
@@ -62,6 +63,7 @@ import {
   decideVoiceMemoAction,
   deleteVoiceMemo,
   listVoiceMemos,
+  transcribeAudio,
 } from "./voice-memos.js";
 import {
   PhoneError,
@@ -410,6 +412,41 @@ app.post("/v1/agent", async (c) => {
   }
 });
 
+app.post("/v1/agent/speech", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = await c.req.json().catch(() => null);
+  const audioBase64 =
+    body && typeof body === "object"
+      ? (body as { audioBase64?: unknown }).audioBase64
+      : null;
+  const timeZone =
+    body && typeof body === "object"
+      ? (body as { timeZone?: unknown }).timeZone
+      : undefined;
+  if (typeof audioBase64 !== "string" || audioBase64.length < 100) {
+    return c.json({ error: "Missing audio" }, 400);
+  }
+  if (audioBase64.length > 8_000_000) {
+    return c.json({ error: "Audio is too long" }, 400);
+  }
+  try {
+    const bytes = Buffer.from(audioBase64, "base64");
+    const file = new File([bytes], "turn.wav", { type: "audio/wav" });
+    const { text } = await transcribeAudio(file);
+    return c.json(
+      await runAgentTurn(auth.uid, {
+        text,
+        timeZone: typeof timeZone === "string" ? timeZone : undefined,
+      }),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed";
+    console.error("[agent-speech]", message);
+    return c.json({ error: message }, 400);
+  }
+});
+
 app.get("/v1/agent/memories", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
@@ -639,10 +676,55 @@ app.post("/v1/phone/provision", async (c) => {
   }
 });
 
+app.post("/v1/invites", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json(await createInvite(auth.uid));
+  } catch (error) {
+    const status = error instanceof InviteError ? error.status : 500;
+    return c.json(
+      {
+        code: error instanceof InviteError ? error.code : "invite_error",
+        error: error instanceof Error ? error.message : "Could not create an invite",
+      },
+      status as 400,
+    );
+  }
+});
+
+app.post("/v1/invites/:code/accept", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json(await acceptInvite(auth.uid, c.req.param("code")));
+  } catch (error) {
+    const status = error instanceof InviteError ? error.status : 500;
+    return c.json(
+      {
+        code: error instanceof InviteError ? error.code : "invite_error",
+        error: error instanceof Error ? error.message : "Could not accept that invite",
+      },
+      status as 400,
+    );
+  }
+});
+
 app.get("/v1/conversations", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
-  return c.json({ conversations: await listConversations(auth.uid) });
+  try {
+    return c.json({ conversations: await listConversations(auth.uid) });
+  } catch (error) {
+    const status = error instanceof MessagingError ? error.status : 500;
+    return c.json(
+      {
+        code: error instanceof MessagingError ? error.code : "messaging_error",
+        error: error instanceof Error ? error.message : "Could not load conversations",
+      },
+      status as 400,
+    );
+  }
 });
 
 app.post("/v1/conversations", async (c) => {

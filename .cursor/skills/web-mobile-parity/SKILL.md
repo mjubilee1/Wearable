@@ -21,7 +21,7 @@ Product decisions in `nearby-product-and-icp.md` win. The Oct 9 color-clip locks
 
 ## Non-negotiables
 
-1. **Same IA** — Tabs: Talk · Profile. The Talk route stays `/activity` on web and `(tabs)/activity` on mobile. Nearby matches and Connections stay in the repo and redirect to Talk. Auth routes: login, signup, forgot-password. Do not invent a product tab.
+1. **Same IA** — Tabs: Talk · Messages · Connectors · Profile. The Talk route stays `/activity` on web and `(tabs)/activity` on mobile. Messages is `/messages` on both. Connectors is `/connectors` on both. Nearby matches and Connections stay in the repo and redirect to Talk. Auth routes: login, signup, forgot-password. Do not invent another product tab.
 2. **Same identity & data** — Firebase Auth + Firestore profiles/connections. No `Bearer dev` in shipped flows. API calls use real ID tokens.
 3. **Domain logic lives in `@nearby/shared`** — Types, scoring (`compatibilityScore`, `walkByScore`), sanitize helpers, option banks (`VIBE_OPTIONS`, `LOOKING_FOR_OPTIONS`, prompts, interests). Never fork rules between clients.
 4. **Same copy & CTAs** — Match web wording (`Help me say hi`, `Send a hello`, Connections subtabs Incoming/Sent/Connected, accept/decline/cancel/block).
@@ -89,4 +89,4 @@ Not allowed: different auth model, or omitting Profile while claiming parity. Ne
 
 ## Current known gap (update as parity lands)
 
-Mobile mirrors web IA via Expo Router: Firebase auth (login/signup/forgot-password), tabs Talk · Profile, and the Talk screen on the Activity route. Nearby and Connections routes redirect to Talk.
+Mobile mirrors web IA via Expo Router: Firebase auth (login/signup/forgot-password), tabs Talk · Messages · Connectors · Profile, and the Talk screen on the Activity route. Nearby and Connections routes redirect to Talk. Plans and referral stay on the web profile.

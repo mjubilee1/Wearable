@@ -107,6 +107,8 @@ export type UserProfile = {
   vibes?: string[];
   /** Wearable device short ID (e.g. A1B2 from NB-A1B2). */
   deviceId?: string | null;
+  /** Pendant code from the Bluetooth name Nearby AB12. */
+  pendantId?: string | null;
   /** SaaS plan — only the API/webhooks may write this. */
   plan?: PlanTier;
   subscriptionStatus?: SubscriptionStatus;
@@ -191,6 +193,7 @@ export type UpdateUserInput = Partial<
     | "prompts"
     | "vibes"
     | "deviceId"
+    | "pendantId"
     | "connectorSetupDismissedAt"
     | "timeZone"
   >
@@ -212,6 +215,23 @@ export function firstNameFrom(name: string, email?: string | null): string | nul
   const first = name.trim().split(/\s+/)[0];
   return first || null;
 }
+
+export {
+  INVITE_STORAGE_KEY,
+  inviteCodeFromPath,
+  inviteJoinMessage,
+  isInviteCode,
+} from "./invite.js";
+
+export {
+  applyNationalPhoneInput,
+  DEFAULT_PHONE_COUNTRY,
+  listPhoneCountries,
+  phonePlaceholder,
+  toE164Phone,
+  type PhoneCountry,
+  type PhoneCountryCode,
+} from "./phone.js";
 
 /** Where the verification email returns the person after they confirm. */
 export const EMAIL_VERIFICATION_CONTINUE_URL = "https://nearbyhello.com/app";
@@ -353,6 +373,96 @@ export type ConversationSummary = Conversation & {
 };
 
 export const MESSAGE_MAX_LENGTH = 2_000;
+
+const MESSAGE_CLUSTER_GAP_MS = 5 * 60 * 1000;
+
+function startOfLocalDay(timestamp: number): number {
+  const date = new Date(timestamp);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function dayDistance(timestamp: number, now: number): number {
+  return Math.round((startOfLocalDay(now) - startOfLocalDay(timestamp)) / 86_400_000);
+}
+
+/** Day chip inside a thread: Today, Yesterday, a weekday, or a short date. */
+export function messageDayLabel(timestamp: number, now = Date.now()): string {
+  const diff = dayDistance(timestamp, now);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  if (diff > 1 && diff < 7) {
+    return new Date(timestamp).toLocaleDateString(undefined, { weekday: "long" });
+  }
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/** Compact time for an inbox row. */
+export function messageListTime(timestamp: number, now = Date.now()): string {
+  const diff = dayDistance(timestamp, now);
+  if (diff === 0) {
+    return new Date(timestamp).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+  if (diff === 1) return "Yesterday";
+  if (diff > 1 && diff < 7) {
+    return new Date(timestamp).toLocaleDateString(undefined, { weekday: "short" });
+  }
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function messageClock(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export type MessageCluster<T> = {
+  senderId: string;
+  messages: T[];
+};
+
+export type MessageDayGroup<T> = {
+  day: string;
+  clusters: MessageCluster<T>[];
+};
+
+/** Group a thread the way a typical chat does: by day, then by sender bursts. */
+export function groupChatMessages<T extends { createdAt: number; senderId: string }>(
+  messages: T[],
+  now = Date.now(),
+): MessageDayGroup<T>[] {
+  const groups: MessageDayGroup<T>[] = [];
+  for (const message of messages) {
+    const day = messageDayLabel(message.createdAt, now);
+    let group = groups.at(-1);
+    if (!group || group.day !== day) {
+      group = { day, clusters: [] };
+      groups.push(group);
+    }
+    const cluster = group.clusters.at(-1);
+    const previous = cluster?.messages.at(-1);
+    if (
+      cluster &&
+      cluster.senderId === message.senderId &&
+      previous &&
+      message.createdAt - previous.createdAt < MESSAGE_CLUSTER_GAP_MS
+    ) {
+      cluster.messages.push(message);
+    } else {
+      group.clusters.push({ senderId: message.senderId, messages: [message] });
+    }
+  }
+  return groups;
+}
 
 /**
  * What someone may see before a mutual connection.
@@ -607,6 +717,17 @@ export function clipIdFromManufacturerBytes(bytes: Uint8Array | number[]): strin
  * Normalize a clip / device id.
  * Accepts 8-char full id, 4-char short (NB-XXXX / legacy profile), or NB-XXXX.
  */
+/** Bluetooth local name is `Nearby` plus this code, for example `Nearby AB12`. */
+export function pendantCodeFromName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const match = name.trim().match(/^Nearby ([0-9A-Fa-f]{4})$/);
+  return match ? match[1].toUpperCase() : null;
+}
+
+export function pendantDisplayName(code: string): string {
+  return `Nearby ${code.trim().toUpperCase()}`;
+}
+
 export function normalizeDeviceId(raw: string): string | null {
   const trimmed = raw.trim().toUpperCase();
   const withPrefix = trimmed.match(/^NB-([0-9A-F]{4})$/);

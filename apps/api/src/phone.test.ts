@@ -52,6 +52,36 @@ test("provisioning requires confirmation and is idempotent", async () => {
   assert.equal((await getPhoneStatus("user-a")).phoneProvisioningStatus, "ACTIVE");
 });
 
+test("development does not cap verification attempts", async () => {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = "development";
+  try {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await startPhoneVerification("user-dev", "415-555-0199");
+    }
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+  }
+});
+
+test("production caps verification starts at five per hour", async () => {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await startPhoneVerification("user-prod", "+14155550198");
+    }
+    await assert.rejects(
+      startPhoneVerification("user-prod", "+14155550198"),
+      /Try again later/,
+    );
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+  }
+});
+
 test("retries safely after a provisioning failure", async () => {
   process.env.TWILIO_MOCK_PROVISION_FAILURE_ONCE = "true";
   await assert.rejects(

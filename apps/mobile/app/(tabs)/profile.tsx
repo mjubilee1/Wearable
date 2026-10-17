@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { isEmailLikeName } from "@nearby/shared";
+import { PendantCard } from "@/components/PendantSession";
 import { useAuth } from "@/lib/auth-context";
 import { updateUserProfile } from "@/lib/users";
 import { colors } from "@/lib/theme";
@@ -84,6 +85,19 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.settingsOpen}>Open</Text>
         </Pressable>
+
+        <Pressable
+          onPress={() => router.push("/connectors")}
+          style={styles.settingsCard}
+        >
+          <View>
+            <Text style={styles.settingsTitle}>Connectors</Text>
+            <Text style={styles.settingsCopy}>Favorites and Google Calendar</Text>
+          </View>
+          <Text style={styles.settingsOpen}>Open</Text>
+        </Pressable>
+
+        <PendantCard />
 
         <Pressable
           onPress={() => router.push("/settings")}

@@ -8,7 +8,9 @@ A voice-first wearable AI assistant: hands-free access to an agent through the d
 
 Immediate goal: a working proof of concept Montrell uses every day. Practical function over polished hardware.
 
-Domain: [nearbyhello.com](https://www.nearbyhello.com) (bought Oct 11 2026 on Namecheap, pointed at Vercel). The name was chosen so the product can start as a personal assistant and grow into a social, "say hello to people nearby" product later. The social layer is not in scope for this phase.
+Domain: [nearbyhello.com](https://www.nearbyhello.com) (bought Oct 11 2026 on Namecheap, pointed at Vercel). The name was chosen so the product can start as a personal assistant and grow into a social, "say hello to people nearby" product later. The color-clip say-hello layer is not in scope for this phase.
+
+Messaging is a leading feature as of Oct 17 2026, beside Talk. The public story is a message sent from the necklace that lands in a normal chat with someone you know. The thread should feel like the messaging apps people already use. This is in-app messaging. It is not carrier SMS, and it is not a companion that chats for its own sake.
 
 ## Hardware
 

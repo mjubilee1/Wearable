@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CalendarDemo } from "@/components/CalendarDemo";
 import { LandingView } from "@/components/LandingView";
 import { HomepageLiveDemo } from "@/components/HomepageLiveDemo";
+import { NecklaceMessages } from "@/components/NecklaceMessages";
 import { MarketingNav } from "@/components/MarketingNav";
 import { PricingSection } from "@/components/PricingSection";
 import { WaitlistForm } from "@/components/WaitlistForm";
@@ -273,6 +274,8 @@ export default async function HomePage({
           />
         </section>
 
+        <NecklaceMessages />
+
         <HomepageLiveDemo />
 
         <section className="px-5 pb-16" aria-label="Example requests">
@@ -326,6 +329,9 @@ export default async function HomePage({
           </div>
           <div className="flex gap-10 text-sm">
             <div className="flex flex-col gap-2">
+              <a href="#messages" className="text-muted hover:text-ink">
+                Messages
+              </a>
               <a href="#pricing" className="text-muted hover:text-ink">
                 Pricing
               </a>

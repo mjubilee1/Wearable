@@ -20,5 +20,8 @@
   },
   "devDependencies": {
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.13.15"
   }
 }

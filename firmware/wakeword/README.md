@@ -101,6 +101,8 @@ contains no trained weights and intentionally cannot detect a wake word.
 
 ## BLE contract
 
+The board advertises as `Nearby` plus four hex characters from its Bluetooth address, for example `Nearby AB12`. Serial prints `[ble] advertising as Nearby AB12` on boot.
+
 Service: `4e421000-0000-1000-8000-00805f9b34fb`
 
 | Characteristic | UUID suffix | Direction and payload |
@@ -111,7 +113,7 @@ Service: `4e421000-0000-1000-8000-00805f9b34fb`
 
 The firmware requests MTU 247 and sizes packets to the negotiated MTU. A phone
 receiver should subscribe to audio before triggering and concatenate
-notifications in order. This PR deliberately does not change the app.
+notifications in order. The phone app subscribes, wraps the PCM as a WAV, and sends it to `POST /v1/agent/speech`.
 
 ## Tuning
 

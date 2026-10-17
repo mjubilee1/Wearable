@@ -12,9 +12,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentMemoryItem, AgentTurnResponse } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
+import { PendantCard } from "@/components/PendantSession";
 import { VoiceMemoPanel } from "@/components/VoiceMemoPanel";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+
+const EXAMPLES = [
+  "What's on my calendar today?",
+  "Remind me to follow up with the Johnsons Friday",
+  "Summarize unread emails from title and escrow",
+];
 
 function deviceTimeZone(): string {
   try {
@@ -118,25 +125,13 @@ export function TalkPanel() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.eyebrow}>Nearby</Text>
       <Text style={styles.title}>Talk</Text>
-      <Text style={styles.subtitle}>
-        One turn, a short answer out loud, then quiet. Ask for a note, a
-        reminder, or a fact, and it saves it.
-      </Text>
-
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Last reply</Text>
-        <Text style={styles.reply}>
-          {reply ?? "Type what you would say. The phone speaks the answer."}
-        </Text>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-      </View>
+      <Text style={styles.subtitle}>Say or type a request.</Text>
 
       <TextInput
         value={text}
         onChangeText={setText}
-        placeholder="What's on my calendar today?"
+        placeholder="Say or type a request"
         placeholderTextColor={colors.muted}
         style={styles.input}
         onSubmitEditing={() => void ask(text)}
@@ -153,27 +148,50 @@ export function TalkPanel() {
           <Text style={styles.askText}>Ask</Text>
         )}
       </Pressable>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {!busy && !reply ? (
+        <View style={styles.examples}>
+          <Text style={styles.tryLabel}>Try one</Text>
+          {EXAMPLES.map((example) => (
+            <Pressable
+              key={example}
+              disabled={busy}
+              onPress={() => void ask(example)}
+              style={styles.example}
+            >
+              <Text style={styles.exampleText}>{example}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {busy || reply ? (
+        <View style={styles.card}>
+          {busy ? (
+            <ActivityIndicator color={colors.teal} />
+          ) : (
+            <Text style={styles.reply}>{reply}</Text>
+          )}
+        </View>
+      ) : null}
+
       <VoiceMemoPanel />
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Memory</Text>
-        {memoriesQuery.isLoading ? (
-          <ActivityIndicator color={colors.teal} style={{ marginTop: 12 }} />
-        ) : memories.length === 0 ? (
-          <Text style={styles.empty}>
-            Nothing saved. Ask Nearby to remember a fact. You can delete it
-            here.
-          </Text>
-        ) : (
-          memories.map((item) => (
+      <PendantCard />
+      {memories.length > 0 ? (
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Memory</Text>
+          {memories.map((item) => (
             <View key={item.id} style={styles.memory}>
               <Text style={styles.memoryText}>{item.text}</Text>
               <Pressable onPress={() => void forget(item.id)}>
                 <Text style={styles.delete}>Delete</Text>
               </Pressable>
             </View>
-          ))
-        )}
-      </View>
+          ))}
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -181,13 +199,6 @@ export function TalkPanel() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
   content: { paddingHorizontal: 16, paddingTop: 56, paddingBottom: 40, gap: 12 },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.8,
-    textTransform: "uppercase",
-    color: colors.teal,
-  },
   title: { fontSize: 32, fontWeight: "700", color: colors.ink },
   subtitle: { fontSize: 14, lineHeight: 20, color: colors.muted },
   card: {
@@ -206,13 +217,23 @@ const styles = StyleSheet.create({
     color: colors.teal,
   },
   reply: {
-    marginTop: 10,
     fontSize: 18,
     fontWeight: "500",
     lineHeight: 24,
     color: colors.ink,
   },
-  error: { marginTop: 10, color: colors.coral, fontSize: 14 },
+  examples: { gap: 8 },
+  tryLabel: { fontSize: 12, color: colors.muted },
+  example: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  exampleText: { fontSize: 14, color: colors.ink },
+  error: { color: colors.coral, fontSize: 14 },
   input: {
     borderRadius: 16,
     borderWidth: 1,
@@ -232,7 +253,6 @@ const styles = StyleSheet.create({
   },
   askText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   disabled: { opacity: 0.6 },
-  empty: { marginTop: 10, fontSize: 14, color: colors.muted },
   memory: {
     marginTop: 10,
     borderRadius: 16,

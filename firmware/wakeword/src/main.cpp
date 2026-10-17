@@ -285,7 +285,12 @@ static void setupBle() {
     Serial.println("[ble] Bluefruit.begin failed");
     while (true) delay(100);
   }
-  Bluefruit.setName("Nearby-Voice");
+  uint8_t mac[6] = {};
+  Bluefruit.getAddr(mac);
+  char name[16];
+  snprintf(name, sizeof(name), "Nearby %02X%02X", mac[1], mac[0]);
+  Bluefruit.setName(name);
+  Serial.printf("[ble] advertising as %s\n", name);
   Bluefruit.setTxPower(0);
   Bluefruit.Periph.setConnectCallback(onConnect);
   Bluefruit.Periph.setDisconnectCallback(onDisconnect);

@@ -1,0 +1,22 @@
+---
+description: Use the Firebase CLI for Firestore indexes, security rules, and other Firebase changes. Do not send the user to the console to do that work.
+alwaysApply: true
+---
+
+# Firebase CLI
+
+This project talks to Firebase through the Firebase CLI. Project: `ascend-platform-7b5f8` (`.firebaserc`). Config: `firebase.json`.
+
+- Firestore rules: `apps/api/firestore.rules`
+- Firestore indexes: `apps/api/firestore.indexes.json`
+- Storage rules: `apps/api/storage.rules`
+
+When a query needs an index, or rules need to be published, deploy from the repo. Do not hand the user a Firebase Console link as the way to create it.
+
+```bash
+firebase deploy --only firestore:indexes --project ascend-platform-7b5f8
+firebase deploy --only firestore:rules --project ascend-platform-7b5f8
+firebase deploy --only storage --project ascend-platform-7b5f8
+```
+
+Add a missing composite index to `apps/api/firestore.indexes.json`, then deploy indexes. A new index can take a minute or two to finish building after the deploy succeeds.

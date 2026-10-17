@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { clientNeedsEmailVerification } from "@nearby/shared";
+import { clientNeedsEmailVerification, INVITE_STORAGE_KEY, inviteCodeFromPath } from "@nearby/shared";
+import { acceptInvite } from "@/lib/phone-messaging";
 import { ConnectorSetupPrompt } from "@/components/ConnectorSetupPrompt";
 import { TrialBanner } from "@/components/TrialBanner";
 import { VerifyEmailScreen } from "@/components/VerifyEmailScreen";
@@ -26,7 +27,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isMarketing = pathname === "/" || pathname === "/pricing";
   const isAuthScreen = AUTH_PATHS.has(pathname);
-  const isPublic = isMarketing || isAuthScreen;
+  const isInvite = pathname.startsWith("/invite/");
+  const isPublic = isMarketing || isAuthScreen || isInvite;
   const createdAtMs = user
     ? Date.parse(user.metadata.creationTime ?? "") || 0
     : 0;
@@ -37,6 +39,39 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         createdAtMs,
       })
     : false;
+
+  useEffect(() => {
+    const code = inviteCodeFromPath(pathname);
+    if (!code) return;
+    try {
+      sessionStorage.setItem(INVITE_STORAGE_KEY, code);
+    } catch {
+      // The invite page stores it again when it can render.
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!user) return;
+    let code = "";
+    try {
+      code = sessionStorage.getItem(INVITE_STORAGE_KEY) ?? "";
+    } catch {
+      return;
+    }
+    if (!code) return;
+    let cancelled = false;
+    void user.getIdToken().then((token) => acceptInvite(token, code)).then(() => {
+      if (cancelled) return;
+      try {
+        sessionStorage.removeItem(INVITE_STORAGE_KEY);
+      } catch {
+        // Already connected.
+      }
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (loading) return;
@@ -52,11 +87,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       user &&
       !needsEmail &&
       profile?.phoneOnboardingRequired &&
-      pathname !== "/onboarding"
+      pathname !== "/onboarding" &&
+      !isInvite
     ) {
       router.replace("/onboarding");
     }
-  }, [user, profile, loading, isPublic, isAuthScreen, needsEmail, pathname, router]);
+  }, [user, profile, loading, isPublic, isAuthScreen, isInvite, needsEmail, pathname, router]);
 
   if (loading && !isPublic) {
     return (

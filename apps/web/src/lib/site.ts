@@ -4,7 +4,7 @@ export const SITE_URL = "https://www.nearbyhello.com";
 export const SITE_NAME = "Nearby";
 export const SITE_TITLE = "Nearby: voice assistant for busy professionals";
 export const SITE_DESCRIPTION =
-  "Your voice assistant for busy days. Talk to Nearby, and it handles your calendar, follow-ups, and emails.";
+  "Your voice assistant for busy days. Talk to Nearby for your calendar, follow-ups, and emails, and message someone from the necklace.";
 export const SITE_TAGLINE = "Speak, and it answers out loud.";
 export const CONNECTOR_PRIVACY_LINE =
   "Nearby only uses a connector when you ask. You can disconnect anytime.";
@@ -42,6 +42,7 @@ const PRIVATE_PATHS = [
   "/onboarding",
   "/nearby",
   "/connections",
+  "/messages",
   "/app",
 ];
 
@@ -149,6 +150,7 @@ Nearby is a voice and type assistant for busy professionals who live on calls, i
 - Drafts replies for you to review and approve. Nearby never sends email on its own.
 - Saves notes.
 - Accepts voice or typed requests and can answer out loud.
+- Messages someone from the necklace. The thread is a normal chat with people you know. Nearby does not send carrier SMS.
 
 ## Plans
 

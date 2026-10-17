@@ -62,6 +62,8 @@ next-env.d.ts
 # Wake-word training takes recorded from the desk board. Not product audio.
 firmware/wakeword/dataset/
 firmware/wakeword/.venv/
+# Edge Impulse Arduino export. Unzip the deployment zip here locally.
+firmware/wakeword/lib/
 
 # PlatformIO
 .pio

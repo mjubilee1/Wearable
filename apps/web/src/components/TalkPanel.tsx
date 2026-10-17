@@ -1,11 +1,10 @@
 "use client";
 
-// PARITY: mobile — example chips, spoken Done receipt, notes delete, history, confirm previews.
+// PARITY: mobile — spoken Done receipt, notes delete, history, confirm previews.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  firstNameFrom,
   isLimitReachedBody,
   isPlaceholderNote,
   type AgentActionReceipt,
@@ -39,8 +38,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 const EXAMPLES = [
   {
-    id: "reschedule",
-    text: "Move my 2 PM showing to tomorrow at 10",
+    id: "calendar-today",
+    text: "What's on my calendar today?",
     needsGoogle: true,
   },
   {
@@ -49,23 +48,8 @@ const EXAMPLES = [
     needsGoogle: true,
   },
   {
-    id: "draft",
-    text: "Draft a reply to the lender asking for the updated pre-approval",
-    needsGoogle: true,
-  },
-  {
-    id: "calendar",
-    text: "What's on my calendar before my 4 PM closing?",
-    needsGoogle: true,
-  },
-  {
     id: "gmail",
     text: "Summarize unread emails from title and escrow",
-    needsGoogle: true,
-  },
-  {
-    id: "calendar-today",
-    text: "What's on my calendar today?",
     needsGoogle: true,
   },
 ] as const;
@@ -210,9 +194,6 @@ export function TalkPanel() {
   const [limitHit, setLimitHit] = useState<LimitReachedBody | null>(null);
   const [historyId, setHistoryId] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRec | null>(null);
-  const greeting = profile
-    ? firstNameFrom(profile.name, profile.email)
-    : null;
   const timeZone = browserTimeZone();
 
   useEffect(() => {
@@ -258,13 +239,8 @@ export function TalkPanel() {
   });
 
   useEffect(() => {
-    if (!historyQuery.data) return;
+    if (!historyQuery.data?.usage) return;
     setUsage(historyQuery.data.usage);
-    const latest = historyQuery.data.history[0];
-    if (!latest) return;
-    setReply((current) => current ?? latest.reply);
-    setReceipt((current) => current ?? latest.receipt);
-    setLastRequest((current) => current ?? latest.request);
   }, [historyQuery.data]);
 
   const memoriesQuery = useQuery({
@@ -664,50 +640,111 @@ export function TalkPanel() {
   const draftPreview =
     draftEdit ??
     (preview?.kind === "draft_email" ? (preview as AgentDraftPreview) : null);
+  const showTurn = Boolean(busy || reply || receipt || pending || preview);
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-20 sm:px-8">
-      <header className="mb-8">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal">
-          Nearby
-        </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink">Talk</h1>
-        {greeting ? (
-          <p className="mt-2 text-base font-medium text-ink">Hi {greeting}.</p>
-        ) : null}
-        <p className="mt-2 max-w-xl text-sm text-muted sm:text-base">
-          What Nearby can do: check your calendar, add a task, summarize unread
-          email, reschedule, draft a reply, and save a note.
-        </p>
+    <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col px-4 pb-16 pt-20 sm:px-6">
+      <header className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-ink">Talk</h1>
+          <p className="mt-1 text-sm text-muted">Say or type a request.</p>
+        </div>
         {usage?.plan === "pro" ? (
-          <p className="mt-3 inline-flex rounded-full bg-teal-soft px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-teal">
+          <p className="rounded-full bg-teal-soft px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-teal">
             Pro
           </p>
         ) : usage && usage.remaining !== null ? (
-          <p className="mt-2 text-sm text-muted">
-            {usage.remaining} of {usage.limit ?? 20} free requests left today
-          </p>
+          <p className="pt-2 text-xs text-muted">{usage.remaining} left today</p>
         ) : null}
       </header>
 
       <main className="flex flex-1 flex-col gap-4">
-        <section
-          className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm"
-          aria-live="polite"
-          aria-busy={busy}
+        <form
+          className="flex flex-col gap-2 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            unlockSpeech();
+            void ask(text);
+          }}
         >
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
-            Last reply
-          </p>
+          <label className="sr-only" htmlFor="talk-text">
+            What you would say
+          </label>
+          <input
+            id="talk-text"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder="Say or type a request"
+            className="min-w-0 flex-1 rounded-2xl border border-black/10 bg-card px-4 py-3 text-base outline-none ring-teal/30 focus:ring-2"
+          />
+          <div className="flex gap-2">
+            {canListen ? (
+              <button
+                type="button"
+                onClick={listening ? stopListening : startListening}
+                disabled={busy}
+                className="flex-1 rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm font-semibold text-teal disabled:opacity-60 sm:flex-none"
+              >
+                {listening ? "Listening…" : "Microphone"}
+              </button>
+            ) : null}
+            <button
+              type="submit"
+              disabled={busy || !text.trim()}
+              className="flex-1 rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-60 sm:flex-none"
+            >
+              {busy ? "Asking…" : "Ask"}
+            </button>
+          </div>
+        </form>
+
+        {error ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-coral">{error}</p>
+            {lastRequest ? (
+              <button
+                type="button"
+                onClick={() => retryLast()}
+                className="rounded-full bg-coral-soft px-3 py-1.5 text-xs font-semibold text-coral"
+              >
+                Retry
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {showExamples ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-muted">Try one</p>
+            {EXAMPLES.map((example) => (
+              <button
+                key={example.id}
+                type="button"
+                disabled={busy || googleQuery.isLoading}
+                onClick={() => void onExample(example)}
+                className="rounded-2xl border border-black/10 bg-card px-4 py-3 text-left text-sm text-ink transition hover:border-teal/40 disabled:opacity-60"
+              >
+                {example.text}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {showTurn ? (
+          <section
+            className="rounded-3xl border border-black/5 bg-card px-5 py-5 shadow-sm"
+            aria-live="polite"
+            aria-busy={busy}
+          >
           {busy ? (
-            <div className="mt-3">
+            <div>
               <div className="h-4 w-3/4 animate-pulse rounded bg-surface" />
               <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-surface" />
               <p className="mt-3 text-sm text-muted">Working on that…</p>
             </div>
           ) : null}
           {!busy && reply ? (
-            <p className="mt-3 text-lg font-medium leading-snug text-ink">{reply}</p>
+            <p className="text-lg font-medium leading-snug text-ink">{reply}</p>
           ) : null}
           {!busy && receipt ? (
             <p className="mt-4 text-sm text-ink">
@@ -864,100 +901,26 @@ export function TalkPanel() {
               </div>
             </div>
           ) : null}
-
-          {error ? (
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <p className="text-sm text-coral">{error}</p>
-              {lastRequest ? (
-                <button
-                  type="button"
-                  onClick={() => retryLast()}
-                  className="rounded-full bg-coral-soft px-3 py-1.5 text-xs font-semibold text-coral"
-                >
-                  Retry
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          {showExamples ? (
-            <div className="mt-4 flex flex-col gap-2">
-              {EXAMPLES.map((example) => (
-                <button
-                  key={example.id}
-                  type="button"
-                  disabled={busy || googleQuery.isLoading}
-                  onClick={() => void onExample(example)}
-                  className="rounded-2xl border border-black/10 bg-surface px-4 py-3 text-left text-sm font-medium text-ink transition hover:border-teal/40 disabled:opacity-60"
-                >
-                  {example.text}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </section>
-
-        <form
-          className="flex flex-col gap-3 sm:flex-row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            unlockSpeech();
-            void ask(text);
-          }}
-        >
-          <label className="sr-only" htmlFor="talk-text">
-            What you would say
-          </label>
-          <input
-            id="talk-text"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="Say or type a request"
-            className="min-w-0 flex-1 rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
-          />
-          {canListen ? (
-            <button
-              type="button"
-              onClick={listening ? stopListening : startListening}
-              disabled={busy}
-              className="rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm font-semibold text-teal disabled:opacity-60"
-            >
-              {listening ? "Listening…" : "Microphone"}
-            </button>
-          ) : null}
-          <button
-            type="submit"
-            disabled={busy || !text.trim()}
-            className="rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {busy ? "Asking…" : "Ask"}
-          </button>
-        </form>
+          </section>
+        ) : null}
 
         <VoiceMemoPanel />
 
+        {history.length > 0 ? (
         <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
               Recent
             </p>
-            {history.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => void clearHistory()}
-                className="text-xs font-semibold text-coral"
-              >
-                Clear history
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => void clearHistory()}
+              className="text-xs font-semibold text-coral"
+            >
+              Clear history
+            </button>
           </div>
-          {historyQuery.isLoading ? (
-            <div className="mt-3 h-4 w-48 animate-pulse rounded bg-surface" />
-          ) : history.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">
-              Your last 20 requests will show up here.
-            </p>
-          ) : (
-            <ul className="mt-3 space-y-3">
+          <ul className="mt-3 space-y-3">
               {history.map((item) => (
                 <li
                   key={item.id}
@@ -984,19 +947,15 @@ export function TalkPanel() {
                 </li>
               ))}
             </ul>
-          )}
         </section>
+        ) : null}
 
+        {notes.length > 0 || noteError ? (
         <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
             Notes
           </p>
-          {notesQuery.isLoading ? (
-            <div className="mt-3 h-4 w-48 animate-pulse rounded bg-surface" />
-          ) : notes.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">Say &quot;note: ...&quot; to save one.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
+          <ul className="mt-3 space-y-2">
               {notes.map((item) => (
                 <li
                   key={item.id}
@@ -1021,23 +980,18 @@ export function TalkPanel() {
                 </li>
               ))}
             </ul>
-          )}
           {noteError ? (
             <p className="mt-3 text-sm text-coral">{noteError}</p>
           ) : null}
         </section>
+        ) : null}
 
+        {memories.length > 0 ? (
         <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
             Memory
           </p>
-          {memories.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">
-              Nothing saved. Ask Nearby to remember a fact. You can delete it
-              here.
-            </p>
-          ) : (
-            <ul className="mt-3 space-y-2">
+          <ul className="mt-3 space-y-2">
               {memories.map((item) => (
                 <li
                   key={item.id}
@@ -1054,8 +1008,8 @@ export function TalkPanel() {
                 </li>
               ))}
             </ul>
-          )}
         </section>
+        ) : null}
       </main>
       <PrivacyFooter />
       <TabBar active="activity" />

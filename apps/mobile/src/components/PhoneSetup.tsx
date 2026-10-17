@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { DEFAULT_PHONE_COUNTRY, toE164Phone, type PhoneCountryCode } from "@nearby/shared";
+import { PhoneNumberField } from "@/components/PhoneNumberField";
 import { useAuth } from "@/lib/auth-context";
 import {
   checkPhoneVerification,
@@ -16,6 +18,7 @@ export function PhoneSetup({ onComplete }: { onComplete?: (phone: PhoneStatus) =
   const [status, setStatus] = useState<PhoneStatus | null>(null);
   const [quote, setQuote] = useState<PhoneQuote | null>(null);
   const [choice, setChoice] = useState<"personal" | "assigned" | null>(null);
+  const [country, setCountry] = useState<PhoneCountryCode>(DEFAULT_PHONE_COUNTRY);
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
@@ -41,8 +44,14 @@ export function PhoneSetup({ onComplete }: { onComplete?: (phone: PhoneStatus) =
   async function sendCode() {
     setBusy(true);
     setError(null);
+    const e164 = toE164Phone(country, phone);
+    if (!e164) {
+      setError("Enter a valid mobile number for this country.");
+      setBusy(false);
+      return;
+    }
     try {
-      await startPhoneVerification(await token(), phone);
+      await startPhoneVerification(await token(), e164);
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send code");
@@ -132,16 +141,29 @@ export function PhoneSetup({ onComplete }: { onComplete?: (phone: PhoneStatus) =
       ) : null}
       {choice === "personal" ? (
         <View style={styles.form}>
-          <Text style={styles.label}>{sent ? "Verification code" : "Mobile number"}</Text>
-          <TextInput
-            value={sent ? code : phone}
-            onChangeText={sent ? setCode : setPhone}
-            keyboardType="phone-pad"
-            autoComplete={sent ? "sms-otp" : "tel"}
-            placeholder={sent ? "000000" : "+1 415 555 0123"}
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-          />
+          {sent ? (
+            <>
+              <Text style={styles.label}>Verification code</Text>
+              <TextInput
+                value={code}
+                onChangeText={setCode}
+                keyboardType="number-pad"
+                autoComplete="sms-otp"
+                placeholder="000000"
+                placeholderTextColor={colors.muted}
+                style={styles.input}
+              />
+            </>
+          ) : (
+            <PhoneNumberField
+              country={country}
+              national={phone}
+              onChange={(next) => {
+                setCountry(next.country);
+                setPhone(next.national);
+              }}
+            />
+          )}
           <Pressable disabled={busy} onPress={sent ? verify : sendCode} style={[styles.primary, busy && styles.disabled]}>
             <Text style={styles.primaryText}>{busy ? "Please wait…" : sent ? "Verify number" : "Send verification code"}</Text>
           </Pressable>

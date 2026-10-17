@@ -186,7 +186,6 @@ export async function listConversations(uid: string): Promise<ConversationSummar
       .firestore()
       .collection("conversations")
       .where("participants", "array-contains", uid)
-      .orderBy("updatedAt", "desc")
       .get();
     for (const doc of snap.docs) {
       const data = doc.data() ?? {};
@@ -222,10 +221,11 @@ export async function listMessages(uid: string, conversationId: string): Promise
     .firestore()
     .collection("messages")
     .where("conversationId", "==", conversationId)
-    .orderBy("createdAt", "asc")
-    .limit(200)
     .get();
-  return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() ?? {}) }) as Message);
+  return snap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() ?? {}) }) as Message)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(-200);
 }
 
 export async function sendMessage(

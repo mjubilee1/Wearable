@@ -233,6 +233,12 @@ function usageFor(plan: "free" | "pro", state: MemoState): VoiceMemoUsage {
   };
 }
 
+export async function transcribeAudio(
+  audio: File,
+): Promise<{ text: string; durationSeconds: number }> {
+  return transcribe(audio);
+}
+
 async function transcribe(audio: File): Promise<{ text: string; durationSeconds: number }> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Speech-to-text is not configured.");

@@ -5,8 +5,10 @@ import type {
 } from "@nearby/shared";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 
-const VERIFY_START_LIMIT = 3;
-const VERIFY_CHECK_LIMIT = 6;
+/** Production only: texts started per user, and per destination number, each hour. */
+const VERIFY_START_LIMIT = 5;
+/** Production only: code submissions per user each hour. */
+const VERIFY_CHECK_LIMIT = 5;
 const HOUR_MS = 60 * 60 * 1000;
 
 export type PhoneStatus = {
@@ -88,7 +90,8 @@ async function twilioRequest<T>(
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!accountSid || !authToken) throw new PhoneError("Twilio is not configured", 503);
-  const response = await fetch(`https://api.twilio.com${path}`, {
+  const host = path.startsWith("/v2/") ? "https://verify.twilio.com" : "https://api.twilio.com";
+  const response = await fetch(`${host}${path}`, {
     method,
     headers: {
       Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
@@ -105,13 +108,30 @@ async function twilioRequest<T>(
   return payload;
 }
 
+function verificationLimitsEnforced(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+function noteDevelopmentAttempt(action: string): void {
+  const bucket = Math.floor(Date.now() / HOUR_MS);
+  const key = `${action}:${bucket}`;
+  const current = mockLimits.get(key);
+  const count = (current?.count ?? 0) + 1;
+  mockLimits.set(key, { count, expiresAt: (bucket + 1) * HOUR_MS });
+  console.info(`phone ${action} attempt ${count} (development, no limit)`);
+}
+
 async function consumeLimit(
-  uid: string,
+  scope: string,
   action: string,
   limit: number,
 ): Promise<void> {
+  if (!verificationLimitsEnforced()) {
+    noteDevelopmentAttempt(action);
+    return;
+  }
   const bucket = Math.floor(Date.now() / HOUR_MS);
-  const key = hash(`${uid}:${action}:${bucket}`);
+  const key = hash(`${scope}:${action}:${bucket}`);
   if (!isFirebaseConfigured()) {
     const current = mockLimits.get(key);
     if (current && current.count >= limit) {
@@ -132,7 +152,7 @@ async function consumeLimit(
       throw new PhoneError("Too many attempts. Try again later.", 429, "rate_limited");
     }
     tx.set(ref, {
-      uid,
+      scope,
       action,
       count: count + 1,
       expiresAt: (bucket + 1) * HOUR_MS,
@@ -156,7 +176,6 @@ export async function getPhoneStatus(uid: string): Promise<PhoneStatus> {
 }
 
 export async function startPhoneVerification(uid: string, rawPhone: string) {
-  await consumeLimit(uid, "verify-start", VERIFY_START_LIMIT);
   const phoneNumber = normalizePhoneNumber(rawPhone);
   const existing = await getPhoneStatus(uid);
   if (
@@ -171,6 +190,12 @@ export async function startPhoneVerification(uid: string, rawPhone: string) {
   }
   if (!mockMode() && !twilioConfigured()) {
     throw new PhoneError("Twilio Verify is not configured", 503, "twilio_not_configured");
+  }
+  if (verificationLimitsEnforced()) {
+    await consumeLimit(uid, "verify-start", VERIFY_START_LIMIT);
+    await consumeLimit(`phone:${phoneNumber}`, "verify-start", VERIFY_START_LIMIT);
+  } else {
+    noteDevelopmentAttempt("verify-start");
   }
   if (mockMode()) {
     if (isFirebaseConfigured()) {
@@ -217,9 +242,13 @@ export async function startPhoneVerification(uid: string, rawPhone: string) {
 }
 
 export async function checkPhoneVerification(uid: string, code: string) {
-  await consumeLimit(uid, "verify-check", VERIFY_CHECK_LIMIT);
   if (!/^\d{4,10}$/.test(code.trim())) {
     throw new PhoneError("Enter the verification code");
+  }
+  if (verificationLimitsEnforced()) {
+    await consumeLimit(uid, "verify-check", VERIFY_CHECK_LIMIT);
+  } else {
+    noteDevelopmentAttempt("verify-check");
   }
 
   if (!isFirebaseConfigured()) {

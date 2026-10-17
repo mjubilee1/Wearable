@@ -97,6 +97,16 @@ export function blockConversation(token: string, conversationId: string) {
   );
 }
 
+export function createInvite(token: string) {
+  return api<{ code: string }>(token, "/v1/invites", { method: "POST" });
+}
+
+export function acceptInvite(token: string, code: string) {
+  return api<{ otherId: string }>(token, `/v1/invites/${encodeURIComponent(code)}/accept`, {
+    method: "POST",
+  });
+}
+
 export function reportConversation(token: string, conversationId: string, reason: string) {
   return api<{ ok: true }>(
     token,
