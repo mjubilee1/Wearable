@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   ActivityIndicator,
+  NativeModules,
   PermissionsAndroid,
   Platform,
   Pressable,
@@ -20,6 +21,7 @@ import {
 import { BleManager, type Device, type Subscription } from "react-native-ble-plx";
 import { pendantCodeFromName, pendantDisplayName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
+import { readDeviceLocation } from "@/lib/device-location";
 import { colors } from "@/lib/theme";
 import { updateUserProfile } from "@/lib/users";
 
@@ -103,6 +105,22 @@ function wavBase64(pcm: Uint8Array): string {
   return encodeBase64(combined);
 }
 
+function bluetoothReady(): boolean {
+  return Platform.OS !== "web" && NativeModules.BlePlx != null;
+}
+
+function pendantStatus(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    !bluetoothReady() ||
+    message.includes("createClient") ||
+    message.includes("BlePlx")
+  ) {
+    return "Open Nearby on your iPhone to connect. This browser cannot use Bluetooth.";
+  }
+  return message || fallback;
+}
+
 async function ensureBluetoothPermission(): Promise<void> {
   if (Platform.OS !== "android") return;
   const results = await PermissionsAndroid.requestMultiple([
@@ -143,6 +161,9 @@ export function PendantProvider({ children }: { children: ReactNode }) {
   const pairedCode = profile?.pendantId ?? null;
 
   const manager = useCallback(() => {
+    if (!bluetoothReady()) {
+      throw new Error("Bluetooth is only available in the iPhone app.");
+    }
     if (!managerRef.current) managerRef.current = new BleManager();
     return managerRef.current;
   }, []);
@@ -168,8 +189,33 @@ export function PendantProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ audioBase64: wavBase64(bytes), timeZone }),
       });
       const payload = (await res.json().catch(() => null)) as
-        | { reply?: string; error?: string }
+        | { reply?: string; error?: string; code?: string; text?: string }
         | null;
+      if (res.status === 409 && payload?.code === "location_required" && payload.text) {
+        setStatus("Nearby needs your location for that.");
+        const location = await readDeviceLocation();
+        const retry = await fetch(`${API_URL}/v1/agent`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            text: payload.text,
+            timeZone,
+            ...(location ? { location } : {}),
+          }),
+        });
+        const answered = (await retry.json().catch(() => null)) as
+          | { reply?: string; error?: string }
+          | null;
+        if (!retry.ok || !answered?.reply) {
+          throw new Error(answered?.error ?? "The assistant didn't answer");
+        }
+        setStatus(answered.reply);
+        speak(answered.reply);
+        return;
+      }
       if (!res.ok || !payload?.reply) {
         throw new Error(payload?.error ?? "The assistant didn't answer");
       }
@@ -270,11 +316,11 @@ export function PendantProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (!pairedCode || !user) return;
+    if (!pairedCode || !user || !bluetoothReady()) return;
     let cancelled = false;
     void connectPaired(pairedCode).catch((error: unknown) => {
       if (!cancelled) {
-        setStatus(error instanceof Error ? error.message : "Could not connect");
+        setStatus(pendantStatus(error, "Could not connect"));
       }
     });
     return () => {
@@ -393,6 +439,23 @@ export function usePendant(): PendantContextValue {
 
 export function PendantCard() {
   const { status, scanning, found, pairedCode, find, pair, forget } = usePendant();
+  if (!bluetoothReady()) {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.label}>Pendant</Text>
+        <Text style={styles.status}>
+          {pairedCode
+            ? `${pendantDisplayName(pairedCode)} is saved on this account. Open the Nearby app on your iPhone to connect.`
+            : "No pendant yet. Open the Nearby app on your iPhone and tap Add pendant."}
+        </Text>
+        {pairedCode ? (
+          <Pressable onPress={() => void forget()} style={styles.secondary}>
+            <Text style={styles.secondaryText}>Remove from account</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
   if (!pairedCode && !scanning && found.length === 0 && status === "Pendant not added") {
     return (
       <View style={styles.quiet}>

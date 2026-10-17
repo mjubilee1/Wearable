@@ -1,12 +1,16 @@
 "use client";
 
-// PARITY: mobile — spoken Done receipt, notes delete, history, confirm previews.
+// PARITY: mobile — spoken Done receipt, notes delete, confirm previews.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  DEVICE_LOCATION_OFF,
   isLimitReachedBody,
   isPlaceholderNote,
+  turnNeedsDeviceLocation,
+  pendantDisplayName,
   type AgentActionReceipt,
   type AgentConfirmPreview,
   type AgentDraftChoicesPreview,
@@ -19,7 +23,6 @@ import {
   type AgentUsageStatus,
   type LimitReachedBody,
 } from "@nearby/shared";
-import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
 import { UpgradeSheet } from "@/components/UpgradeSheet";
 import { useAuth } from "@/lib/auth-context";
@@ -30,8 +33,10 @@ import {
   stashPendingAsk,
   startGoogleCalendarConnect,
 } from "@/lib/connectors";
+import { locationForTurn, offerDeviceLocationOnce } from "@/lib/device-location";
 import { updateUserProfile } from "@/lib/users";
 import { trackFunnel } from "@/lib/funnel";
+import { CONNECTOR_PRIVACY_LINE } from "@/lib/site";
 import { VoiceMemoPanel } from "@/components/VoiceMemoPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -169,6 +174,31 @@ function ReceiptLine({ receipt }: { receipt: AgentActionReceipt }) {
   );
 }
 
+function UserBubble({ text }: { text: string }) {
+  return (
+    <div className="flex justify-end">
+      <p className="max-w-[75%] whitespace-pre-wrap break-words rounded-3xl bg-black/[0.06] px-4 py-2.5 text-[15px] leading-snug text-ink">
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function NearbyBubble({
+  children,
+  time,
+}: {
+  children: ReactNode;
+  time?: string;
+}) {
+  return (
+    <div className="pr-6">
+      <div className="text-[16px] leading-7 text-ink">{children}</div>
+      {time ? <time className="mt-1.5 block text-[11px] text-muted">{time}</time> : null}
+    </div>
+  );
+}
+
 export function TalkPanel() {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
@@ -193,7 +223,11 @@ export function TalkPanel() {
   });
   const [limitHit, setLimitHit] = useState<LimitReachedBody | null>(null);
   const [historyId, setHistoryId] = useState<string | null>(null);
+  const [locationNote, setLocationNote] = useState<string | null>(null);
+  const [library, setLibrary] = useState<"memory" | "notes" | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const recognitionRef = useRef<SpeechRec | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const timeZone = browserTimeZone();
 
   useEffect(() => {
@@ -242,6 +276,18 @@ export function TalkPanel() {
     if (!historyQuery.data?.usage) return;
     setUsage(historyQuery.data.usage);
   }, [historyQuery.data]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [
+    historyQuery.data?.history.length,
+    reply,
+    busy,
+    pending,
+    preview,
+    error,
+    library,
+  ]);
 
   const memoriesQuery = useQuery({
     queryKey: ["agent-memories", user?.uid],
@@ -334,6 +380,8 @@ export function TalkPanel() {
     async (spoken: string) => {
       const next = spoken.trim();
       if (!next || busy || !user) return;
+      const needsLocation = turnNeedsDeviceLocation(next);
+      const locationPromise = locationForTurn(needsLocation);
       setLastRequest(next);
       setBusy(true);
       setError(null);
@@ -343,6 +391,8 @@ export function TalkPanel() {
       setPreview(null);
       setDraftEdit(null);
       try {
+        const location = await locationPromise;
+        setLocationNote(needsLocation && !location ? DEVICE_LOCATION_OFF : null);
         const token = await user.getIdToken();
         const res = await fetch(`${API_URL}/v1/agent`, {
           method: "POST",
@@ -350,7 +400,11 @@ export function TalkPanel() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ text: next, timeZone }),
+          body: JSON.stringify({
+            text: next,
+            timeZone,
+            ...(location ? { location } : {}),
+          }),
         });
         const payload = (await res.json().catch(() => null)) as
           | (AgentTurnResponse & { error?: string })
@@ -540,6 +594,7 @@ export function TalkPanel() {
     const rec = speechRecognition();
     if (!rec || busy) return;
     recognitionRef.current = rec;
+    offerDeviceLocationOnce();
     unlockSpeech();
     setListening(true);
     setError(null);
@@ -626,11 +681,28 @@ export function TalkPanel() {
     void ask(lastRequest);
   }
 
-  const memories = memoriesQuery.data ?? [];
-  const notes = (notesQuery.data ?? []).filter((note) => !isPlaceholderNote(note.text));
-  const history = historyQuery.data?.history ?? [];
+  const memories = [...(memoriesQuery.data ?? [])].sort(
+    (a, b) => a.createdAt - b.createdAt,
+  );
+  const notes = (notesQuery.data ?? [])
+    .filter((note) => !isPlaceholderNote(note.text))
+    .sort((a, b) => a.createdAt - b.createdAt);
+  const history = [...(historyQuery.data?.history ?? [])].sort(
+    (a, b) => a.createdAt - b.createdAt,
+  );
+  const newest = history[history.length - 1];
+  const turnSaved = Boolean(
+    (historyId && reply && history.some((item) => item.id === historyId)) ||
+      (!historyId &&
+        reply &&
+        lastRequest &&
+        newest?.reply === reply &&
+        newest.request === lastRequest),
+  );
+  const showLive = !turnSaved && Boolean(busy || reply || pending || preview);
+  const confirmOn = turnSaved ? historyId : showLive ? "live" : null;
   const receiptHref = safeHref(receipt?.href);
-  const showExamples = !busy && !reply && !pending;
+  const showExamples = history.length === 0 && !showLive;
   const reschedulePreview =
     preview?.kind === "reschedule" ? (preview as AgentReschedulePreview) : null;
   const draftChoicesPreview =
@@ -640,382 +712,468 @@ export function TalkPanel() {
   const draftPreview =
     draftEdit ??
     (preview?.kind === "draft_email" ? (preview as AgentDraftPreview) : null);
-  const showTurn = Boolean(busy || reply || receipt || pending || preview);
+  const confirmCard = (
+    <>
+      {!busy && draftChoicesPreview ? (
+        <div className="mt-3 rounded-2xl bg-surface px-3 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
+            Pick a thread
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            {draftChoicesPreview.choices.map((choice) => (
+              <button
+                key={choice.messageId}
+                type="button"
+                disabled={busy}
+                onClick={() => void pickDraftChoice(choice)}
+                className="rounded-2xl border border-black/10 bg-card px-4 py-3 text-left text-sm font-medium text-ink disabled:opacity-60"
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {!busy && reschedulePreview && pending?.tool === "reschedule" ? (
+        <div className="mt-3 rounded-2xl bg-surface px-3 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
+            Reschedule preview
+          </p>
+          <p className="mt-2 text-sm text-ink">
+            Move &apos;{reschedulePreview.title}&apos; from {reschedulePreview.oldWhen} to{" "}
+            {reschedulePreview.newWhen}?
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void decide(true)}
+              className="rounded-2xl bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void decide(false)}
+              className="rounded-2xl border border-black/10 bg-card px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {!busy && draftPreview && pending?.tool === "draft_email" ? (
+        <div className="mt-3 rounded-2xl bg-surface px-3 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
+            Draft preview
+          </p>
+          {editingDraft ? (
+            <div className="mt-3 space-y-2">
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold text-ink">To</span>
+                <input
+                  value={draftPreview.to}
+                  onChange={(event) =>
+                    setDraftEdit({ ...draftPreview, to: event.target.value })
+                  }
+                  className="w-full rounded-xl border border-black/10 bg-card px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold text-ink">Subject</span>
+                <input
+                  value={draftPreview.subject}
+                  onChange={(event) =>
+                    setDraftEdit({
+                      ...draftPreview,
+                      subject: event.target.value,
+                    })
+                  }
+                  className="w-full rounded-xl border border-black/10 bg-card px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold text-ink">Body</span>
+                <textarea
+                  value={draftPreview.body}
+                  rows={5}
+                  onChange={(event) =>
+                    setDraftEdit({
+                      ...draftPreview,
+                      body: event.target.value,
+                    })
+                  }
+                  className="w-full rounded-xl border border-black/10 bg-card px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-1 text-sm text-ink">
+              <p>
+                <span className="text-muted">To:</span> {draftPreview.to}
+              </p>
+              <p>
+                <span className="text-muted">Subject:</span> {draftPreview.subject}
+              </p>
+              <p className="whitespace-pre-wrap pt-2">{draftPreview.body}</p>
+            </div>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setEditingDraft((value) => !value)}
+              className="rounded-2xl border border-black/10 bg-card px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
+            >
+              {editingDraft ? "Done editing" : "Edit"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void decide(true)}
+              className="rounded-2xl bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              Save to Gmail Drafts
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void decide(false)}
+              className="rounded-2xl border border-black/10 bg-card px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+
+  const threadOpen = history.length > 0 || showLive || Boolean(error);
+  const toolClass = (on: boolean) =>
+    `rounded-full px-3 py-1.5 text-xs font-semibold ${on ? "bg-teal-soft text-teal" : "text-muted hover:bg-black/5"}`;
+
+  const libraryPanel = library ? (
+    <section className="max-h-[40vh] overflow-y-auto rounded-3xl border border-black/10 bg-card px-4 py-3 shadow-lg">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
+          {library === "memory" ? "Memory" : "Notes"}
+        </p>
+        <button
+          type="button"
+          onClick={() => setLibrary(null)}
+          className="text-xs font-semibold text-muted"
+        >
+          Close
+        </button>
+      </div>
+      {library === "memory" ? (
+        memories.length > 0 ? (
+          <ul className="flex flex-col gap-2">
+            {memories.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-start justify-between gap-3 rounded-2xl bg-surface px-3 py-2"
+              >
+                <p className="text-sm text-ink">{item.text}</p>
+                <button
+                  type="button"
+                  onClick={() => void forget(item.id)}
+                  className="shrink-0 text-xs font-semibold text-coral"
+                >
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted">Nothing saved yet.</p>
+        )
+      ) : notes.length > 0 || noteError ? (
+        <>
+          <ul className="flex flex-col gap-2">
+            {notes.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-start justify-between gap-3 rounded-2xl bg-surface px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-ink">{item.text}</p>
+                  <time
+                    dateTime={new Date(item.createdAt).toISOString()}
+                    className="mt-1 block text-[11px] text-muted"
+                  >
+                    {formatNoteTime(item.createdAt)}
+                  </time>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void deleteNote(item.id)}
+                  className="shrink-0 text-xs font-semibold text-coral"
+                >
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+          {noteError ? <p className="mt-3 text-sm text-coral">{noteError}</p> : null}
+        </>
+      ) : (
+        <p className="text-sm text-muted">Nothing saved yet.</p>
+      )}
+    </section>
+  ) : null;
+
+  const composer = (
+    <form
+      className="rounded-[28px] border border-black/10 bg-card px-2 pb-2 pt-1 shadow-[0_8px_30px_rgba(17,24,39,0.06)]"
+      onSubmit={(event) => {
+        event.preventDefault();
+        unlockSpeech();
+        void ask(text);
+      }}
+    >
+      <label className="sr-only" htmlFor="talk-text">
+        What you would say
+      </label>
+      <input
+        id="talk-text"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        placeholder="Say or type a request"
+        className="w-full bg-transparent px-3 py-3 text-base outline-none placeholder:text-muted"
+      />
+      <div className="flex items-center gap-1 px-1">
+        <button
+          type="button"
+          aria-pressed={library === "memory"}
+          onClick={() => {
+            setMenuOpen(false);
+            setLibrary(library === "memory" ? null : "memory");
+          }}
+          className={toolClass(library === "memory")}
+        >
+          Memory{memories.length ? ` ${memories.length}` : ""}
+        </button>
+        <button
+          type="button"
+          aria-pressed={library === "notes"}
+          onClick={() => {
+            setMenuOpen(false);
+            setLibrary(library === "notes" ? null : "notes");
+          }}
+          className={toolClass(library === "notes")}
+        >
+          Notes{notes.length ? ` ${notes.length}` : ""}
+        </button>
+        <button
+          type="button"
+          aria-expanded={menuOpen}
+          onClick={() => {
+            setLibrary(null);
+            setMenuOpen((open) => !open);
+          }}
+          className={toolClass(menuOpen)}
+        >
+          More
+        </button>
+        {usage?.plan !== "pro" ? (
+          <Link href="/pricing" className="rounded-full px-3 py-1.5 text-xs font-semibold text-teal">
+            Upgrade
+          </Link>
+        ) : null}
+        <div className="ml-auto flex items-center gap-1">
+          {canListen ? (
+            <button
+              type="button"
+              onClick={listening ? stopListening : startListening}
+              disabled={busy}
+              aria-label={listening ? "Stop microphone" : "Microphone"}
+              className="flex h-9 items-center justify-center rounded-full px-3 text-xs font-semibold text-teal hover:bg-teal-soft disabled:opacity-40"
+            >
+              {listening ? "•" : "Mic"}
+            </button>
+          ) : null}
+          <button
+            type="submit"
+            disabled={busy || !text.trim()}
+            aria-label={busy ? "Asking" : "Ask"}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-teal text-base font-semibold text-white disabled:opacity-40"
+          >
+            {busy ? "…" : "↑"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col px-4 pb-16 pt-20 sm:px-6">
-      <header className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-ink">Talk</h1>
-          <p className="mt-1 text-sm text-muted">Say or type a request.</p>
-        </div>
+    <div className="mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden pt-16">
+      <header className="flex items-center justify-between px-4 py-2">
+        <h1 className="text-sm font-semibold text-ink">Talk</h1>
         {usage?.plan === "pro" ? (
           <p className="rounded-full bg-teal-soft px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-teal">
             Pro
           </p>
         ) : usage && usage.remaining !== null ? (
-          <p className="pt-2 text-xs text-muted">{usage.remaining} left today</p>
+          <p className="text-xs text-muted">{usage.remaining} left today</p>
         ) : null}
       </header>
 
-      <main className="flex flex-1 flex-col gap-4">
-        <form
-          className="flex flex-col gap-2 sm:flex-row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            unlockSpeech();
-            void ask(text);
-          }}
-        >
-          <label className="sr-only" htmlFor="talk-text">
-            What you would say
-          </label>
-          <input
-            id="talk-text"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="Say or type a request"
-            className="min-w-0 flex-1 rounded-2xl border border-black/10 bg-card px-4 py-3 text-base outline-none ring-teal/30 focus:ring-2"
-          />
-          <div className="flex gap-2">
-            {canListen ? (
-              <button
-                type="button"
-                onClick={listening ? stopListening : startListening}
-                disabled={busy}
-                className="flex-1 rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm font-semibold text-teal disabled:opacity-60 sm:flex-none"
-              >
-                {listening ? "Listening…" : "Microphone"}
-              </button>
-            ) : null}
-            <button
-              type="submit"
-              disabled={busy || !text.trim()}
-              className="flex-1 rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-60 sm:flex-none"
-            >
-              {busy ? "Asking…" : "Ask"}
-            </button>
-          </div>
-        </form>
-
-        {error ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm text-coral">{error}</p>
-            {lastRequest ? (
-              <button
-                type="button"
-                onClick={() => retryLast()}
-                className="rounded-full bg-coral-soft px-3 py-1.5 text-xs font-semibold text-coral"
-              >
-                Retry
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {showExamples ? (
-          <div className="flex flex-col gap-2">
-            <p className="text-xs text-muted">Try one</p>
-            {EXAMPLES.map((example) => (
-              <button
-                key={example.id}
-                type="button"
-                disabled={busy || googleQuery.isLoading}
-                onClick={() => void onExample(example)}
-                className="rounded-2xl border border-black/10 bg-card px-4 py-3 text-left text-sm text-ink transition hover:border-teal/40 disabled:opacity-60"
-              >
-                {example.text}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {showTurn ? (
-          <section
-            className="rounded-3xl border border-black/5 bg-card px-5 py-5 shadow-sm"
-            aria-live="polite"
-            aria-busy={busy}
-          >
-          {busy ? (
-            <div>
-              <div className="h-4 w-3/4 animate-pulse rounded bg-surface" />
-              <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-surface" />
-              <p className="mt-3 text-sm text-muted">Working on that…</p>
-            </div>
-          ) : null}
-          {!busy && reply ? (
-            <p className="text-lg font-medium leading-snug text-ink">{reply}</p>
-          ) : null}
-          {!busy && receipt ? (
-            <p className="mt-4 text-sm text-ink">
-              <span className="font-semibold text-teal">Done:</span> {receipt.action}
-              {receiptHref ? (
-                <>
-                  {" "}
-                  <a
-                    href={receiptHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold text-teal underline"
-                  >
-                    {receipt.linkLabel ?? "Open"}
-                  </a>
-                </>
-              ) : null}
-            </p>
-          ) : null}
-
-          {!busy && draftChoicesPreview ? (
-            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
-                Pick a thread
-              </p>
-              <div className="mt-3 flex flex-col gap-2">
-                {draftChoicesPreview.choices.map((choice) => (
-                  <button
-                    key={choice.messageId}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void pickDraftChoice(choice)}
-                    className="rounded-2xl border border-black/10 bg-card px-4 py-3 text-left text-sm font-medium text-ink disabled:opacity-60"
-                  >
-                    {choice.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {!busy && reschedulePreview && pending?.tool === "reschedule" ? (
-            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
-                Reschedule preview
-              </p>
-              <p className="mt-2 text-sm text-ink">
-                Move &apos;{reschedulePreview.title}&apos; from{" "}
-                {reschedulePreview.oldWhen} to {reschedulePreview.newWhen}?
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void decide(true)}
-                  className="rounded-2xl bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void decide(false)}
-                  className="rounded-2xl border border-black/10 bg-card px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {!busy && draftPreview && pending?.tool === "draft_email" ? (
-            <div className="mt-4 rounded-2xl bg-surface px-4 py-3">
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-teal">
-                Draft preview
-              </p>
-              {editingDraft ? (
-                <div className="mt-3 space-y-2">
-                  <label className="block space-y-1">
-                    <span className="text-xs font-semibold text-ink">To</span>
-                    <input
-                      value={draftPreview.to}
-                      onChange={(event) =>
-                        setDraftEdit({ ...draftPreview, to: event.target.value })
-                      }
-                      className="w-full rounded-xl border border-black/10 bg-card px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="text-xs font-semibold text-ink">Subject</span>
-                    <input
-                      value={draftPreview.subject}
-                      onChange={(event) =>
-                        setDraftEdit({
-                          ...draftPreview,
-                          subject: event.target.value,
-                        })
-                      }
-                      className="w-full rounded-xl border border-black/10 bg-card px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="text-xs font-semibold text-ink">Body</span>
-                    <textarea
-                      value={draftPreview.body}
-                      rows={5}
-                      onChange={(event) =>
-                        setDraftEdit({
-                          ...draftPreview,
-                          body: event.target.value,
-                        })
-                      }
-                      className="w-full rounded-xl border border-black/10 bg-card px-3 py-2 text-sm"
-                    />
-                  </label>
-                </div>
-              ) : (
-                <div className="mt-2 space-y-1 text-sm text-ink">
-                  <p>
-                    <span className="text-muted">To:</span> {draftPreview.to}
-                  </p>
-                  <p>
-                    <span className="text-muted">Subject:</span>{" "}
-                    {draftPreview.subject}
-                  </p>
-                  <p className="whitespace-pre-wrap pt-2">{draftPreview.body}</p>
-                </div>
-              )}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setEditingDraft((value) => !value)}
-                  className="rounded-2xl border border-black/10 bg-card px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
-                >
-                  {editingDraft ? "Done editing" : "Edit"}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void decide(true)}
-                  className="rounded-2xl bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  Save to Gmail Drafts
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void decide(false)}
-                  className="rounded-2xl border border-black/10 bg-card px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : null}
-          </section>
-        ) : null}
-
-        <VoiceMemoPanel />
-
-        {history.length > 0 ? (
-        <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
-              Recent
-            </p>
-            <button
-              type="button"
-              onClick={() => void clearHistory()}
-              className="text-xs font-semibold text-coral"
-            >
-              Clear history
-            </button>
-          </div>
-          <ul className="mt-3 space-y-3">
-              {history.map((item) => (
-                <li
-                  key={item.id}
-                  className="rounded-2xl bg-surface px-3 py-3"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-muted">You</p>
+      <main className="min-h-0 flex-1 overflow-y-auto">
+        {threadOpen ? (
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end gap-6 px-4 py-6">
+            {history.map((item) => (
+              <div key={item.id} className="flex flex-col gap-3">
+                <UserBubble text={item.request} />
+                <NearbyBubble time={formatNoteTime(item.createdAt)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="whitespace-pre-wrap break-words">{item.reply}</p>
                     {item.status === "cancelled" ? (
-                      <span className="rounded-full bg-coral-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-coral">
+                      <span className="shrink-0 rounded-full bg-coral-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-coral">
                         Cancelled
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-sm text-ink">{item.request}</p>
-                  <p className="mt-2 text-xs font-semibold text-muted">Nearby</p>
-                  <p className="text-sm text-ink">{item.reply}</p>
                   {item.receipt ? <ReceiptLine receipt={item.receipt} /> : null}
-                  <time
-                    dateTime={new Date(item.createdAt).toISOString()}
-                    className="mt-2 block text-[11px] text-muted"
+                  {item.id === confirmOn ? confirmCard : null}
+                </NearbyBubble>
+              </div>
+            ))}
+            {showLive ? (
+              <div className="flex flex-col gap-3" aria-live="polite" aria-busy={busy}>
+                {lastRequest ? <UserBubble text={lastRequest} /> : null}
+                <NearbyBubble>
+                  {busy ? (
+                    <div>
+                      <div className="h-4 w-40 animate-pulse rounded bg-black/10" />
+                      <p className="mt-2 text-sm text-muted">Working on that…</p>
+                    </div>
+                  ) : (
+                    <>
+                      {reply ? <p className="whitespace-pre-wrap break-words">{reply}</p> : null}
+                      {receipt ? (
+                        <p className="mt-2 text-sm text-ink">
+                          <span className="font-semibold text-teal">Done:</span> {receipt.action}
+                          {receiptHref ? (
+                            <>
+                              {" "}
+                              <a
+                                href={receiptHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-semibold text-teal underline"
+                              >
+                                {receipt.linkLabel ?? "Open"}
+                              </a>
+                            </>
+                          ) : null}
+                        </p>
+                      ) : null}
+                      {confirmOn === "live" ? confirmCard : null}
+                    </>
+                  )}
+                </NearbyBubble>
+              </div>
+            ) : null}
+            {error ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm text-coral">{error}</p>
+                {lastRequest ? (
+                  <button
+                    type="button"
+                    onClick={() => retryLast()}
+                    className="rounded-full bg-coral-soft px-3 py-1.5 text-xs font-semibold text-coral"
                   >
-                    {formatNoteTime(item.createdAt)}
-                  </time>
-                </li>
-              ))}
-            </ul>
-        </section>
-        ) : null}
-
-        {notes.length > 0 || noteError ? (
-        <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
-            Notes
-          </p>
-          <ul className="mt-3 space-y-2">
-              {notes.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-start justify-between gap-3 rounded-2xl bg-surface px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm text-ink">{item.text}</p>
-                    <time
-                      dateTime={new Date(item.createdAt).toISOString()}
-                      className="mt-1 block text-[11px] text-muted"
-                    >
-                      {formatNoteTime(item.createdAt)}
-                    </time>
+                    Retry
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            <div ref={bottomRef} />
+          </div>
+        ) : (
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col items-center justify-center px-4 pb-10">
+            <h2 className="text-center text-3xl font-medium tracking-tight text-ink sm:text-4xl">
+              Say or type a request.
+            </h2>
+            <div className="relative mt-6 w-full">
+              {libraryPanel}
+              {menuOpen ? (
+                <div className="mb-2 rounded-3xl border border-black/10 bg-card px-4 py-3 text-sm text-ink shadow-lg">
+                  <p>
+                    {profile?.pendantId
+                      ? `${pendantDisplayName(profile.pendantId)} is saved on this account. The phone app connects to it.`
+                      : "No pendant yet. Open the Nearby app on your iPhone and tap Add pendant."}
+                  </p>
+                  <div className="mt-3">
+                    <VoiceMemoPanel />
                   </div>
+                </div>
+              ) : null}
+              {composer}
+            </div>
+            {showExamples ? (
+              <div className="mt-4 grid w-full gap-3 sm:grid-cols-3">
+                {EXAMPLES.map((example) => (
                   <button
+                    key={example.id}
                     type="button"
-                    onClick={() => void deleteNote(item.id)}
-                    className="shrink-0 text-xs font-semibold text-coral"
+                    disabled={busy || googleQuery.isLoading}
+                    onClick={() => void onExample(example)}
+                    className="rounded-2xl border border-black/10 bg-card px-4 py-3 text-left text-sm leading-snug text-ink transition hover:border-teal/40 disabled:opacity-60"
                   >
-                    Delete
+                    {example.text}
                   </button>
-                </li>
-              ))}
-            </ul>
-          {noteError ? (
-            <p className="mt-3 text-sm text-coral">{noteError}</p>
-          ) : null}
-        </section>
-        ) : null}
-
-        {memories.length > 0 ? (
-        <section className="rounded-3xl border border-black/5 bg-card px-5 py-6 shadow-sm">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal">
-            Memory
-          </p>
-          <ul className="mt-3 space-y-2">
-              {memories.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-start justify-between gap-3 rounded-2xl bg-surface px-3 py-2"
-                >
-                  <p className="text-sm text-ink">{item.text}</p>
-                  <button
-                    type="button"
-                    onClick={() => void forget(item.id)}
-                    className="shrink-0 text-xs font-semibold text-coral"
-                  >
-                    Delete
-                  </button>
-                </li>
-              ))}
-            </ul>
-        </section>
-        ) : null}
+                ))}
+              </div>
+            ) : null}
+          </div>
+        )}
       </main>
-      <PrivacyFooter />
+
+      {threadOpen ? (
+        <footer className="relative px-4 pb-3">
+          <div className="mx-auto w-full max-w-3xl">
+            {library ? <div className="absolute inset-x-4 bottom-full mb-2">{libraryPanel}</div> : null}
+            {menuOpen ? (
+              <div className="absolute inset-x-4 bottom-full z-10 mb-2 rounded-3xl border border-black/10 bg-card px-4 py-3 shadow-lg">
+                <p className="text-sm text-ink">
+                  {profile?.pendantId
+                    ? `${pendantDisplayName(profile.pendantId)} is saved on this account. The phone app connects to it.`
+                    : "No pendant yet. Open the Nearby app on your iPhone and tap Add pendant."}
+                </p>
+                <div className="mt-3">
+                  <VoiceMemoPanel />
+                </div>
+                {history.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => void clearHistory()}
+                    className="mt-3 text-xs font-semibold text-coral"
+                  >
+                    Clear history
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {locationNote ? <p className="mb-2 text-sm text-muted">{locationNote}</p> : null}
+            {composer}
+            <p className="mt-2 text-center text-[11px] text-muted">{CONNECTOR_PRIVACY_LINE}</p>
+          </div>
+        </footer>
+      ) : (
+        <p className="pb-4 text-center text-[11px] text-muted">{CONNECTOR_PRIVACY_LINE}</p>
+      )}
+
       <TabBar active="activity" />
       {limitHit ? (
         <UpgradeSheet feature={limitHit.feature} onClose={() => setLimitHit(null)} />
       ) : null}
     </div>
   );
+
 }

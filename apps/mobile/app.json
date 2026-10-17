@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Nearby uses Bluetooth to connect a wearable when that radio is available.",
         "NSBluetoothPeripheralUsageDescription": "Nearby uses Bluetooth to connect a wearable.",
-        "NSMicrophoneUsageDescription": "Nearby uses the microphone when you talk to it."
+        "NSMicrophoneUsageDescription": "Nearby uses the microphone when you talk to it.",
+        "NSLocationWhenInUseUsageDescription": "Nearby uses your location when you ask about the weather, places nearby, or directions."
       }
     },
     "android": {
@@ -56,7 +57,13 @@
           "bluetoothAlwaysPermission": "Nearby uses Bluetooth to connect a wearable when that radio is available."
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Nearby uses your location when you ask about the weather, places nearby, or directions."
+        }
+      ]
     ],
     "extra": {
       "router": {},

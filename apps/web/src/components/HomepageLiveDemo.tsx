@@ -4,8 +4,10 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   DEMO_TRY_LIMIT,
+  turnNeedsDeviceLocation,
   type AgentActionReceipt,
 } from "@nearby/shared";
+import { locationForTurn, offerDeviceLocationOnce } from "@/lib/device-location";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const STORAGE_KEY = "nearby-home-demo-tries";
@@ -79,16 +81,22 @@ export function HomepageLiveDemo() {
   async function runTask(task: string) {
     const clean = task.trim();
     if (!clean || exhausted || loading) return;
+    const locationPromise = locationForTurn(turnNeedsDeviceLocation(clean));
     setLoading(true);
     setError("");
     setReply("");
     setReceipt(null);
     setHeard(clean);
     try {
+      const location = await locationPromise;
       const response = await fetch(`${API_URL}/v1/agent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demo: true, text: clean }),
+        body: JSON.stringify({
+          demo: true,
+          text: clean,
+          ...(location ? { location } : {}),
+        }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         reply?: string;
@@ -121,6 +129,7 @@ export function HomepageLiveDemo() {
 
   function startListening() {
     if (exhausted || loading) return;
+    offerDeviceLocationOnce();
     unlockSpeech();
     setError("");
     const recognition = createRecognition();

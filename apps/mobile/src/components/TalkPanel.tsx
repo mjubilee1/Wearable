@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,8 +12,17 @@ import {
   View,
 } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AgentMemoryItem, AgentTurnResponse } from "@nearby/shared";
+import {
+  DEVICE_LOCATION_OFF,
+  turnNeedsDeviceLocation,
+  type AgentHistoryItem,
+  type AgentMemoryItem,
+  type AgentTurnResponse,
+  type AgentUsageStatus,
+  type DeviceLocation,
+} from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
+import { locationForTurn, offerDeviceLocationOnce } from "@/lib/device-location";
 import { colors } from "@/lib/theme";
 import { PendantCard } from "@/components/PendantSession";
 import { VoiceMemoPanel } from "@/components/VoiceMemoPanel";
@@ -46,8 +58,38 @@ export function TalkPanel() {
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
+  const [lastRequest, setLastRequest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [locationNote, setLocationNote] = useState<string | null>(null);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const threadRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    void offerDeviceLocationOnce();
+  }, []);
+
+  const historyQuery = useQuery({
+    queryKey: ["agent-history", user?.uid],
+    enabled: Boolean(user),
+    queryFn: async () => {
+      if (!user) {
+        return { history: [] as AgentHistoryItem[], usage: null as AgentUsageStatus | null };
+      }
+      const token = await user.getIdToken();
+      const res = await fetch(
+        `${API_URL}/v1/agent/history?timeZone=${encodeURIComponent(deviceTimeZone())}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) throw new Error("Could not load history");
+      const body = (await res.json()) as {
+        history: AgentHistoryItem[];
+        usage: AgentUsageStatus;
+      };
+      return { history: body.history ?? [], usage: body.usage ?? null };
+    },
+  });
 
   const memoriesQuery = useQuery({
     queryKey: ["agent-memories", user?.uid],
@@ -64,7 +106,7 @@ export function TalkPanel() {
     },
   });
 
-  async function postTurn(body: Record<string, unknown>) {
+  async function postTurn(body: Record<string, unknown> & { location?: DeviceLocation }) {
     if (!user) throw new Error("Sign in first");
     const token = await user.getIdToken();
     const res = await fetch(`${API_URL}/v1/agent`, {
@@ -88,14 +130,24 @@ export function TalkPanel() {
   async function ask(spoken: string) {
     const next = spoken.trim();
     if (!next || busy) return;
+    const needsLocation = turnNeedsDeviceLocation(next);
+    setLastRequest(next);
     setBusy(true);
     setError(null);
+    setReply(null);
+    setLocationNote(null);
     try {
-      const result = await postTurn({ text: next });
+      const location = await locationForTurn(needsLocation);
+      if (needsLocation && !location) setLocationNote(DEVICE_LOCATION_OFF);
+      const result = await postTurn({
+        text: next,
+        ...(location ? { location } : {}),
+      });
       setReply(result.reply);
       setText("");
       speak(result.reply);
       await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
+      await queryClient.invalidateQueries({ queryKey: ["agent-history"] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not ask");
     } finally {
@@ -117,110 +169,305 @@ export function TalkPanel() {
     await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
   }
 
-  const memories = memoriesQuery.data ?? [];
+  async function clearHistory() {
+    if (!user) return;
+    Alert.alert("Clear your Talk history?", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Clear",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            const token = await user.getIdToken();
+            const res = await fetch(`${API_URL}/v1/agent/history`, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) {
+              setError("Could not clear history.");
+              return;
+            }
+            setReply(null);
+            setLastRequest(null);
+            await queryClient.invalidateQueries({ queryKey: ["agent-history"] });
+          })();
+        },
+      },
+    ]);
+  }
+
+  const memories = [...(memoriesQuery.data ?? [])].sort(
+    (a, b) => a.createdAt - b.createdAt,
+  );
+  const history = [...(historyQuery.data?.history ?? [])].sort(
+    (a, b) => a.createdAt - b.createdAt,
+  );
+  const newest = history[history.length - 1];
+  const turnSaved = Boolean(
+    reply &&
+      lastRequest &&
+      newest &&
+      newest.reply === reply &&
+      newest.request === lastRequest,
+  );
+  const showLive = !turnSaved && Boolean(busy || reply);
+  const usage = historyQuery.data?.usage;
+  const showExamples = history.length === 0 && !showLive;
+
+  useEffect(() => {
+    threadRef.current?.scrollToEnd({ animated: true });
+  }, [history.length, reply, busy, error, memoryOpen]);
 
   return (
-    <ScrollView
+    <KeyboardAvoidingView
       style={styles.screen}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={styles.title}>Talk</Text>
-      <Text style={styles.subtitle}>Say or type a request.</Text>
-
-      <TextInput
-        value={text}
-        onChangeText={setText}
-        placeholder="Say or type a request"
-        placeholderTextColor={colors.muted}
-        style={styles.input}
-        onSubmitEditing={() => void ask(text)}
-        returnKeyType="send"
-      />
-      <Pressable
-        disabled={busy || !text.trim()}
-        onPress={() => void ask(text)}
-        style={[styles.ask, (busy || !text.trim()) && styles.disabled]}
-      >
-        {busy ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.askText}>Ask</Text>
-        )}
-      </Pressable>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      {!busy && !reply ? (
-        <View style={styles.examples}>
-          <Text style={styles.tryLabel}>Try one</Text>
-          {EXAMPLES.map((example) => (
-            <Pressable
-              key={example}
-              disabled={busy}
-              onPress={() => void ask(example)}
-              style={styles.example}
-            >
-              <Text style={styles.exampleText}>{example}</Text>
-            </Pressable>
-          ))}
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>Talk</Text>
         </View>
-      ) : null}
+        {usage?.plan === "pro" ? (
+          <Text style={styles.pro}>Pro</Text>
+        ) : usage && usage.remaining !== null ? (
+          <Text style={styles.remaining}>{usage.remaining} left today</Text>
+        ) : null}
+      </View>
 
-      {busy || reply ? (
-        <View style={styles.card}>
-          {busy ? (
-            <ActivityIndicator color={colors.teal} />
+      <ScrollView
+        ref={threadRef}
+        style={styles.thread}
+        contentContainerStyle={[
+          styles.threadContent,
+          showExamples ? styles.threadEmpty : null,
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {showExamples ? (
+          <View style={styles.examples}>
+            <Text style={styles.headline}>Say or type a request.</Text>
+            {EXAMPLES.map((example) => (
+              <Pressable
+                key={example}
+                disabled={busy}
+                onPress={() => void ask(example)}
+                style={styles.example}
+              >
+                <Text style={styles.exampleText}>{example}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        {history.map((item) => (
+          <View key={item.id} style={styles.turn}>
+            <View style={styles.mineRow}>
+              <View style={styles.mineBubble}>
+                <Text style={styles.mineText}>{item.request}</Text>
+              </View>
+            </View>
+            <View style={styles.theirRow}>
+              <View style={styles.theirBubble}>
+                <Text style={styles.theirText}>{item.reply}</Text>
+                {item.receipt ? (
+                  <Text style={styles.receipt}>Done: {item.receipt.action}</Text>
+                ) : null}
+                {item.status === "cancelled" ? (
+                  <Text style={styles.cancelled}>Cancelled</Text>
+                ) : null}
+                <Text style={styles.time}>
+                  {new Date(item.createdAt).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              </View>
+            </View>
+          </View>
+        ))}
+
+        {showLive ? (
+          <View style={styles.turn}>
+            {lastRequest ? (
+              <View style={styles.mineRow}>
+                <View style={styles.mineBubble}>
+                  <Text style={styles.mineText}>{lastRequest}</Text>
+                </View>
+              </View>
+            ) : null}
+            <View style={styles.theirRow}>
+              <View style={styles.theirBubble}>
+                {busy ? (
+                  <ActivityIndicator color={colors.teal} />
+                ) : (
+                  <Text style={styles.theirText}>{reply}</Text>
+                )}
+              </View>
+            </View>
+          </View>
+        ) : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+      </ScrollView>
+
+      {memoryOpen ? (
+        <View style={styles.library}>
+          <View style={styles.libraryHeader}>
+            <Text style={styles.cardLabel}>Memory</Text>
+            <Pressable onPress={() => setMemoryOpen(false)}>
+              <Text style={styles.close}>Close</Text>
+            </Pressable>
+          </View>
+          {memories.length > 0 ? (
+            memories.map((item) => (
+              <View key={item.id} style={styles.memory}>
+                <Text style={styles.memoryText}>{item.text}</Text>
+                <Pressable onPress={() => void forget(item.id)}>
+                  <Text style={styles.delete}>Delete</Text>
+                </Pressable>
+              </View>
+            ))
           ) : (
-            <Text style={styles.reply}>{reply}</Text>
+            <Text style={styles.note}>Nothing saved yet.</Text>
           )}
         </View>
       ) : null}
 
-      <VoiceMemoPanel />
-      <PendantCard />
-      {memories.length > 0 ? (
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Memory</Text>
-          {memories.map((item) => (
-            <View key={item.id} style={styles.memory}>
-              <Text style={styles.memoryText}>{item.text}</Text>
-              <Pressable onPress={() => void forget(item.id)}>
-                <Text style={styles.delete}>Delete</Text>
+      <View style={styles.footer}>
+        {menuOpen ? (
+          <View style={styles.morePanel}>
+            <VoiceMemoPanel />
+            <PendantCard />
+            {history.length > 0 ? (
+              <Pressable onPress={() => void clearHistory()}>
+                <Text style={styles.clear}>Clear history</Text>
               </Pressable>
-            </View>
-          ))}
+            ) : null}
+          </View>
+        ) : null}
+        {locationNote ? <Text style={styles.note}>{locationNote}</Text> : null}
+        <View style={styles.composerCard}>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder="Say or type a request"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            onSubmitEditing={() => void ask(text)}
+            returnKeyType="send"
+          />
+          <View style={styles.composerTools}>
+            <Pressable
+              onPress={() => {
+                setMenuOpen(false);
+                setMemoryOpen((open) => !open);
+              }}
+            >
+              <Text style={[styles.libraryLink, memoryOpen && styles.libraryLinkOn]}>
+                Memory{memories.length ? ` ${memories.length}` : ""}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setMemoryOpen(false);
+                setMenuOpen((open) => !open);
+              }}
+            >
+              <Text style={[styles.libraryLink, menuOpen && styles.libraryLinkOn]}>More</Text>
+            </Pressable>
+            <Pressable
+              disabled={busy || !text.trim()}
+              onPress={() => void ask(text)}
+              style={[styles.ask, (busy || !text.trim()) && styles.disabled]}
+            >
+              {busy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.askText}>↑</Text>
+              )}
+            </Pressable>
+          </View>
         </View>
-      ) : null}
-    </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
-  content: { paddingHorizontal: 16, paddingTop: 56, paddingBottom: 40, gap: 12 },
-  title: { fontSize: 32, fontWeight: "700", color: colors.ink },
-  subtitle: { fontSize: 14, lineHeight: 20, color: colors.muted },
-  card: {
-    marginTop: 8,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    padding: 16,
+  header: {
+    paddingTop: 56,
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
+  headerText: { flex: 1 },
+  title: { fontSize: 15, fontWeight: "600", color: colors.ink },
+  pro: {
+    overflow: "hidden",
+    borderRadius: 999,
+    backgroundColor: colors.tealSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.teal,
+  },
+  remaining: { paddingTop: 8, fontSize: 12, color: colors.muted },
+  thread: { flex: 1 },
+  threadContent: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 18,
+  },
+  threadEmpty: { justifyContent: "center" },
+  headline: {
+    marginBottom: 8,
+    textAlign: "center",
+    fontSize: 28,
+    fontWeight: "500",
+    color: colors.ink,
+  },
+  turn: { gap: 8 },
+  mineRow: { flexDirection: "row", justifyContent: "flex-end" },
+  theirRow: { flexDirection: "row", justifyContent: "flex-start" },
+  mineBubble: {
+    maxWidth: "78%",
+    borderRadius: 22,
+    backgroundColor: "rgba(17,24,39,0.06)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  theirBubble: {
+    maxWidth: "100%",
+    paddingRight: 12,
+  },
+  mineText: { fontSize: 16, lineHeight: 22, color: colors.ink },
+  theirText: { fontSize: 16, lineHeight: 24, color: colors.ink },
+  receipt: { marginTop: 6, fontSize: 13, color: colors.ink },
+  cancelled: {
+    marginTop: 6,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.coral,
+  },
+  time: { marginTop: 4, fontSize: 10, color: colors.muted },
   cardLabel: {
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 1.4,
     textTransform: "uppercase",
     color: colors.teal,
-  },
-  reply: {
-    fontSize: 18,
-    fontWeight: "500",
-    lineHeight: 24,
-    color: colors.ink,
   },
   examples: { gap: 8 },
   tryLabel: { fontSize: 12, color: colors.muted },
@@ -233,28 +480,79 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   exampleText: { fontSize: 14, color: colors.ink },
+  note: { color: colors.muted, fontSize: 14 },
   error: { color: colors.coral, fontSize: 14 },
-  input: {
-    borderRadius: 16,
+  footer: {
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 12,
+    backgroundColor: colors.page,
+  },
+  morePanel: {
+    gap: 10,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
+    padding: 14,
+  },
+  composerCard: {
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  composerTools: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 8,
+  },
+  libraryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  libraryLink: { fontSize: 12, fontWeight: "700", color: colors.muted },
+  libraryLinkOn: { color: colors.teal },
+  clear: { fontSize: 12, fontWeight: "700", color: colors.coral },
+  library: {
+    maxHeight: 220,
+    gap: 8,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
+    paddingVertical: 12,
+    backgroundColor: colors.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  libraryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  close: { fontSize: 12, fontWeight: "700", color: colors.muted },
+  input: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
     color: colors.ink,
   },
   ask: {
-    borderRadius: 16,
+    marginLeft: "auto",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.teal,
-    minHeight: 48,
     alignItems: "center",
     justifyContent: "center",
   },
-  askText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  askText: { color: "#fff", fontWeight: "700", fontSize: 18 },
   disabled: { opacity: 0.6 },
   memory: {
-    marginTop: 10,
     borderRadius: 16,
     backgroundColor: colors.surface,
     paddingHorizontal: 12,

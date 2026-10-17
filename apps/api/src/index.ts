@@ -11,7 +11,9 @@ import {
   compatibilityScore,
   hasProAccess,
   mockFacilitate,
+  isDeviceLocation,
   normalizeDeviceId,
+  turnNeedsDeviceLocation,
   vibeCaption,
   walkByScore,
   type ClipSightingPost,
@@ -424,6 +426,10 @@ app.post("/v1/agent/speech", async (c) => {
     body && typeof body === "object"
       ? (body as { timeZone?: unknown }).timeZone
       : undefined;
+  const location =
+    body && typeof body === "object"
+      ? (body as { location?: unknown }).location
+      : undefined;
   if (typeof audioBase64 !== "string" || audioBase64.length < 100) {
     return c.json({ error: "Missing audio" }, 400);
   }
@@ -434,10 +440,15 @@ app.post("/v1/agent/speech", async (c) => {
     const bytes = Buffer.from(audioBase64, "base64");
     const file = new File([bytes], "turn.wav", { type: "audio/wav" });
     const { text } = await transcribeAudio(file);
+    const deviceLocation = isDeviceLocation(location) ? location : null;
+    if (turnNeedsDeviceLocation(text) && !deviceLocation) {
+      return c.json({ code: "location_required", text }, 409);
+    }
     return c.json(
       await runAgentTurn(auth.uid, {
         text,
         timeZone: typeof timeZone === "string" ? timeZone : undefined,
+        location: deviceLocation ?? undefined,
       }),
     );
   } catch (error) {

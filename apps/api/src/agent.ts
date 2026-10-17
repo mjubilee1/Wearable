@@ -6,7 +6,9 @@ import {
   FREE_DAILY_RESCHEDULES,
   hasProAccess,
   isAgentToolName,
+  isDeviceLocation,
   isPlaceholderNote,
+  turnNeedsDeviceLocation,
   type AgentActionReceipt,
   type AgentConfirmPreview,
   type AgentFeatureUsage,
@@ -14,6 +16,7 @@ import {
   type AgentPendingTool,
   type AgentToolName,
   type AgentTurnRequest,
+  type DeviceLocation,
   type AgentTurnResponse,
   type AgentUsageStatus,
   type LimitFeature,
@@ -787,11 +790,34 @@ function nameLine(name: string | null): string {
   return `The user's first name is ${name}. Use it when you greet them. Never address them by an email address. `;
 }
 
+function locationLine(location: DeviceLocation | null): string {
+  if (!location) return "";
+  return (
+    `The user is at latitude ${location.latitude.toFixed(4)}, longitude ${location.longitude.toFixed(4)}. ` +
+    "Use that for weather, nearby places, and directions. Speak a place, not the coordinates. "
+  );
+}
+
+function searchQueryWithLocation(
+  query: string,
+  requestText: string,
+  location: DeviceLocation | null,
+): string {
+  if (
+    !location ||
+    (!turnNeedsDeviceLocation(query) && !turnNeedsDeviceLocation(requestText))
+  ) {
+    return query;
+  }
+  return `${query} near ${location.latitude.toFixed(3)},${location.longitude.toFixed(3)}`;
+}
+
 async function modelTurn(
   uid: string,
   text: string,
   name: string | null,
   timeZone: string,
+  location: DeviceLocation | null,
 ): Promise<AgentTurnResponse> {
   const state = await readState(uid);
   const lower = text.toLowerCase();
@@ -827,6 +853,7 @@ async function modelTurn(
             content:
               "You are Nearby, a voice assistant. The user spoke one turn. Reply in one or two short sentences meant to be spoken aloud. No markdown, lists, or emoji. " +
               nameLine(name) +
+              locationLine(location) +
               "You can already see their saved notes, local reminders, and memories below with timestamps — when they ask what they saved, answer in chronological order (oldest to newest) and mention when each was saved in plain speech. Do not claim you cannot access notes. If they want to create a note, set a reminder (pushed to Google Tasks when connected), remember a fact, check the calendar, or read unread Gmail, set tool and do not ask permission — the server runs it in this turn and replaces reply. " +
               WEB_SEARCH_GUIDANCE +
               " Otherwise tool is null and reply is the spoken answer. Return JSON only: {\"reply\":string,\"tool\":null|{name:\"calendar\"|\"gmail\"|\"note\"|\"reminder\"|\"remember\"|\"web_search\",summary:string,payload:object}}. Payload keys: note text; reminder text and when; remember text; calendar when (today or tomorrow) and first (1 for the first event only); gmail when and limit; web_search query.\n\n" +
@@ -900,6 +927,7 @@ async function applyDecision(
     recordHistory?: boolean;
     consumeQuota?: boolean;
     timeZone: string;
+    location?: DeviceLocation | null;
   },
 ): Promise<AgentTurnResponse> {
   const payload = asPayload(decision.payload);
@@ -1033,7 +1061,11 @@ async function applyDecision(
     }
     const searched = await answerWithWebSearch({
       question: requestText || summary || payload.query || "",
-      query: payload.query || requestText || summary,
+      query: searchQueryWithLocation(
+        payload.query || requestText || summary,
+        requestText,
+        options.location ?? null,
+      ),
       name,
     });
     return finish(searched.reply, { receipt: searched.receipt });
@@ -1309,6 +1341,10 @@ async function runAgentTurnCore(
 
   const text = typeof request.text === "string" ? clip(request.text, 500) : "";
   if (!text) throw new Error("Say something first");
+  const location =
+    turnNeedsDeviceLocation(text) && isDeviceLocation(request.location)
+      ? request.location
+      : null;
 
   const plan = await readPlan(uid);
   const state = await readState(uid);
@@ -1349,10 +1385,10 @@ async function runAgentTurnCore(
       },
       name,
       text,
-      { recordHistory: true, consumeQuota: true, timeZone },
+      { recordHistory: true, consumeQuota: true, timeZone, location },
     );
   }
-  const turn = await modelTurn(uid, text, name, timeZone);
+  const turn = await modelTurn(uid, text, name, timeZone, location);
   const pending =
     turn.pendingTool ??
     (await mockTurn(text, await readState(uid), timeZone)).pendingTool;
@@ -1384,7 +1420,7 @@ async function runAgentTurnCore(
     },
     name,
     text,
-    { recordHistory: true, consumeQuota: true, timeZone },
+    { recordHistory: true, consumeQuota: true, timeZone, location },
   );
 }
 
@@ -1392,12 +1428,7 @@ export async function runAgentTurn(
   uid: string,
   body: unknown,
 ): Promise<AgentTurnResponse> {
-  const response = await runAgentTurnCore(uid, body);
-  const request = body && typeof body === "object" ? body as AgentTurnRequest : null;
-  if (typeof request?.text === "string" && request.text.trim()) {
-    await saveMemory(uid, request.text, "command");
-  }
-  return response;
+  return runAgentTurnCore(uid, body);
 }
 
 export async function listAgentMemories(

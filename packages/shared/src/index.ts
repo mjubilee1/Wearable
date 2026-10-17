@@ -797,11 +797,62 @@ export function isAgentToolName(value: string): value is AgentToolName {
   return (AGENT_TOOL_NAMES as readonly string[]).includes(value);
 }
 
+/** One GPS fix for a turn about weather, nearby places, or directions. */
+export type DeviceLocation = {
+  latitude: number;
+  longitude: number;
+};
+
+export function isDeviceLocation(value: unknown): value is DeviceLocation {
+  if (!value || typeof value !== "object") return false;
+  const latitude = (value as DeviceLocation).latitude;
+  const longitude = (value as DeviceLocation).longitude;
+  return (
+    typeof latitude === "number" &&
+    typeof longitude === "number" &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180
+  );
+}
+
+/**
+ * True when the spoken or typed turn is about where the user is.
+ * A named place ("weather in Washington DC") does not need GPS.
+ */
+export function turnNeedsDeviceLocation(text: string): boolean {
+  const clean = text.trim();
+  if (!clean || /^(?:hey |hello |ok |okay )?nearby[.!?\s]*$/i.test(clean)) {
+    return false;
+  }
+  const lower = clean.toLowerCase();
+  if (
+    /\b(where am i|where i am|my location|current location)\b/.test(lower) ||
+    /\b(near me|around here|around me|close to me|in this area)\b/.test(lower) ||
+    /\bnearby\b/.test(lower) ||
+    /\b(nearest|closest)\b/.test(lower) ||
+    /\b(directions|how far|how long to get)\b/.test(lower) ||
+    /\btraffic\b/.test(lower)
+  ) {
+    return true;
+  }
+  if (!/\b(weather|forecast|temperature)\b/.test(lower)) return false;
+  return !/\b(?:in|for|at)\s+[a-z]/i.test(lower);
+}
+
+export const DEVICE_LOCATION_OFF =
+  "Location is off, so this answer won't use where you are.";
+
 /** One spoken turn. A tool the model selects runs in this same request. */
 export type AgentTurnRequest = {
   text?: string;
   /** Browser IANA timezone for today/tomorrow and wall-clock times. */
   timeZone?: string;
+  /** Present only when this turn needs where the user is. */
+  location?: DeviceLocation;
   decision?: {
     tool: AgentToolName;
     approved: boolean;

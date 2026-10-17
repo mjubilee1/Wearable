@@ -106,8 +106,8 @@ export default function ProfilePage() {
           <p className="text-sm font-bold text-ink">Pendant</p>
           <p className="mt-1 text-sm text-muted">
             {profile.pendantId
-              ? `${pendantDisplayName(profile.pendantId)} is on this account. The phone app connects to it.`
-              : "Not added yet. Sign in on the phone and tap Add pendant."}
+              ? `${pendantDisplayName(profile.pendantId)} is saved on this account. The phone app connects to it.`
+              : "No pendant yet. Open the Nearby app on your iPhone and tap Add pendant."}
           </p>
         </section>
 
