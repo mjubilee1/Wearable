@@ -75,13 +75,24 @@ export default function ProfileScreen() {
         </Text>
 
         <Pressable
+          onPress={() => router.push("/messages")}
+          style={styles.settingsCard}
+        >
+          <View>
+            <Text style={styles.settingsTitle}>Messages</Text>
+            <Text style={styles.settingsCopy}>Chat privately with your connections</Text>
+          </View>
+          <Text style={styles.settingsOpen}>Open</Text>
+        </Pressable>
+
+        <Pressable
           onPress={() => router.push("/settings")}
           style={styles.settingsCard}
         >
           <View>
-            <Text style={styles.settingsTitle}>Memory settings</Text>
+            <Text style={styles.settingsTitle}>Account settings</Text>
             <Text style={styles.settingsCopy}>
-              Search, review, and delete saved memories
+              Phone number, privacy, and saved memories
             </Text>
           </View>
           <Text style={styles.settingsOpen}>Open</Text>

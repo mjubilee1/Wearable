@@ -68,6 +68,7 @@ function mapUser(id: string, data: DocumentData): UserProfile {
       data.deviceId === undefined || data.deviceId === null
         ? null
         : String(data.deviceId),
+    phoneOnboardingRequired: data.phoneOnboardingRequired === true,
     createdAt: Number(data.createdAt ?? Date.now()),
     updatedAt: Number(data.updatedAt ?? Date.now()),
   };
@@ -103,6 +104,7 @@ export async function createUserProfile(input: {
     prompts: [],
     vibes: [],
     deviceId: null,
+    phoneOnboardingRequired: true,
     createdAt: now,
     updatedAt: now,
   };

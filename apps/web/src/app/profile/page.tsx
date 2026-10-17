@@ -79,13 +79,24 @@ export default function ProfilePage() {
         <ReferralCard />
 
         <Link
+          href="/messages"
+          className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
+        >
+          <div>
+            <p className="text-sm font-bold text-ink">Messages</p>
+            <p className="mt-1 text-sm text-muted">Chat privately with your connections</p>
+          </div>
+          <span className="text-sm font-semibold text-teal">Open</span>
+        </Link>
+
+        <Link
           href="/settings"
           className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
         >
           <div>
-            <p className="text-sm font-bold text-ink">Memory settings</p>
+            <p className="text-sm font-bold text-ink">Account settings</p>
             <p className="mt-1 text-sm text-muted">
-              Search, review, and delete saved memories
+              Phone number, privacy, and saved memories
             </p>
           </div>
           <span className="text-sm font-semibold text-teal">Open</span>

@@ -24,6 +24,11 @@ type FirestoreTransaction = {
     data: Record<string, unknown>,
     options?: { merge?: boolean },
   ) => FirestoreTransaction;
+  update: (
+    ref: FirestoreDocRef,
+    data: Record<string, unknown>,
+  ) => FirestoreTransaction;
+  delete: (ref: FirestoreDocRef) => FirestoreTransaction;
 };
 
 type FirestoreQuery = {

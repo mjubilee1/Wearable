@@ -21,6 +21,14 @@ export type SubscriptionStatus =
   | "unpaid"
   | "incomplete";
 
+export type PhoneNumberType = "PERSONAL" | "NEARBY_ASSIGNED";
+export type PhoneProvisioningStatus =
+  | "NONE"
+  | "VERIFYING"
+  | "PROCESSING"
+  | "ACTIVE"
+  | "FAILED";
+
 export const PRO_MONTHLY_USD = 29;
 export const PRO_YEARLY_USD = 249;
 export const PRO_TRIAL_DAYS = 7;
@@ -133,6 +141,15 @@ export type UserProfile = {
   connectorSetupDismissedAt?: number | null;
   /** IANA timezone from the browser (e.g. America/New_York). */
   timeZone?: string | null;
+  /** Private account data. APIs must never include this on public profiles. */
+  phoneNumber?: string | null;
+  phoneNumberType?: PhoneNumberType | null;
+  phoneVerified?: boolean;
+  twilioPhoneNumberSid?: string | null;
+  phoneProvisioningStatus?: PhoneProvisioningStatus;
+  phoneCreatedAt?: number | null;
+  /** New accounts remain in phone onboarding until the server completes setup. */
+  phoneOnboardingRequired?: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -308,6 +325,34 @@ export type UserBlock = {
   blockedId: string;
   createdAt: number;
 };
+
+export type MessageType = "TEXT";
+export type MessageDeliveryStatus = "SENT" | "DELIVERED";
+
+export type Conversation = {
+  id: string;
+  participants: [string, string];
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type Message = {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  recipientId: string;
+  content: string;
+  messageType: MessageType;
+  deliveryStatus: MessageDeliveryStatus;
+  createdAt: number;
+};
+
+export type ConversationSummary = Conversation & {
+  other: PublicProfilePreview;
+  lastMessage: Pick<Message, "content" | "senderId" | "createdAt"> | null;
+};
+
+export const MESSAGE_MAX_LENGTH = 2_000;
 
 /**
  * What someone may see before a mutual connection.

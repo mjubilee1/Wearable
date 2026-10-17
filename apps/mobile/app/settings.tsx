@@ -2,6 +2,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { MemorySettings } from "@/components/MemorySettings";
 import { colors } from "@/lib/theme";
+import { PhoneSetup } from "@/components/PhoneSetup";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function SettingsScreen() {
           <Text style={styles.back}>Back to profile</Text>
         </Pressable>
       </View>
+      <PhoneSetup />
       <MemorySettings />
     </ScrollView>
   );

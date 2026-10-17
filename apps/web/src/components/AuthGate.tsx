@@ -21,7 +21,7 @@ function afterAuthPath(): string {
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, loading, emailVerified } = useAuth();
+  const { user, profile, loading, emailVerified } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const isMarketing = pathname === "/" || pathname === "/pricing";
@@ -46,8 +46,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
     if (user && isAuthScreen && !needsEmail) {
       router.replace(afterAuthPath());
+      return;
     }
-  }, [user, loading, isPublic, isAuthScreen, needsEmail, router]);
+    if (
+      user &&
+      !needsEmail &&
+      profile?.phoneOnboardingRequired &&
+      pathname !== "/onboarding"
+    ) {
+      router.replace("/onboarding");
+    }
+  }, [user, profile, loading, isPublic, isAuthScreen, needsEmail, pathname, router]);
 
   if (loading && !isPublic) {
     return (

@@ -127,6 +127,7 @@ function mapUser(id: string, data: DocumentData): UserProfile {
       typeof data.timeZone === "string" && data.timeZone
         ? data.timeZone
         : null,
+    phoneOnboardingRequired: data.phoneOnboardingRequired === true,
     createdAt: Number(data.createdAt ?? Date.now()),
     updatedAt: Number(data.updatedAt ?? Date.now()),
   };
@@ -186,6 +187,7 @@ export async function createUserProfile(input: {
     utmMedium: input.utmMedium ?? null,
     utmCampaign: input.utmCampaign ?? null,
     timeZone: input.timeZone ?? null,
+    phoneOnboardingRequired: true,
     createdAt: now,
     updatedAt: now,
   };
