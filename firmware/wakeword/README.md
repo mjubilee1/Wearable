@@ -14,13 +14,18 @@ PDM mic (16 kHz PCM16)
   -> local inference only while idle
   -> "hello nearby" >= threshold OR D1 button
   -> 80 ms onboard LED cue (optional haptic GPIO)
-  -> BLE PCM notifications
+  -> BLE PCM notifications when the phone is connected
+  -> otherwise one clip on the onboard flash, sent when the phone returns
   -> stop after 1.2 s silence or 10 s maximum
 ```
 
 Idle audio is consumed by the local classifier and is **never written to a
-BLE characteristic**. The placeholder model always returns zero, so only the
+BLE characteristic or to flash**. The placeholder model always returns zero, so only the
 button opens the stream until a real model is installed.
+
+If the phone is out of Bluetooth range, that one turn is written to the onboard
+2 MB flash. A newer turn replaces it. When the phone connects and subscribes,
+the board sends the held clip and erases it. This is not a recording of the day.
 
 ## Build and flash
 
@@ -40,15 +45,30 @@ do not power a motor from a GPIO. Set its control pin with
 
 ## Collect training audio
 
-Record on the target board/microphone when possible. Use mono, 16-bit WAV at
-16 kHz and gather many speakers, distances, rooms, and necklace positions.
-Avoid slicing one long recording into both training and test sets.
+Record on this board’s microphone. Each take is three seconds, mono 16-bit
+PCM at 16 kHz, so a slow "hello nearby" fits. Gather
+many speakers, distances, rooms, and necklace positions. Avoid slicing one
+long recording into both training and test sets.
+
+Stop the serial monitor first so the script can open the USB port. The onboard
+LED turns on for the window; say the phrase while it is lit. The board prints
+that one window over USB and does not write it to flash or Bluetooth.
+
+```bash
+cd firmware/wakeword
+python3 tools/record_clip.py --label hello_nearby
+python3 tools/record_clip.py --label noise
+python3 tools/record_clip.py --label unknown
+```
+
+Files land in `dataset/<label>/`, which is gitignored. When you upload, name
+the Edge Impulse label for `hello_nearby` exactly `hello nearby`.
 
 Suggested first dataset:
 
 | Label | What to record |
 |---|---|
-| `hello nearby` | 1–2 second clips of the exact phrase; varied voices, pace, distance, and volume |
+| `hello nearby` | 3 second clips of the exact phrase; varied voices, pace, distance, and volume |
 | `noise` | HVAC, traffic, café, music, handling/rubbing, keyboard, and silence |
 | `unknown` | Other speech, especially “hello”, “nearby”, and similar phrases in sentences |
 
@@ -61,7 +81,7 @@ conditions; they matter more than a high training accuracy.
 1. Create an Edge Impulse audio project named `nearby_wakeword` and upload the
    labeled WAV clips. That name makes the generated public header
    `nearby_wakeword_inferencing.h`, which the adapter detects automatically.
-2. Use a 16 kHz audio impulse, typically a 1 second window with an MFE or MFCC
+2. Use a 16 kHz audio impulse with a 2 second window and an MFE or MFCC
    processing block and a small classification network.
 3. Train three labels named exactly `hello nearby`, `noise`, and `unknown`.
 4. Check the confusion matrix, then run **Model testing** on held-out speakers.

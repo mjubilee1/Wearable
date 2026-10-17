@@ -4,6 +4,8 @@
 
 // Audio is mono signed PCM16 at 16 kHz throughout the pipeline.
 static constexpr uint32_t kSampleRateHz = 16000;
+// Long enough for a slow "hello nearby" plus a little silence.
+static constexpr size_t kTrainingClipSamples = kSampleRateHz * 3;
 static constexpr size_t kPdmReadSamples = 256;
 static constexpr size_t kAudioRingSamples = 4096;  // 256 ms; absorbs BLE stalls.
 static constexpr size_t kBlePacketSamples = 80;    // 160 bytes per notification.
