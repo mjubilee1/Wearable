@@ -63,6 +63,24 @@ import {
   deleteVoiceMemo,
   listVoiceMemos,
 } from "./voice-memos.js";
+import {
+  PhoneError,
+  checkPhoneVerification,
+  getPhoneStatus,
+  phoneProvisioningQuote,
+  provisionNearbyNumber,
+  publicPhoneStatus,
+  startPhoneVerification,
+} from "./phone.js";
+import {
+  MessagingError,
+  blockConversationUser,
+  listConversations,
+  listMessages,
+  reportConversationUser,
+  sendMessage,
+  startConversation,
+} from "./messaging.js";
 
 // Load apps/api/.env whether started from repo root or apps/api
 const apiDir = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -170,6 +188,9 @@ app.get("/health", (c) =>
     stripe: isStripeConfigured(),
     stripeWebhook: isStripeWebhookConfigured(),
     googleCalendar: isGoogleCalendarConfigured(),
+    twilioVerify: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID),
+    twilioPurchasesEnabled:
+      process.env.TWILIO_ENABLE_PHONE_PURCHASES === "true",
   }),
 );
 
@@ -535,6 +556,203 @@ app.delete("/v1/agent/notes/:id", async (c) => {
   if (!id) return c.json({ error: "Missing note id" }, 400);
   await deleteAgentNote(auth.uid, id);
   return c.json({ ok: true });
+});
+
+app.get("/v1/phone", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  return c.json({
+    phone: publicPhoneStatus(await getPhoneStatus(auth.uid)),
+    quote: phoneProvisioningQuote(),
+  });
+});
+
+app.post("/v1/phone/verify/start", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    phoneNumber?: string;
+  } | null;
+  try {
+    return c.json(
+      await startPhoneVerification(auth.uid, String(body?.phoneNumber ?? "")),
+      202,
+    );
+  } catch (error) {
+    const status = error instanceof PhoneError ? error.status : 500;
+    return c.json(
+      {
+        code: error instanceof PhoneError ? error.code : "phone_error",
+        error: error instanceof Error ? error.message : "Verification failed",
+      },
+      status as 400,
+    );
+  }
+});
+
+app.post("/v1/phone/verify/check", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as { code?: string } | null;
+  try {
+    return c.json({
+      phone: publicPhoneStatus(
+        await checkPhoneVerification(auth.uid, String(body?.code ?? "")),
+      ),
+    });
+  } catch (error) {
+    const status = error instanceof PhoneError ? error.status : 500;
+    return c.json(
+      {
+        code: error instanceof PhoneError ? error.code : "phone_error",
+        error: error instanceof Error ? error.message : "Verification failed",
+      },
+      status as 400,
+    );
+  }
+});
+
+app.post("/v1/phone/provision", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    confirmMonthlyCharge?: boolean;
+  } | null;
+  try {
+    return c.json({
+      phone: publicPhoneStatus(
+        await provisionNearbyNumber(
+          auth.uid,
+          body?.confirmMonthlyCharge === true,
+        ),
+      ),
+    });
+  } catch (error) {
+    const status = error instanceof PhoneError ? error.status : 500;
+    return c.json(
+      {
+        code: error instanceof PhoneError ? error.code : "phone_error",
+        error: error instanceof Error ? error.message : "Provisioning failed",
+      },
+      status as 400,
+    );
+  }
+});
+
+app.get("/v1/conversations", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  return c.json({ conversations: await listConversations(auth.uid) });
+});
+
+app.post("/v1/conversations", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    recipientId?: string;
+  } | null;
+  try {
+    return c.json(
+      {
+        conversation: await startConversation(
+          auth.uid,
+          String(body?.recipientId ?? ""),
+        ),
+      },
+      201,
+    );
+  } catch (error) {
+    const status = error instanceof MessagingError ? error.status : 500;
+    return c.json(
+      {
+        code: error instanceof MessagingError ? error.code : "messaging_error",
+        error: error instanceof Error ? error.message : "Could not start chat",
+      },
+      status as 400,
+    );
+  }
+});
+
+app.get("/v1/conversations/:conversationId/messages", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json({
+      messages: await listMessages(auth.uid, c.req.param("conversationId")),
+    });
+  } catch (error) {
+    const status = error instanceof MessagingError ? error.status : 500;
+    return c.json(
+      { error: error instanceof Error ? error.message : "Could not load messages" },
+      status as 400,
+    );
+  }
+});
+
+app.post("/v1/conversations/:conversationId/messages", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    content?: string;
+  } | null;
+  try {
+    return c.json(
+      {
+        message: await sendMessage(
+          auth.uid,
+          c.req.param("conversationId"),
+          String(body?.content ?? ""),
+        ),
+      },
+      201,
+    );
+  } catch (error) {
+    const status = error instanceof MessagingError ? error.status : 500;
+    return c.json(
+      {
+        code: error instanceof MessagingError ? error.code : "messaging_error",
+        error: error instanceof Error ? error.message : "Could not send message",
+      },
+      status as 400,
+    );
+  }
+});
+
+app.post("/v1/conversations/:conversationId/block", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json(
+      await blockConversationUser(auth.uid, c.req.param("conversationId")),
+    );
+  } catch (error) {
+    const status = error instanceof MessagingError ? error.status : 500;
+    return c.json(
+      { error: error instanceof Error ? error.message : "Could not block user" },
+      status as 400,
+    );
+  }
+});
+
+app.post("/v1/conversations/:conversationId/report", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as { reason?: string } | null;
+  try {
+    return c.json(
+      await reportConversationUser(
+        auth.uid,
+        c.req.param("conversationId"),
+        String(body?.reason ?? ""),
+      ),
+    );
+  } catch (error) {
+    const status = error instanceof MessagingError ? error.status : 500;
+    return c.json(
+      { error: error instanceof Error ? error.message : "Could not report user" },
+      status as 400,
+    );
+  }
 });
 
 app.get("/v1/matches", async (c) => {
