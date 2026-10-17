@@ -59,6 +59,10 @@ next-env.d.ts
 # turbo
 .turbo
 
+# Wake-word training takes recorded from the desk board. Not product audio.
+firmware/wakeword/dataset/
+firmware/wakeword/.venv/
+
 # PlatformIO
 .pio
 .vscode/.browse.c_cpp.db*

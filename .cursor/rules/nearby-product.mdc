@@ -17,6 +17,7 @@ M1: speak through the laptop, the phone, or AirPods and get a spoken answer. One
 
 - Don't put permanent API secrets in firmware. Devices authenticate; the backend holds model keys.
 - Short spoken replies. A spoken request runs the tool in that turn. Nearby does not record the room, and it does not ask again before a note, reminder, memory, or calendar check.
+- Default trigger: the pendant's own mic listens for "hello nearby," and the button works too. The phone does not take a permanent microphone permission. After either trigger, the phone sends that one turn over the internet to `POST /v1/agent`.
 - Design against recent failures: not a phone-in-a-box (Rabbit), not an always-on recorder (Omi), not a chatty companion (Friend). Prove the daily job on laptop/AirPods before selling a gadget.
 - Leave the color-ring sketches under `firmware/` in place. Don't extend them. AirPods go through the laptop or phone, not the board.
 - Desk board (Oct 16 2026): Seeed XIAO nRF52840 Sense, the same module Omi's devkit uses. USB identity `2886:8045`. Flash `firmware/wakeword` with `-e xiaoblesense`. The old QT Py sketch is gone.
@@ -27,4 +28,4 @@ M1: speak through the laptop, the phone, or AirPods and get a spoken answer. One
 
 ## Still open
 
-Do not invent: who buys it, device only or a subscription, the price, press-to-talk vs. always listening, or the one job it does better than a phone plus AirPods plus ChatGPT voice.
+Do not invent: who buys it, device only or a subscription, the price, or the one job it does better than a phone plus AirPods plus ChatGPT voice. The trigger is decided: "hello nearby" or the button.

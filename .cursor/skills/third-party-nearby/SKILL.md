@@ -21,7 +21,7 @@ Copy this checklist into the reply and mark each line. Stop if any line fails.
 - [ ] Color-ring sketches under `firmware/` stay as they are.
 - [ ] AirPods go through the laptop or phone, not the board.
 - [ ] Necklace prototype only. No enclosure, manufacturing, or battery polish.
-- [ ] Open decisions stay open: buyer, price, subscription, press-to-talk vs always listening, and the one daily job.
+- [ ] Open decisions stay open: buyer, price, subscription, and the one daily job. The trigger is decided: "hello nearby" or the button, then the phone sends that turn to the internet.
 - [ ] The reference tree is unchanged. `third_party/omi` is read-only.
 
 ## How to use a third-party project

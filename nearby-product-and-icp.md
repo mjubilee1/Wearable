@@ -47,6 +47,7 @@ Reuse what works. Don't rebuild it.
 - Don't put permanent API secrets in firmware. Devices authenticate to the backend; the backend holds the model keys.
 - Short, useful spoken replies.
 - A spoken request runs the tool in that turn. Nearby does not record the room, and it does not ask again before a note, reminder, memory, or calendar check. A saved fact can be deleted.
+- Default trigger (Oct 16 2026): the pendant listens on its own mic for "hello nearby," and the button works too. The phone does not need a permanent microphone permission. After either trigger, the phone sends that one turn to the internet through `POST /v1/agent`.
 - Log errors and handle them clearly at every layer.
 - Don't optimize the enclosure, industrial design, manufacturing, or battery yet.
 - The color-clip BLE scan is off in the phone and the website. Leave `/v1/matches` and `/v1/ble/sightings` in the API. Don't put the scan UI back.
@@ -107,4 +108,4 @@ Posted links include the channel so the waitlist `source` shows where the signup
 
 ## Still to decide
 
-Do not invent: who buys it, device only or a subscription, the price, press-to-talk vs. always listening, or the one job it does better than a phone plus AirPods plus ChatGPT voice. The M6 pilot is the real test.
+Do not invent: who buys it, device only or a subscription, the price, or the one job it does better than a phone plus AirPods plus ChatGPT voice. The M6 pilot is the real test. The trigger is decided: "hello nearby" or the button.
