@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "expo start",
     "start": "expo start",
+    "start:client": "expo start --dev-client",
     "start:tunnel": "expo start --dev-client --tunnel",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "ios:device": "expo run:ios --device",
+    "ios:device:rebuild": "expo run:ios --device --no-bundler",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "echo \"no lint configured\""
