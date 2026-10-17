@@ -1,7 +1,5 @@
 "use client";
 
-// PARITY: mobile — signup onboarding (name, Google, first task) is web-only for this phase.
-
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { isEmailLikeName } from "@nearby/shared";
@@ -12,6 +10,7 @@ import {
   writeConnectorSetup,
 } from "@/lib/connectors";
 import { updateUserProfile } from "@/lib/users";
+import { PhoneSetup } from "@/components/PhoneSetup";
 
 const FIRST_TASK = "What's my first meeting tomorrow?";
 const ONBOARDING_FLAG = "nearby_onboarding";
@@ -22,6 +21,7 @@ export default function OnboardingPage() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [phoneComplete, setPhoneComplete] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -91,13 +91,17 @@ export default function OnboardingPage() {
         Nearby
       </p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">
-        Get one win
+        Set up Nearby
       </h1>
       <p className="mt-2 text-sm text-muted">
-        Your name, then Google. Nearby will ask about tomorrow&apos;s first
-        meeting as soon as you&apos;re back.
+        Choose a private account number, then connect Google if you want.
       </p>
-      <form onSubmit={onConnect} className="mt-8 space-y-4">
+      <div className="mt-8">
+        <PhoneSetup compact onComplete={() => setPhoneComplete(true)} />
+      </div>
+      {phoneComplete ? (
+      <form onSubmit={onConnect} className="mt-8 space-y-4 border-t border-black/10 pt-6">
+        <p className="text-sm font-bold text-ink">Optional: connect Google</p>
         <label className="block space-y-1.5">
           <span className="text-xs font-semibold text-ink">First name</span>
           <input
@@ -129,6 +133,7 @@ export default function OnboardingPage() {
           Skip for now
         </button>
       </form>
+      ) : null}
     </div>
   );
 }

@@ -115,6 +115,36 @@ service cloud.firestore {
       allow delete: if isSelf(resource.data.blockerId);
     }
 
+    // Phone ownership, OTP state, messages, reports, and rate counters are
+    // server-only. The API performs participant and connection authorization.
+    match /userPrivate/{userId} {
+      allow read, write: if false;
+    }
+
+    match /phoneNumberClaims/{claimId} {
+      allow read, write: if false;
+    }
+
+    match /twilioSidClaims/{claimId} {
+      allow read, write: if false;
+    }
+
+    match /conversations/{conversationId} {
+      allow read, write: if false;
+    }
+
+    match /messages/{messageId} {
+      allow read, write: if false;
+    }
+
+    match /userReports/{reportId} {
+      allow read, write: if false;
+    }
+
+    match /rateLimits/{limitId} {
+      allow read, write: if false;
+    }
+
     // Clip BLE sightings are written/read only via the API (Admin SDK).
     match /clipSightings/{sightingId} {
       allow read, write: if false;
