@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DEVICE_LOCATION_OFF,
+  FREE_DAILY_REQUESTS,
   isLimitReachedBody,
   isPlaceholderNote,
   turnNeedsDeviceLocation,
@@ -217,9 +218,9 @@ export function TalkPanel() {
   const [canListen, setCanListen] = useState(false);
   const [usage, setUsage] = useState<AgentUsageStatus | null>({
     plan: "free",
-    limit: 20,
+    limit: FREE_DAILY_REQUESTS,
     used: 0,
-    remaining: 20,
+    remaining: FREE_DAILY_REQUESTS,
   });
   const [limitHit, setLimitHit] = useState<LimitReachedBody | null>(null);
   const [historyId, setHistoryId] = useState<string | null>(null);

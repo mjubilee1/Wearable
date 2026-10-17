@@ -18,7 +18,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { BleManager, type Device, type Subscription } from "react-native-ble-plx";
+import { BleManager, State, type Device, type Subscription } from "react-native-ble-plx";
 import { pendantCodeFromName, pendantDisplayName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { readDeviceLocation } from "@/lib/device-location";
@@ -107,6 +107,38 @@ function wavBase64(pcm: Uint8Array): string {
 
 function bluetoothReady(): boolean {
   return Platform.OS !== "web" && NativeModules.BlePlx != null;
+}
+
+function waitForBluetooth(ble: BleManager): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let subscription: Subscription | null = null;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      subscription?.remove();
+      if (error) reject(error);
+      else resolve();
+    };
+    const timer = setTimeout(() => {
+      finish(
+        new Error(
+          "Bluetooth didn't start. Turn it on, then try again. The iPhone simulator has no Bluetooth.",
+        ),
+      );
+    }, 8000);
+    subscription = ble.onStateChange((state) => {
+      if (state === State.PoweredOn) finish();
+      else if (state === State.PoweredOff) {
+        finish(new Error("Bluetooth is off. Turn it on and try again."));
+      } else if (state === State.Unauthorized) {
+        finish(new Error("Allow Bluetooth for Nearby in Settings, then try again."));
+      } else if (state === State.Unsupported) {
+        finish(new Error("This device has no Bluetooth. Use a physical iPhone."));
+      }
+    }, true);
+  });
 }
 
 function pendantStatus(error: unknown, fallback: string): string {
@@ -249,6 +281,7 @@ export function PendantProvider({ children }: { children: ReactNode }) {
       setStatus(`Looking for ${pendantDisplayName(code)}…`);
       await ensureBluetoothPermission();
       const ble = manager();
+      await waitForBluetooth(ble);
       ble.stopDeviceScan();
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -337,6 +370,7 @@ export function PendantProvider({ children }: { children: ReactNode }) {
     try {
       await ensureBluetoothPermission();
       const ble = manager();
+      await waitForBluetooth(ble);
       const seen = new Map<string, FoundPendant>();
       await new Promise<void>((resolve) => {
         const timer = setTimeout(() => {
@@ -379,6 +413,7 @@ export function PendantProvider({ children }: { children: ReactNode }) {
         let code = pendant.code;
         if (!code) {
           const ble = manager();
+          await waitForBluetooth(ble);
           const devices = await ble.connectedDevices([SERVICE]);
           const known = devices.find((item) => item.id === pendant.id);
           const connected = known?.id

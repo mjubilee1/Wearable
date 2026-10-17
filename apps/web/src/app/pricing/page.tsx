@@ -6,7 +6,7 @@ import { PricingSection } from "@/components/PricingSection";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Nearby Free and Pro. 20 requests a day on Free. Unlimited on Pro for $29 a month or $249 a year, with a 7-day trial.",
+    "Nearby Free and Pro. 20 requests a day on Free, including reschedules and drafts. Messages are free. Unlimited on Pro for $29 a month or $249 a year, with a 7-day trial.",
   alternates: { canonical: "/pricing" },
 };
 
@@ -19,7 +19,7 @@ export default function PricingPage() {
           Talk. It does it.
         </h1>
         <p className="mt-4 max-w-xl text-base text-muted">
-          Start free. Move to Pro when the daily limits get in the way. The
+          Start free. Move to Pro when the daily limit gets in the way. The
           trial is 7 days, and the card is charged when it ends.
         </p>
         <div className="mt-10">

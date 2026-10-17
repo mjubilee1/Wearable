@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  FREE_DAILY_REQUESTS,
   PRO_MONTHLY_USD,
   PRO_YEARLY_USD,
   hasProAccess,
@@ -79,8 +80,8 @@ export function PlansCard() {
       </h2>
       <p className="mt-2 text-sm text-muted">
         {pro
-          ? "Unlimited requests, reschedules, and email drafts."
-          : `Free includes 20 requests, 3 reschedules, and 3 email drafts a day. Pro is $${PRO_MONTHLY_USD}/mo or $${PRO_YEARLY_USD}/yr, free for 7 days.`}
+          ? "Unlimited requests."
+          : `Free includes ${FREE_DAILY_REQUESTS} requests a day. Reschedules and email drafts count as requests. Messages are free. Pro is $${PRO_MONTHLY_USD}/mo or $${PRO_YEARLY_USD}/yr, free for 7 days.`}
       </p>
 
       {billing === "success" ? (

@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { PRO_MONTHLY_USD, PRO_TRIAL_DAYS, PRO_YEARLY_USD, hasProAccess } from "@nearby/shared";
+import {
+  FREE_DAILY_REQUESTS,
+  PRO_MONTHLY_USD,
+  PRO_TRIAL_DAYS,
+  PRO_YEARLY_USD,
+  hasProAccess,
+} from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { startProCheckout } from "@/lib/billing";
 import { trackFunnel } from "@/lib/funnel";
@@ -10,15 +16,14 @@ import type { BillingInterval } from "@nearby/shared";
 import { hasFoundingOffer } from "@/lib/offers";
 
 const FREE = [
-  "20 requests a day",
-  "3 reschedules a day",
-  "3 email drafts a day",
+  `${FREE_DAILY_REQUESTS} requests a day`,
+  "Reschedules and drafts count as requests",
+  "Messages with your connections",
   "Calendar, tasks, mail, and notes",
 ];
 
 const PRO = [
   "Unlimited requests",
-  "Unlimited reschedules and drafts",
   "Voice memo recaps that turn into follow-ups.",
   "7-day free trial, card required",
   "Cancel anytime",

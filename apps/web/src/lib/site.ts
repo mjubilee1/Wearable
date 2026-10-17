@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FREE_DAILY_REQUESTS } from "@nearby/shared";
 
 export const SITE_URL = "https://www.nearbyhello.com";
 export const SITE_NAME = "Nearby";
@@ -12,7 +13,7 @@ export const CONNECTOR_PRIVACY_LINE =
 export const PRICING_FAQ = [
   {
     q: "What is included in the Free tier?",
-    a: "Free includes 20 requests a day, 3 reschedules a day, 3 email drafts a day, and access to calendar, tasks, mail, and notes.",
+    a: `Free includes ${FREE_DAILY_REQUESTS} requests a day. A reschedule and an email draft each count as one request. Messages with your connections are free, along with calendar, tasks, mail, and notes.`,
   },
   {
     q: "How much is Pro?",
@@ -20,7 +21,7 @@ export const PRICING_FAQ = [
   },
   {
     q: "What does Pro include?",
-    a: "Pro includes unlimited requests, unlimited reschedules and drafts, and voice memo recaps that turn into follow-ups.",
+    a: "Pro includes unlimited requests and voice memo recaps that turn into follow-ups.",
   },
   {
     q: "Does Nearby send emails on its own?",
@@ -154,7 +155,7 @@ Nearby is a voice and type assistant for busy professionals who live on calls, i
 
 ## Plans
 
-- Free: 20 requests per day.
+- Free: ${FREE_DAILY_REQUESTS} requests per day. Reschedules and email drafts count as requests. Messages are free.
 - Pro: $29 per month or $249 per year, with a 7-day free trial.
 
 ## Privacy and control

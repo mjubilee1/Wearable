@@ -1,9 +1,4 @@
-import {
-  FREE_DAILY_DRAFTS,
-  FREE_DAILY_REQUESTS,
-  FREE_DAILY_RESCHEDULES,
-  type LimitFeature,
-} from "@nearby/shared";
+import { FREE_DAILY_REQUESTS, type LimitFeature } from "@nearby/shared";
 import { dayBoundsInZone } from "./timezone.js";
 
 export class LimitReachedError extends Error {
@@ -19,8 +14,7 @@ export class LimitReachedError extends Error {
   }
 }
 
-export function freeLimit(feature: LimitFeature): number {
-  if (feature === "requests") return FREE_DAILY_REQUESTS;
-  if (feature === "reschedule") return FREE_DAILY_RESCHEDULES;
-  return FREE_DAILY_DRAFTS;
+/** Reschedules and email drafts spend the same daily pool as any other request. */
+export function freeLimit(_feature: LimitFeature = "requests"): number {
+  return FREE_DAILY_REQUESTS;
 }

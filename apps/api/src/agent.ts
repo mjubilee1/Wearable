@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   firstNameFrom,
-  FREE_DAILY_DRAFTS,
   FREE_DAILY_REQUESTS,
-  FREE_DAILY_RESCHEDULES,
   hasProAccess,
   isAgentToolName,
   isDeviceLocation,
@@ -11,7 +9,6 @@ import {
   turnNeedsDeviceLocation,
   type AgentActionReceipt,
   type AgentConfirmPreview,
-  type AgentFeatureUsage,
   type AgentHistoryItem,
   type AgentPendingTool,
   type AgentToolName,
@@ -19,7 +16,6 @@ import {
   type DeviceLocation,
   type AgentTurnResponse,
   type AgentUsageStatus,
-  type LimitFeature,
 } from "@nearby/shared";
 import {
   applyReschedule,
@@ -36,7 +32,7 @@ import {
   saveGmailDraft,
 } from "./connectors/google-calendar.js";
 import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
-import { LimitReachedError } from "./limits.js";
+import { freeLimit, LimitReachedError } from "./limits.js";
 import {
   deleteMemory,
   listMemories,
@@ -152,7 +148,9 @@ function asHistoryItem(value: unknown): AgentHistoryItem | null {
     receipt: asReceipt(row.receipt),
     createdAt: typeof row.createdAt === "number" ? row.createdAt : Date.now(),
   };
-  if (row.status === "cancelled") item.status = "cancelled";
+  if (row.status === "cancelled" || row.status === "confirmed") {
+    item.status = row.status;
+  }
   return item;
 }
 
@@ -245,7 +243,9 @@ function serializeHistoryItem(
     receipt: serializeReceipt(item.receipt),
     createdAt: item.createdAt,
   };
-  if (item.status === "cancelled") out.status = "cancelled";
+  if (item.status === "cancelled" || item.status === "confirmed") {
+    out.status = item.status;
+  }
   return out;
 }
 
@@ -283,25 +283,13 @@ function usageStatus(
   const day = zonedDayKey(timeZone);
   const usage = state.usage && state.usage.day === day ? state.usage : null;
   const used = usage?.count ?? 0;
-  const reschedulesUsed = usage?.reschedules ?? 0;
-  const draftsUsed = usage?.drafts ?? 0;
   const resetAt = dayBoundsInZone(timeZone, 1).start.toISOString();
-  const feature = (usedCount: number, limit: number): AgentFeatureUsage =>
-    plan === "pro"
-      ? { limit: null, used: usedCount, remaining: null }
-      : {
-          limit,
-          used: usedCount,
-          remaining: Math.max(0, limit - usedCount),
-        };
   if (plan === "pro") {
     return {
       plan,
       limit: null,
       used,
       remaining: null,
-      reschedules: feature(reschedulesUsed, FREE_DAILY_RESCHEDULES),
-      drafts: feature(draftsUsed, FREE_DAILY_DRAFTS),
       resetAt,
     };
   }
@@ -310,39 +298,41 @@ function usageStatus(
     limit: FREE_DAILY_REQUESTS,
     used,
     remaining: Math.max(0, FREE_DAILY_REQUESTS - used),
-    reschedules: feature(reschedulesUsed, FREE_DAILY_RESCHEDULES),
-    drafts: feature(draftsUsed, FREE_DAILY_DRAFTS),
     resetAt,
   };
 }
 
-function featureUsed(
-  state: AgentState,
-  timeZone: string,
-  feature: LimitFeature,
-): number {
+function requestsUsed(state: AgentState, timeZone: string): number {
   const day = zonedDayKey(timeZone);
   if (!state.usage || state.usage.day !== day) return 0;
-  if (feature === "requests") return state.usage.count;
-  if (feature === "reschedule") return state.usage.reschedules;
-  return state.usage.drafts;
+  return state.usage.count;
+}
+
+function previewStillOpen(state: AgentState, historyId: string | undefined): boolean {
+  if (!historyId) return false;
+  const item = state.history.find((row) => row.id === historyId);
+  return Boolean(item && item.status !== "confirmed" && item.status !== "cancelled");
+}
+
+async function markPreviewConfirmed(uid: string, historyId: string): Promise<void> {
+  const state = await readState(uid);
+  let changed = false;
+  state.history = state.history.map((item) => {
+    if (item.id !== historyId || item.status === "confirmed") return item;
+    changed = true;
+    return { ...item, status: "confirmed" as const };
+  });
+  if (changed) await writeState(uid, state);
 }
 
 function assertWithinLimit(
   state: AgentState,
   timeZone: string,
-  feature: LimitFeature,
   plan: "free" | "pro",
 ): void {
   if (plan === "pro") return;
-  const limit =
-    feature === "requests"
-      ? FREE_DAILY_REQUESTS
-      : feature === "reschedule"
-        ? FREE_DAILY_RESCHEDULES
-        : FREE_DAILY_DRAFTS;
-  if (featureUsed(state, timeZone, feature) >= limit) {
-    throw new LimitReachedError(feature, timeZone);
+  if (requestsUsed(state, timeZone) >= freeLimit("requests")) {
+    throw new LimitReachedError("requests", timeZone);
   }
 }
 
@@ -367,23 +357,6 @@ async function statusFor(
   timeZone: string,
 ): Promise<AgentUsageStatus> {
   return usageStatus(state, timeZone, await readPlan(uid));
-}
-
-async function bumpFeature(
-  uid: string,
-  timeZone: string,
-  feature: "reschedule" | "draft_email",
-): Promise<void> {
-  const state = await readState(uid);
-  const day = zonedDayKey(timeZone);
-  const prev =
-    state.usage && state.usage.day === day
-      ? state.usage
-      : { day, count: 0, reschedules: 0, drafts: 0 };
-  if (feature === "reschedule") prev.reschedules += 1;
-  else prev.drafts += 1;
-  state.usage = prev;
-  await writeState(uid, state);
 }
 
 async function appendHistory(
@@ -978,12 +951,6 @@ async function applyDecision(
   }
 
   if (decision.tool === "reschedule") {
-    assertWithinLimit(
-      await readState(uid),
-      timeZone,
-      "reschedule",
-      await readPlan(uid),
-    );
     const result = await applyReschedule(
       uid,
       {
@@ -997,17 +964,13 @@ async function applyDecision(
       },
       name,
     );
-    if (result.receipt) await bumpFeature(uid, timeZone, "reschedule");
+    if (result.receipt && decision.historyId) {
+      await markPreviewConfirmed(uid, decision.historyId);
+    }
     return finish(clip(result.spoken, 420), { receipt: result.receipt });
   }
 
   if (decision.tool === "draft_email") {
-    assertWithinLimit(
-      await readState(uid),
-      timeZone,
-      "draft_email",
-      await readPlan(uid),
-    );
     const result = await saveGmailDraft(
       uid,
       {
@@ -1019,7 +982,9 @@ async function applyDecision(
       },
       name,
     );
-    if (result.receipt) await bumpFeature(uid, timeZone, "draft_email");
+    if (result.receipt && decision.historyId) {
+      await markPreviewConfirmed(uid, decision.historyId);
+    }
     return finish(clip(result.spoken, 420), { receipt: result.receipt });
   }
 
@@ -1257,8 +1222,6 @@ async function runAgentTurnCore(
     ) {
       throw new Error("Invalid draft pick");
     }
-    const plan = await readPlan(uid);
-    assertWithinLimit(await readState(uid), timeZone, "draft_email", plan);
     const result = await previewDraftFromPick(uid, pick, name);
     if (!result.ok) {
       const saved = await appendHistory(
@@ -1312,17 +1275,17 @@ async function runAgentTurnCore(
       throw new Error("Invalid tool decision");
     }
     const plan = await readPlan(uid);
-    if (decision.approved) {
-      const feature: LimitFeature =
-        decision.tool === "reschedule" || decision.tool === "draft_email"
-          ? decision.tool
-          : "requests";
-      assertWithinLimit(await readState(uid), timeZone, feature, plan);
-    }
-    const countsAsRequest =
+    const state = await readState(uid);
+    const historyId =
+      typeof decision.historyId === "string" ? decision.historyId : undefined;
+    const continuingPreview =
       decision.approved &&
-      decision.tool !== "reschedule" &&
-      decision.tool !== "draft_email";
+      (decision.tool === "reschedule" || decision.tool === "draft_email") &&
+      previewStillOpen(state, historyId);
+    const countsAsRequest = decision.approved && !continuingPreview;
+    if (countsAsRequest) {
+      assertWithinLimit(state, timeZone, plan);
+    }
     return applyDecision(
       uid,
       {
@@ -1348,13 +1311,7 @@ async function runAgentTurnCore(
 
   const plan = await readPlan(uid);
   const state = await readState(uid);
-  const gated = parseRescheduleRequest(text, timeZone)
-    ? "reschedule"
-    : parseDraftRequest(text)
-      ? "draft_email"
-      : null;
-  if (gated) assertWithinLimit(state, timeZone, gated, plan);
-  assertWithinLimit(state, timeZone, "requests", plan);
+  assertWithinLimit(state, timeZone, plan);
 
   const recalled = await recallMemory(uid, text, plan, timeZone);
   if (recalled) {

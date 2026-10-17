@@ -33,8 +33,6 @@ export const PRO_MONTHLY_USD = 29;
 export const PRO_YEARLY_USD = 249;
 export const PRO_TRIAL_DAYS = 7;
 export const FREE_DAILY_REQUESTS = 20;
-export const FREE_DAILY_RESCHEDULES = 3;
-export const FREE_DAILY_DRAFTS = 3;
 export const VOICE_MEMO_MONTHLY_MINUTES = 300;
 export const VOICE_MEMO_MAX_SECONDS = 5 * 60;
 export const FREE_MEMORY_RETENTION_DAYS = 7;
@@ -76,14 +74,8 @@ export function isLimitReachedBody(value: unknown): value is LimitReachedBody {
   );
 }
 
-export function limitReachedMessage(feature: LimitFeature): string {
-  if (feature === "reschedule") {
-    return "You've used today's free reschedules. Pro does unlimited for $29/mo, free for 7 days.";
-  }
-  if (feature === "draft_email") {
-    return "You've used today's free email drafts. Pro does unlimited for $29/mo, free for 7 days.";
-  }
-  return "You've used today's 20 free requests. Pro does unlimited for $29/mo, free for 7 days.";
+export function limitReachedMessage(_feature: LimitFeature): string {
+  return `You've used today's ${FREE_DAILY_REQUESTS} free requests. Pro does unlimited for $29/mo, free for 7 days.`;
 }
 
 export type UserProfile = {
@@ -931,8 +923,8 @@ export type AgentHistoryItem = {
   reply: string;
   receipt: AgentActionReceipt | null;
   createdAt: number;
-  /** Preview that was cancelled — not a separate Cancel turn. */
-  status?: "cancelled" | null;
+  /** Preview that was cancelled, or a confirm that already spent its request. */
+  status?: "cancelled" | "confirmed" | null;
 };
 
 export type AgentFeatureUsage = {
@@ -943,7 +935,7 @@ export type AgentFeatureUsage = {
 
 export type AgentUsageStatus = {
   plan: "free" | "pro";
-  /** Free daily request cap; null when unlimited (Pro). */
+  /** Free daily request cap; null when unlimited (Pro). Reschedules and drafts spend this same pool. */
   limit: number | null;
   used: number;
   remaining: number | null;
