@@ -8,6 +8,7 @@
     "dev:web": "pnpm --filter @nearby/web dev",
     "dev:api": "pnpm --filter @nearby/api dev",
     "dev:mobile": "pnpm --filter @nearby/mobile start",
+    "dev:mobile:tunnel": "pnpm --filter @nearby/mobile start:tunnel",
     "dev:mobile:ios": "pnpm --filter @nearby/mobile ios:device",
     "build": "pnpm --filter @nearby/shared --filter @nearby/api --filter @nearby/web run build",
     "build:api": "pnpm --filter @nearby/shared --filter @nearby/api run build",

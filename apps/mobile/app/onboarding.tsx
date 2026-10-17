@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text } from "react-native";
 import { useRouter } from "expo-router";
+import { BrandMark } from "@/components/BrandMark";
 import { PhoneSetup } from "@/components/PhoneSetup";
 import { colors } from "@/lib/theme";
 
@@ -7,7 +8,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.eyebrow}>Nearby</Text>
+      <BrandMark style={styles.eyebrow} />
       <Text style={styles.title}>Set up Nearby</Text>
       <Text style={styles.subtitle}>Choose the private number linked to your account.</Text>
       <PhoneSetup onComplete={() => router.replace("/(tabs)/activity")} />

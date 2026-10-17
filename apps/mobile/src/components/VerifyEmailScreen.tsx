@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
 
@@ -60,7 +61,7 @@ export function VerifyEmailScreen() {
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.eyebrow}>Nearby</Text>
+      <BrandMark style={styles.eyebrow} />
       <Text style={styles.title}>Check your inbox to verify your email</Text>
       <Text style={styles.body}>
         We sent a link{user?.email ? ` to ${user.email}` : ""}. Open it, then

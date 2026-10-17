@@ -91,6 +91,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       !isInvite
     ) {
       router.replace("/onboarding");
+      return;
+    }
+    if (user && !needsEmail && pathname === "/" && !profile?.phoneOnboardingRequired) {
+      router.replace("/activity");
     }
   }, [user, profile, loading, isPublic, isAuthScreen, isInvite, needsEmail, pathname, router]);
 
@@ -107,8 +111,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!user && !isPublic) return null;
-  if (user && needsEmail && !isMarketing) return <VerifyEmailScreen />;
+  if (user && needsEmail && (!isMarketing || pathname === "/")) return <VerifyEmailScreen />;
   if (user && isAuthScreen) return null;
+  if (user && pathname === "/") {
+    return (
+      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pt-20 sm:px-8">
+        <div className="h-3 w-16 animate-pulse rounded bg-teal/20" />
+        <div className="mt-3 h-9 w-40 animate-pulse rounded-lg bg-surface" />
+      </div>
+    );
+  }
 
   return (
     <>

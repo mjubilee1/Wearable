@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Link } from "expo-router";
 import { isEmailLikeName } from "@nearby/shared";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
 
@@ -53,7 +54,7 @@ export default function SignupScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.eyebrow}>Nearby</Text>
+        <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Create your account</Text>
         <Text style={styles.subtitle}>Then you can talk.</Text>
 

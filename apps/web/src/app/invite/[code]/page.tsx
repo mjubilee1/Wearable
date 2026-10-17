@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { INVITE_STORAGE_KEY, isInviteCode } from "@nearby/shared";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { acceptInvite } from "@/lib/phone-messaging";
 
@@ -57,7 +58,7 @@ export default function InvitePage() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
-      <p className="font-display text-3xl italic text-ink">nearby</p>
+      <BrandMark className="font-display text-3xl italic text-ink" />
       <h1 className="mt-6 text-3xl font-bold tracking-tight text-ink">
         {status === "joined"
           ? "You're connected"

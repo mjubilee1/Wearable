@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { isEmailLikeName } from "@nearby/shared";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { captureAttribution } from "@/lib/attribution";
 import { trackFunnel } from "@/lib/funnel";
@@ -75,9 +76,7 @@ export default function SignupPage() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
-      <Link href="/" className="font-display text-3xl italic text-ink">
-        nearby
-      </Link>
+      <BrandMark className="font-display text-3xl italic text-ink" />
       <h1 className="font-display mt-6 text-4xl font-medium leading-none text-ink">
         Create your account
       </h1>

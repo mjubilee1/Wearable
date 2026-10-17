@@ -5,6 +5,7 @@ import { CalendarDemo } from "@/components/CalendarDemo";
 import { LandingView } from "@/components/LandingView";
 import { HomepageLiveDemo } from "@/components/HomepageLiveDemo";
 import { NecklaceMessages } from "@/components/NecklaceMessages";
+import { BrandMark } from "@/components/BrandMark";
 import { MarketingNav } from "@/components/MarketingNav";
 import { PricingSection } from "@/components/PricingSection";
 import { WaitlistForm } from "@/components/WaitlistForm";
@@ -324,7 +325,7 @@ export default async function HomePage({
       <footer className="border-t border-ink/15 px-5 py-12">
         <div className="mx-auto flex max-w-5xl flex-col gap-8 sm:flex-row sm:justify-between">
           <div>
-            <p className="font-display text-3xl italic text-ink">nearby</p>
+            <BrandMark className="font-display text-3xl italic text-ink" />
             <p className="mt-2 max-w-xs text-sm text-muted">Talk. It does it.</p>
           </div>
           <div className="flex gap-10 text-sm">

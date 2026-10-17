@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import {
   CONNECTOR_CATALOG,
@@ -100,7 +101,7 @@ export default function ConnectorsScreen() {
         />
       }
     >
-      <Text style={styles.eyebrow}>Nearby</Text>
+      <BrandMark style={styles.eyebrow} />
       <Text style={styles.title}>Connectors</Text>
       <Text style={styles.subtitle}>
         Pick what Nearby may use. A spoken request in Talk runs the tool.

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { isEmailLikeName } from "@nearby/shared";
+import { BrandMark } from "@/components/BrandMark";
 import { PendantCard } from "@/components/PendantSession";
 import { useAuth } from "@/lib/auth-context";
 import { updateUserProfile } from "@/lib/users";
@@ -69,7 +70,7 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.eyebrow}>Nearby</Text>
+        <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Profile</Text>
         <Text style={styles.subtitle}>
           Your account. Connect calendar and other tools under Connectors.

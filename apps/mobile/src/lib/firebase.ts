@@ -1,10 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import {
-  getAuth,
-  initializeAuth,
-  type Auth,
-  type Persistence,
-} from "firebase/auth";
+import { getAuth, type Auth, type Persistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -32,25 +27,26 @@ function createAuth(): Auth {
     return getAuth(app);
   }
 
+  // Metro aliases firebase/auth to the React Native build. The browser build
+  // keeps the session in memory, so reopening the app looks signed out.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rnAuth = require("@firebase/auth") as {
+    getAuth: (firebaseApp: typeof app) => Auth;
+    initializeAuth: (
+      firebaseApp: typeof app,
+      deps: { persistence: Persistence },
+    ) => Auth;
+    getReactNativePersistence: (storage: typeof AsyncStorage) => Persistence;
+  };
+
   try {
-    // Available at runtime via @firebase/auth's "react-native" export condition.
-    // Types ship in dist/rn only, so we load it dynamically.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const rnAuth = require("@firebase/auth") as {
-      getReactNativePersistence?: (
-        storage: typeof AsyncStorage,
-      ) => Persistence;
-    };
-
-    if (!rnAuth.getReactNativePersistence) {
-      return getAuth(app);
-    }
-
-    return initializeAuth(app, {
+    return rnAuth.initializeAuth(app, {
       persistence: rnAuth.getReactNativePersistence(AsyncStorage),
     });
-  } catch {
-    return getAuth(app);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/already/i.test(message)) return rnAuth.getAuth(app);
+    throw error;
   }
 }
 

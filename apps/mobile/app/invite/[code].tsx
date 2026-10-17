@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { INVITE_STORAGE_KEY, isInviteCode } from "@nearby/shared";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { acceptInvite } from "@/lib/phone-messaging";
 import { colors } from "@/lib/theme";
@@ -47,7 +48,7 @@ export default function InviteScreen() {
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.brand}>nearby</Text>
+      <BrandMark label="nearby" style={styles.brand} />
       <Text style={styles.title}>
         {status === "joined"
           ? "You're connected"

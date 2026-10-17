@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Link } from "expo-router";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
 
@@ -44,7 +45,7 @@ export default function ForgotPasswordScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.eyebrow}>Nearby</Text>
+        <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Reset password</Text>
         <Text style={styles.subtitle}>
           Enter your email and we’ll send a reset link.

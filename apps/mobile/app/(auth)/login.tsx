@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Link, useRouter } from "expo-router";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
 
@@ -43,7 +44,7 @@ export default function LoginScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.eyebrow}>Nearby</Text>
+        <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Welcome back</Text>
         <Text style={styles.subtitle}>Sign in to talk.</Text>
 

@@ -25,6 +25,8 @@ import { updateUserProfile } from "@/lib/users";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 const SERVICE = "4e421000-0000-1000-8000-00805f9b34fb";
+const GAP_SERVICE = "00001800-0000-1000-8000-00805f9b34fb";
+const GAP_NAME = "00002a00-0000-1000-8000-00805f9b34fb";
 const AUDIO = "4e421001-0000-1000-8000-00805f9b34fb";
 const EVENT = "4e421003-0000-1000-8000-00805f9b34fb";
 
@@ -294,17 +296,23 @@ export function PendantProvider({ children }: { children: ReactNode }) {
         const timer = setTimeout(() => {
           ble.stopDeviceScan();
           resolve();
-        }, 8000);
-        ble.startDeviceScan(null, null, (error, device) => {
+        }, 12000);
+        ble.startDeviceScan(null, { allowDuplicates: true }, (error, device) => {
           if (error) {
             clearTimeout(timer);
             ble.stopDeviceScan();
             resolve();
             return;
           }
-          const code = pendantCodeFromName(device?.localName ?? device?.name);
-          if (!device || !code || seen.has(device.id)) return;
-          const next = { id: device.id, code, name: pendantDisplayName(code) };
+          if (!device || seen.has(device.id)) return;
+          const code = pendantCodeFromName(device.localName ?? device.name);
+          const services = (device.serviceUUIDs ?? []).map((id) => id.toLowerCase());
+          if (!code && !services.includes(SERVICE)) return;
+          const next = {
+            id: device.id,
+            code: code ?? "",
+            name: code ? pendantDisplayName(code) : "Nearby pendant",
+          };
           seen.set(device.id, next);
           setFound([...seen.values()]);
         });
@@ -320,12 +328,44 @@ export function PendantProvider({ children }: { children: ReactNode }) {
   const pair = useCallback(
     async (pendant: FoundPendant) => {
       if (!profile) return;
-      await updateUserProfile(profile.id, { pendantId: pendant.code });
-      await refreshProfile();
-      setFound([]);
-      setStatus(`Saved ${pendant.name} on your account.`);
+      setStatus("Reading the pendant name…");
+      try {
+        let code = pendant.code;
+        if (!code) {
+          const ble = manager();
+          const devices = await ble.connectedDevices([SERVICE]);
+          const known = devices.find((item) => item.id === pendant.id);
+          const connected = known?.id
+            ? known
+            : await ble.connectToDevice(pendant.id);
+          await connected.discoverAllServicesAndCharacteristics();
+          code =
+            pendantCodeFromName(connected.localName ?? connected.name) ?? "";
+          if (!code) {
+            const characteristic = await connected.readCharacteristicForService(
+              GAP_SERVICE,
+              GAP_NAME,
+            );
+            const bytes = characteristic.value
+              ? decodeBase64(characteristic.value)
+              : new Uint8Array();
+            code = pendantCodeFromName(String.fromCharCode(...bytes)) ?? "";
+          }
+          await connected.cancelConnection().catch(() => undefined);
+        }
+        if (!code) {
+          setStatus("Found a pendant, but couldn't read its name. Keep it plugged in and try again.");
+          return;
+        }
+        await updateUserProfile(profile.id, { pendantId: code });
+        await refreshProfile();
+        setFound([]);
+        setStatus(`Saved ${pendantDisplayName(code)} on your account.`);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "Could not add that pendant");
+      }
     },
-    [profile, refreshProfile],
+    [manager, profile, refreshProfile],
   );
 
   const forget = useCallback(async () => {

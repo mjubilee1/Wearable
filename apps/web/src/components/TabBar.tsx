@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 
 const TABS = [
@@ -48,9 +49,7 @@ export function TabBar({ active }: { active: TabId }) {
       aria-label="Primary"
     >
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 py-3 sm:gap-6 sm:px-8">
-        <Link href="/activity" className="font-display shrink-0 text-xl italic leading-none text-ink">
-          nearby
-        </Link>
+        <BrandMark className="font-display shrink-0 text-xl italic leading-none text-ink" />
         <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
           <ul className="flex min-w-0 items-center gap-0.5 sm:gap-1">
             {TABS.map((tab) => {

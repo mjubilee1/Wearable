@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Stack, usePathname, useRouter, useSegments } from "expo-router";
+import { Stack, usePathname, useRootNavigationState, useRouter, useSegments } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { clientNeedsEmailVerification, INVITE_STORAGE_KEY, inviteCodeFromPath } from "@nearby/shared";
 import { acceptInvite } from "@/lib/phone-messaging";
@@ -16,6 +16,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   const pathname = usePathname();
+  const navigationState = useRootNavigationState();
   const root = segments[0];
   const inAuthGroup = root === "(auth)";
   const onIndex = root === undefined || root === "index";
@@ -53,7 +54,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || !navigationState?.key) return;
     if (!user && !inAuthGroup && !onInvite) {
       router.replace("/(auth)/login");
       return;
@@ -69,7 +70,7 @@ function AuthGate({ children }: { children: ReactNode }) {
     if ((inAuthGroup || onIndex) && !profile.phoneOnboardingRequired) {
       router.replace("/(tabs)/activity");
     }
-  }, [user, profile, loading, needsEmail, inAuthGroup, onIndex, onOnboarding, onInvite, router]);
+  }, [user, profile, loading, needsEmail, inAuthGroup, onIndex, onOnboarding, onInvite, navigationState?.key, router]);
 
   if (loading || (user && !profile && !needsEmail)) {
     return (

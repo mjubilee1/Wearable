@@ -1,5 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { BrandMark } from "@/components/BrandMark";
 import { MemorySettings } from "@/components/MemorySettings";
 import { colors } from "@/lib/theme";
 import { PhoneSetup } from "@/components/PhoneSetup";
@@ -14,7 +15,7 @@ export default function SettingsScreen() {
     >
       <View style={styles.headingRow}>
         <View>
-          <Text style={styles.eyebrow}>Nearby</Text>
+          <BrandMark style={styles.eyebrow} />
           <Text style={styles.title}>Settings</Text>
         </View>
         <Pressable onPress={() => router.back()}>

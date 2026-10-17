@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: `${SITE_NAME} — Voice assistant that answers out loud`,
     short_name: SITE_NAME,
     description: SITE_DESCRIPTION,
-    start_url: "/",
+    start_url: "/activity",
     display: "standalone",
     background_color: "#ffffff",
     theme_color: "#0d9488",

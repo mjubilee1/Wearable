@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
@@ -29,9 +30,7 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
-      <Link href="/" className="font-display text-3xl italic text-ink">
-        nearby
-      </Link>
+      <BrandMark className="font-display text-3xl italic text-ink" />
       <h1 className="font-display mt-6 text-4xl font-medium leading-none text-ink">
         Welcome back
       </h1>
