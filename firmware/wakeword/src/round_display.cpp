@@ -75,20 +75,46 @@ static void paint(PendantFace face) {
   tft.print(detail);
 }
 
+static void fillAndMark(uint16_t color, const char *name) {
+  Serial.printf("[display] fill %s\n", name);
+  tft.fillScreen(color);
+  delay(400);
+}
+
 void roundDisplayBegin() {
+  Serial.println("[display] setPins MISO=D9 SCK=D8 MOSI=D10");
   SPI.setPins(kMiso, kSck, kMosi);
+  Serial.printf("[display] begin %lu Hz CS=D1 DC=D2 RST=D3\n",
+                static_cast<unsigned long>(kSpiHz));
   tft.begin(kSpiHz);
   ready = true;
   tft.setRotation(0);
+  tft.invertDisplay(false);
+  // Wiring check. A black glass that never leaves these colors is SPI or power.
+  fillAndMark(GC9A01A_RED, "red");
+  fillAndMark(GC9A01A_GREEN, "green");
+  fillAndMark(GC9A01A_BLUE, "blue");
+  Serial.println("[display] color sweep done; painting Nearby");
   paint(PendantFace::Idle);
   shown = PendantFace::Idle;
-  Serial.println("[display] GC9A01 ready; CS=D1 DC=D2 RST=D3 SCK=D8 MOSI=D10");
+  Serial.println("[display] GC9A01 ready");
 }
 
 bool roundDisplayReady() { return ready; }
 
 void roundDisplayShow(PendantFace face) {
   if (!ready || face == shown) return;
+  Serial.printf("[display] face %u -> %u\n", static_cast<unsigned>(shown),
+                static_cast<unsigned>(face));
   paint(face);
   shown = face;
+}
+
+void roundDisplayWatch() {
+  static uint32_t lastMs = 0;
+  const uint32_t now = millis();
+  if (now - lastMs < 2000) return;
+  lastMs = now;
+  Serial.printf("[display] watch ready=%d face=%u up_ms=%lu\n", ready ? 1 : 0,
+                static_cast<unsigned>(shown), static_cast<unsigned long>(now));
 }

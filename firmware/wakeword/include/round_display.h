@@ -15,3 +15,4 @@ enum class PendantFace : uint8_t {
 void roundDisplayBegin();
 bool roundDisplayReady();
 void roundDisplayShow(PendantFace face);
+void roundDisplayWatch();

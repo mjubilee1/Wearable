@@ -539,6 +539,7 @@ void loop() {
   }
 
   roundDisplayShow(pendantFace());
+  roundDisplayWatch();
 
   // Let the Cortex-M4 sleep between PDM/BLE interrupts. Continuous PDM and
   // inference still dominate idle current; this is not a system-off mode.
