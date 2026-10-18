@@ -67,16 +67,25 @@ Leave D9 open. The panel has no MISO.
 ```
 
 ```text
-idle -- "hello nearby" or D0 --> listening -- silence or 10 s --> idle
-                                 |
-                                 +-- phone away --> holding
-                                                       |
-                                                       +-- phone back --> sending --> idle
+idle clock -- "hello nearby" or D0 --> listening -- silence or 10 s --> thinking
+                                 |                                      |
+                                 +-- phone away --> notice               +-- reply for 6 s --> idle
 ```
 
-The screen redraws only when that state changes. Idle says Nearby, listening
-says Listening, a turn held for a missing phone says Holding, and the replay
-says Sending.
+The glass is a round watch face. Idle shows the 12-hour time, the date, a
+battery icon, and a Bluetooth mark. Listening pulses the teal ring and draws
+a waveform. Thinking is a spinning arc. A reply is wrapped inside the circle
+for 6 seconds. `showNotice("Calendar", "Meeting in 10 min")` holds a title
+and a line for 8 seconds.
+
+After 20 idle seconds the panel sleeps. The button wakes the clock; press it
+again to start a turn. "Hello Nearby" or a phone connection also wakes it.
+The backlight is tied to 3V3, so sleep turns the controller off, not that LED.
+
+Under 15% the battery icon turns red and a warning mark appears. Under 5%
+the screen and the radio turn off. The RTC keeps the time. Press the button
+to glance at the clock. The radio returns once the cell is back to 8%. A USB
+bench with no cell does not take this path.
 
 The onboard LED is the default cue. For a haptic motor, use a transistor and
 flyback protection on a free pin such as D4 or D6. Do not power a motor from
@@ -150,6 +159,67 @@ Service: `4e421000-0000-1000-8000-00805f9b34fb`
 | Audio | `1001` | Notify: little-endian PCM16, mono, 16 kHz |
 | Wake settings | `1002` | Read/write two bytes: `[enabled, threshold_percent]`; default `[1, 85]` |
 | Trigger event | `1003` | Notify two bytes: `[source, confidence_percent]`; source 1=word, 2=button |
+
+Clock service: `4e421010-0000-1000-8000-00805f9b34fb`
+
+| Characteristic | UUID | Direction and payload |
+|---|---|---|
+| Time | `4e421011-0000-1000-8000-00805f9b34fb` | Write 8 bytes, little-endian: `int32` Unix UTC seconds, then `int32` timezone offset in seconds. Local time is the sum. |
+
+The standard Current Time Service `0x1805` is also writable (`0x2A2B` current time, `0x2A0F` local time). The phone app uses the custom characteristic. iOS does not push `0x1805` by itself.
+
+Time is counted on RTC2 (the 32.768 kHz crystal), so it keeps moving while the CPU sleeps. Every few minutes, and again under 5%, that time is written to internal flash (`/time.bin`). A reboot shows the saved time immediately, with a small teal dot, until the phone writes a fresh one. Before the first sync ever, the face shows `--:--` and `Open Nearby app to sync`.
+
+The clock service is in the GATT table after connect. It is not in the advertising packet, because two 128-bit UUIDs do not fit. Write it on every connect.
+
+Swift (call this from `didConnect`):
+
+```swift
+let nearbyTimeService = CBUUID(string: "4E421010-0000-1000-8000-00805F9B34FB")
+let nearbyTimeChar = CBUUID(string: "4E421011-0000-1000-8000-00805F9B34FB")
+
+func writeNearbyTime(_ peripheral: CBPeripheral, _ characteristic: CBCharacteristic) {
+    var unix = Int32(Date().timeIntervalSince1970).littleEndian
+    var offset = Int32(TimeZone.current.secondsFromGMT()).littleEndian
+    var payload = Data()
+    withUnsafeBytes(of: unix) { payload.append(contentsOf: $0) }
+    withUnsafeBytes(of: offset) { payload.append(contentsOf: $0) }
+    peripheral.writeValue(payload, for: characteristic, type: .withResponse)
+}
+```
+
+React Native (`react-native-ble-plx` takes base64). The Expo app does this in `listen()` after discover:
+
+```javascript
+const TIME_SERVICE = "4e421010-0000-1000-8000-00805f9b34fb";
+const TIME_CHAR = "4e421011-0000-1000-8000-00805f9b34fb";
+
+export async function writeNearbyTime(device) {
+  const unix = Math.floor(Date.now() / 1000);
+  const offset = -new Date().getTimezoneOffset() * 60;
+  const bytes = new Uint8Array(8);
+  const view = new DataView(bytes.buffer);
+  view.setInt32(0, unix, true);
+  view.setInt32(4, offset, true);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  await device.writeCharacteristicWithResponseForService(
+    TIME_SERVICE,
+    TIME_CHAR,
+    btoa(binary)
+  );
+}
+```
+
+Confirm USB `2886:8045`, then flash this image (not `firmware/display_gc9a01` or `firmware/round-display`):
+
+```bash
+cd firmware/wakeword
+pio run -e xiaoblesense -t upload
+pio device monitor -e xiaoblesense -b 115200
+```
 
 The firmware requests MTU 247 and sizes packets to the negotiated MTU. A phone
 receiver should subscribe to audio before triggering and concatenate

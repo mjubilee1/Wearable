@@ -10,7 +10,7 @@ static constexpr size_t kPdmReadSamples = 256;
 static constexpr size_t kAudioRingSamples = 4096;  // 256 ms; absorbs BLE stalls.
 static constexpr size_t kBlePacketSamples = 80;    // 160 bytes per notification.
 
-// D0. D1, D2, D3, D8, and D10 belong to the round display.
+// D0 to GND, momentary. D1, D2, D3, D8, and D10 belong to the round display.
 #ifndef NEARBY_BUTTON_PIN
 #define NEARBY_BUTTON_PIN 0
 #endif
@@ -46,6 +46,22 @@ static const char kWakeSettingsCharacteristicUuid[] =
     "4E421002-0000-1000-8000-00805F9B34FB";
 static const char kWakeEventCharacteristicUuid[] =
     "4E421003-0000-1000-8000-00805F9B34FB";
+
+// Clock service. The phone writes this on every connect. RTC2 keeps
+// counting after that, including while the CPU sleeps. Eight bytes,
+// little-endian: int32 Unix UTC seconds, then int32 offset seconds.
+// Local time is the sum. Optional Current Time Service is 0x1805.
+static const char kTimeServiceUuid[] =
+    "4E421010-0000-1000-8000-00805F9B34FB";
+static const char kTimeCharacteristicUuid[] =
+    "4E421011-0000-1000-8000-00805F9B34FB";
+
+// Little-endian. Local time = unixSeconds + offsetSeconds.
+// unixSeconds is UTC. offsetSeconds is the phone's timezone offset.
+struct __attribute__((packed)) TimeSync {
+  int32_t unixSeconds;
+  int32_t offsetSeconds;
+};
 
 // Settings characteristic payload:
 //   byte 0: 0 = wake word disabled, nonzero = enabled

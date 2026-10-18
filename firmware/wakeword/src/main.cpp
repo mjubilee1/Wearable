@@ -3,11 +3,24 @@
 #include <PDM.h>
 #include <bluefruit.h>
 #include <math.h>
+#include <nrf_gpio.h>
+#include <nrf_soc.h>
+#include <string.h>
 
+#include "battery.h"
+#include "clock.h"
 #include "config.h"
 #include "round_display.h"
 #include "turn_cache.h"
 #include "wakeword_model.h"
+
+// Momentary button between this pin and GND. Active low, internal pull-up.
+static constexpr uint8_t kButtonPin = NEARBY_BUTTON_PIN;
+static constexpr uint32_t kButtonDebounceMs = 30;
+// A shorter press is a tap. On a dark glass that tap only wakes the clock.
+static constexpr uint32_t kButtonHoldMs = 300;
+static constexpr uint32_t kButtonLongPressMs = 3000;
+static constexpr uint32_t kGoodbyeMs = 1000;
 
 // PDM callback -> ring buffer -> either local inference (idle) or BLE (active).
 // There is deliberately no BLE notify call in the idle path.
@@ -26,6 +39,7 @@ static BLECharacteristic eventCharacteristic(kWakeEventCharacteristicUuid);
 static WakeSettings wakeSettings = {
     1, static_cast<uint8_t>(NEARBY_WAKE_THRESHOLD * 100.0f + 0.5f)};
 static bool capturing = false;
+static bool pttActive = false;
 static uint32_t captureStartedAtMs = 0;
 static uint32_t lastSpeechAtMs = 0;
 static uint32_t detectionCount = 0;
@@ -120,6 +134,7 @@ static void drainRingToCache() {
 static void stopCapture(const char *reason) {
   if (!capturing) return;
   if (holdingTurn) drainRingToCache();
+  const bool savedForLater = holdingTurn;
   capturing = false;
   inferenceSamplesFilled = 0;
   clearAudioRing();
@@ -127,6 +142,18 @@ static void stopCapture(const char *reason) {
   holdingTurn = false;
   Serial.printf("[capture] stop reason=%s duration_ms=%lu\n", reason,
                 static_cast<unsigned long>(millis() - captureStartedAtMs));
+  // Sleep paints Goodbye itself. A critical cell stays dark.
+  if (batteryCritical() ||
+      (reason != nullptr && strcmp(reason, "sleep") == 0)) {
+    return;
+  }
+  if (savedForLater) {
+    showNotice("Phone away", "Saved until it reconnects");
+    Serial.println("[state] holding");
+  } else {
+    showThinking();
+    Serial.println("[state] thinking");
+  }
 }
 
 static void startCapture(TriggerSource source, float confidence) {
@@ -143,10 +170,11 @@ static void startCapture(TriggerSource source, float confidence) {
         static_cast<unsigned long>(detectionCount),
         static_cast<unsigned long>(falseTriggerCount));
   } else {
-    Serial.println("[button] backup trigger");
+    Serial.println("[button] push to talk");
   }
 
   cueTrigger();
+  onWakeWord();
   clearAudioRing();  // Start with speech after the trigger, not the wake phrase.
   captureStartedAtMs = millis();
   lastSpeechAtMs = captureStartedAtMs;
@@ -155,6 +183,7 @@ static void startCapture(TriggerSource source, float confidence) {
   turnSource = static_cast<uint8_t>(source);
   turnConfidence =
       static_cast<uint8_t>(constrain(confidence * 100.0f, 0.0f, 100.0f));
+  Serial.println("[state] listening");
 
   const uint8_t event[] = {turnSource, turnConfidence};
   if (connectionHandle != BLE_CONN_HANDLE_INVALID) {
@@ -215,6 +244,13 @@ static void processCaptureAudio() {
   }
 
   const uint32_t now = millis();
+  if (pttActive) {
+    // The hold is the utterance. Silence must not cut it off.
+    if (now - captureStartedAtMs >= NEARBY_MAX_CAPTURE_MS) {
+      stopCapture("max_10s");
+    }
+    return;
+  }
   if (now - captureStartedAtMs >= NEARBY_MAX_CAPTURE_MS) {
     stopCapture("max_10s");
   } else if (now - captureStartedAtMs > 500 &&
@@ -261,6 +297,7 @@ static void onSettingsWrite(uint16_t, BLECharacteristic *, uint8_t *data,
 
 static void onConnect(uint16_t handle) {
   connectionHandle = handle;
+  roundDisplaySetConnected(true);
   BLEConnection *connection = Bluefruit.Connection(handle);
   if (connection != nullptr) connection->requestMtuExchange(247);
   Serial.println("[ble] phone connected; requesting MTU 247");
@@ -268,6 +305,7 @@ static void onConnect(uint16_t handle) {
 
 static void onDisconnect(uint16_t, uint8_t reason) {
   connectionHandle = BLE_CONN_HANDLE_INVALID;
+  roundDisplaySetConnected(false);
   // The open turn keeps running until silence or 10 s, and the unsent part
   // is held. A replay that was in progress starts over on the next connection.
   if (capturing && !holdingTurn) beginHold();
@@ -315,6 +353,7 @@ static void setupBle() {
   eventCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
   eventCharacteristic.setFixedLen(2);
   eventCharacteristic.begin();
+  clockAddService();
 
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
   Bluefruit.Advertising.addTxPower();
@@ -326,7 +365,10 @@ static void setupBle() {
   Bluefruit.Advertising.start(0);
 }
 
-static void setupMicrophone() {
+static bool microphoneOn = false;
+
+static void startMicrophone() {
+  if (microphoneOn) return;
 #ifdef PIN_PDM_PWR
   pinMode(PIN_PDM_PWR, OUTPUT);
   digitalWrite(PIN_PDM_PWR, HIGH);
@@ -339,7 +381,20 @@ static void setupMicrophone() {
     Serial.println("[mic] PDM.begin failed");
     while (true) delay(100);
   }
+  microphoneOn = true;
   Serial.println("[mic] onboard PDM ready: PCM16 mono at 16 kHz");
+}
+
+static void stopMicrophone() {
+  if (!microphoneOn) return;
+  PDM.end();
+#ifdef PIN_PDM_PWR
+  digitalWrite(PIN_PDM_PWR, LOW);
+#endif
+  microphoneOn = false;
+  clearAudioRing();
+  inferenceSamplesFilled = 0;
+  Serial.println("[mic] off");
 }
 
 static char hexDigit(uint8_t value) {
@@ -431,15 +486,244 @@ static void processSerialTuning() {
   }
 }
 
+static bool radioStopped = false;
+
+static void stopRadio() {
+  if (radioStopped) return;
+  Bluefruit.Advertising.restartOnDisconnect(false);
+  if (connectionHandle != BLE_CONN_HANDLE_INVALID) {
+    Bluefruit.disconnect(connectionHandle);
+    const uint32_t started = millis();
+    while (connectionHandle != BLE_CONN_HANDLE_INVALID &&
+           millis() - started < 500) {
+      delay(10);
+    }
+  }
+  if (Bluefruit.Advertising.isRunning()) Bluefruit.Advertising.stop();
+  radioStopped = true;
+  Serial.println("[ble] advertising stopped");
+}
+
+static void startRadio() {
+  if (!radioStopped) return;
+  Bluefruit.Advertising.restartOnDisconnect(true);
+  Bluefruit.Advertising.start(0);
+  radioStopped = false;
+  Serial.println("[ble] advertising");
+}
+
+static void enterCriticalBattery() {
+  Serial.println("[power] under 5%; screen and radio off, clock still running");
+  clockSaveNow();
+  stopCapture("low_battery");
+  stopMicrophone();
+  stopRadio();
+  roundDisplayForceSleep();
+}
+
+static void leaveCriticalBattery() {
+  Serial.println("[power] battery recovered");
+  startMicrophone();
+  startRadio();
+  roundDisplayPowerOk();
+  roundDisplayGlance();
+}
+
+struct ButtonDebounce {
+  bool stableDown = false;
+  bool lastRaw = false;
+  uint32_t changedAtMs = 0;
+
+  void reset() {
+    lastRaw = digitalRead(kButtonPin) == LOW;
+    stableDown = lastRaw;
+    changedAtMs = millis();
+  }
+
+  bool poll(bool &pressed, bool &released) {
+    const bool raw = digitalRead(kButtonPin) == LOW;
+    const uint32_t now = millis();
+    pressed = false;
+    released = false;
+    if (raw != lastRaw) {
+      lastRaw = raw;
+      changedAtMs = now;
+    }
+    if (now - changedAtMs >= kButtonDebounceMs && raw != stableDown) {
+      stableDown = raw;
+      pressed = raw;
+      released = !raw;
+    }
+    return stableDown;
+  }
+};
+
+static ButtonDebounce button;
+
+static void clearSenseLatch() {
+  NRF_P0->LATCH = NRF_P0->LATCH;
+  NRF_P1->LATCH = NRF_P1->LATCH;
+}
+
+static void armButtonWake() {
+  nrf_gpio_cfg_sense_input(digitalPinToPinName(kButtonPin), NRF_GPIO_PIN_PULLUP,
+                           NRF_GPIO_PIN_SENSE_LOW);
+  clearSenseLatch();
+  Serial.printf("[button] D%u wake armed\n", kButtonPin);
+}
+
+static void disarmButtonWake() {
+  pinMode(kButtonPin, INPUT_PULLUP);
+  clearSenseLatch();
+}
+
+static void waitUntilButtonReleased() {
+  uint32_t highSince = 0;
+  while (true) {
+    if (digitalRead(kButtonPin) != LOW) {
+      if (highSince == 0) highSince = millis();
+      if (millis() - highSince >= kButtonDebounceMs) return;
+    } else {
+      highSince = 0;
+    }
+    delay(5);
+  }
+}
+
+static void beginPushToTalk() {
+  if (pttActive || capturing || clipArmed) return;
+  pttActive = true;
+  startMicrophone();
+  startCapture(TriggerSource::Button, 1.0f);
+  if (!capturing) pttActive = false;
+}
+
+static void endPushToTalk() {
+  if (!pttActive) return;
+  pttActive = false;
+  // Same ending as a wake-word turn: Thinking, or the held-turn notice.
+  stopCapture("button_release");
+}
+
+static void wakeFromSystemSleep() {
+  disarmButtonWake();
+  startMicrophone();
+  startRadio();
+  roundDisplayResume();
+  button.reset();
+  Serial.println("[state] awake");
+}
+
+// Blocks in System ON until D0 is tapped. RTC2 keeps running.
+static void sleepUntilShortTap() {
+  button.reset();
+  while (true) {
+    bool pressed = false;
+    bool released = false;
+    button.poll(pressed, released);
+    if (pressed) {
+      Serial.println("[button] down");
+      const uint32_t downAt = millis();
+      while (true) {
+        button.poll(pressed, released);
+        if (released) {
+          Serial.println("[button] up");
+          if (millis() - downAt < kButtonLongPressMs) return;
+          Serial.println("[button] long press while asleep");
+          button.reset();
+          break;
+        }
+        if (button.stableDown && millis() - downAt >= kButtonLongPressMs) {
+          Serial.println("[button] held while asleep");
+          waitUntilButtonReleased();
+          button.reset();
+          break;
+        }
+        delay(5);
+      }
+    }
+    if (digitalRead(kButtonPin) != LOW) clearSenseLatch();
+    waitForEvent();
+  }
+}
+
+static void enterSystemOnSleep() {
+  Serial.println("[state] goodbye");
+  pttActive = false;
+  if (capturing) stopCapture("sleep");
+  roundDisplayShowGoodbye();
+  delay(kGoodbyeMs);
+  stopMicrophone();
+  roundDisplaySuspend();
+  stopRadio();
+  waitUntilButtonReleased();
+  armButtonWake();
+  // Stay in System ON. System OFF resets RTC2, and the clock is that counter.
+  sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
+  Serial.println("[state] asleep");
+  Serial.flush();
+  sleepUntilShortTap();
+  wakeFromSystemSleep();
+}
+
 static void processButton() {
   if (clipArmed) return;
-  static bool previousPressed = false;
-  static uint32_t changedAtMs = 0;
-  const bool pressed = digitalRead(NEARBY_BUTTON_PIN) == LOW;
-  if (pressed != previousPressed && millis() - changedAtMs > 30) {
-    changedAtMs = millis();
-    previousPressed = pressed;
-    if (pressed) startCapture(TriggerSource::Button, 1.0f);
+  bool pressed = false;
+  bool released = false;
+  const bool down = button.poll(pressed, released);
+
+  // Under 5% the button only lights the clock. The microphone stays off.
+  if (batteryCritical() || radioStopped) {
+    if (pressed) {
+      Serial.println("[button] down");
+      roundDisplayGlance();
+      Serial.println("[state] idle");
+    }
+    return;
+  }
+
+  static uint32_t downAtMs = 0;
+  static bool holdStarted = false;
+  static bool longHandled = false;
+  static bool darkAtPress = false;
+
+  if (pressed) {
+    downAtMs = millis();
+    holdStarted = false;
+    longHandled = false;
+    darkAtPress = roundDisplayAsleep();
+    Serial.println("[button] down");
+  }
+
+  if (down && !longHandled && downAtMs != 0 &&
+      millis() - downAtMs >= kButtonLongPressMs) {
+    longHandled = true;
+    Serial.println("[button] long press");
+    enterSystemOnSleep();
+    downAtMs = 0;
+    holdStarted = false;
+    button.reset();
+    return;
+  }
+
+  if (down && !holdStarted && !longHandled && downAtMs != 0 &&
+      millis() - downAtMs >= kButtonHoldMs) {
+    holdStarted = true;
+    beginPushToTalk();
+  }
+
+  if (released) {
+    Serial.println("[button] up");
+    if (pttActive) {
+      endPushToTalk();
+    } else if (!holdStarted && (darkAtPress || roundDisplayAsleep())) {
+      roundDisplayGlance();
+      Serial.println("[state] idle");
+    } else if (!holdStarted) {
+      Serial.println("[button] tap");
+    }
+    downAtMs = 0;
+    holdStarted = false;
   }
 }
 
@@ -450,7 +734,8 @@ void setup() {
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
-  pinMode(NEARBY_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(kButtonPin, INPUT_PULLUP);
+  button.reset();
   if (NEARBY_HAPTIC_PIN >= 0) {
     pinMode(NEARBY_HAPTIC_PIN, OUTPUT);
     digitalWrite(NEARBY_HAPTIC_PIN, LOW);
@@ -470,19 +755,22 @@ void setup() {
 
   setupBle();
   turnCacheBegin();
-  setupMicrophone();
+  startMicrophone();
   roundDisplayBegin();
   Serial.printf(
-      "[ready] wake=on threshold=%.2f; button=D%d; display=%s; 's'=stats "
-      "'f'=false 'c'=one training clip\n",
-      wakeSettings.thresholdPercent / 100.0f, NEARBY_BUTTON_PIN,
+      "[ready] wake=on threshold=%.2f; button=D%u debounce=%lums hold=%lums "
+      "long=%lums; display=%s; 's'=stats 'f'=false 'c'=one training clip\n",
+      wakeSettings.thresholdPercent / 100.0f, kButtonPin,
+      static_cast<unsigned long>(kButtonDebounceMs),
+      static_cast<unsigned long>(kButtonHoldMs),
+      static_cast<unsigned long>(kButtonLongPressMs),
       roundDisplayReady() ? "on" : "off");
 }
 
 static PendantFace pendantFace() {
   if (clipArmed) return PendantFace::Clip;
+  if (pttActive || (capturing && !holdingTurn)) return PendantFace::Listening;
   if (capturing && holdingTurn) return PendantFace::Holding;
-  if (capturing) return PendantFace::Listening;
   if (turnCachePending()) {
     return connectionHandle == BLE_CONN_HANDLE_INVALID ? PendantFace::Holding
                                                        : PendantFace::Sending;
@@ -504,6 +792,7 @@ static void sendHeldTurn() {
       return;
     }
     replayEventSent = true;
+    showThinking();
     Serial.println("[cache] phone back; sending the held turn");
   }
 
@@ -527,6 +816,17 @@ static void sendHeldTurn() {
 void loop() {
   processButton();
   processSerialTuning();
+
+  // Under 5% the glass and the radio are off. RTC2 keeps the time.
+  // System OFF would stop that clock, so the CPU only naps.
+  if (batteryCritical()) {
+    if (!radioStopped) enterCriticalBattery();
+    roundDisplayWatch();
+    __WFE();
+    return;
+  }
+  if (radioStopped) leaveCriticalBattery();
+
   if (clipArmed) {
     processClip();
   } else if (capturing) {
@@ -541,7 +841,7 @@ void loop() {
   roundDisplayShow(pendantFace());
   roundDisplayWatch();
 
-  // Let the Cortex-M4 sleep between PDM/BLE interrupts. Continuous PDM and
-  // inference still dominate idle current; this is not a system-off mode.
+  // Nap between microphone and radio events. The panel also sleeps after
+  // 20 idle seconds. Wake word and BLE still run, so this is not System OFF.
   if (ringRead == ringWrite) __WFE();
 }

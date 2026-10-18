@@ -31,6 +31,8 @@ const GAP_SERVICE = "00001800-0000-1000-8000-00805f9b34fb";
 const GAP_NAME = "00002a00-0000-1000-8000-00805f9b34fb";
 const AUDIO = "4e421001-0000-1000-8000-00805f9b34fb";
 const EVENT = "4e421003-0000-1000-8000-00805f9b34fb";
+const TIME_SERVICE = "4e421010-0000-1000-8000-00805f9b34fb";
+const TIME_CHAR = "4e421011-0000-1000-8000-00805f9b34fb";
 
 export type FoundPendant = {
   id: string;
@@ -103,6 +105,20 @@ function wavBase64(pcm: Uint8Array): string {
   combined.set(header);
   combined.set(pcm, header.length);
   return encodeBase64(combined);
+}
+
+async function writeNearbyTime(device: Device): Promise<void> {
+  const unix = Math.floor(Date.now() / 1000);
+  const offset = -new Date().getTimezoneOffset() * 60;
+  const bytes = new Uint8Array(8);
+  const view = new DataView(bytes.buffer);
+  view.setInt32(0, unix, true);
+  view.setInt32(4, offset, true);
+  await device.writeCharacteristicWithResponseForService(
+    TIME_SERVICE,
+    TIME_CHAR,
+    encodeBase64(bytes),
+  );
 }
 
 function bluetoothReady(): boolean {
@@ -312,6 +328,9 @@ export function PendantProvider({ children }: { children: ReactNode }) {
     const connected = await device.connect();
     await connected.discoverAllServicesAndCharacteristics();
     await connected.requestMTU(247).catch(() => connected);
+    await writeNearbyTime(connected).catch((error: unknown) => {
+      console.warn("Pendant clock sync failed", error);
+    });
     setStatus(`Connected to ${pendantDisplayName(code)}`);
     const audioSub = connected.monitorCharacteristicForService(
       SERVICE,
