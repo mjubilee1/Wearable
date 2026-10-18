@@ -4,7 +4,7 @@ Seeed XIAO nRF52840 Sense driving a Teyleten GC9A01 1.28" 240x240 round display.
 
 Sketch: `display_gc9a01.ino` in this folder.
 
-This is a separate Arduino sketch from `firmware/wakeword`. Uploading it replaces whatever firmware is currently on the board. D1 is the display chip-select here. In the wake-word firmware, D1 is the backup button.
+This clock demo is separate from the desk image. Flash `firmware/wakeword` when the microphone and the panel should run together. The wiring diagram is in `firmware/wakeword/README.md`. Uploading this sketch replaces that image. D1 is display chip select in both. The wake-word button is D0.
 
 The sketch does not use the microphone. Later, call `onWakeWord()` from `loop()` when "hello nearby" scores, and `showReply()` when the phone sends the spoken answer.
 

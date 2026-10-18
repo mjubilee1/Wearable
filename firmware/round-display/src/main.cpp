@@ -16,7 +16,7 @@
  * The panel does not use MISO. D9 stays the SPI peripheral's unused input.
  * If the module has a BL pin, tie it to 3V3.
  *
- * This image is not the wake-word firmware. Wake word uses D1 as a button.
+ * Display-only bench. The combined image is firmware/wakeword, where D0 is the button.
  */
 
 #include <Adafruit_GC9A01A.h>

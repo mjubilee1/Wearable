@@ -1,6 +1,6 @@
 # GC9A01 round display
 
-Glowing waveform for the 1.28" GC9A01 on the Seeed XIAO nRF52840 Sense. This is a separate image from `firmware/wakeword`. Wake word uses D1 as the backup button; here D1 is the display chip select.
+Waveform bench for the 1.28" GC9A01. The desk image is `firmware/wakeword`, which runs this same panel and the wake word together. Flashing this folder replaces that image. The display pins match the diagram in `firmware/wakeword/README.md`. This bench has no button; in the combined image the button is D0 because D1 is chip select.
 
 Confirm the board enumerates as USB `2886:8045` before flashing.
 
