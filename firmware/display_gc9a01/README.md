@@ -11,7 +11,7 @@ The sketch does not use the microphone. Later, call `onWakeWord()` from `loop()`
 ## Install
 
 1. Arduino IDE → Boards Manager → install **Seeed nRF52 mbed-enabled Boards** by Seeed Studio, version **2.9.2 or newer**. Older versions read the battery pin wrong.
-2. Tools → Board → **Seeed XIAO nRF52840 Sense**.
+2. Tools → Board → **XIAO nRF52840 Sense (No Updates)**. In package 2.9.3 that row is the mbed board. The row named **Seeed XIAO nRF52840 Sense** is the other package and will not compile.
 3. Library Manager → install:
    - **Adafruit GC9A01A** by Adafruit
    - **Adafruit GFX Library** by Adafruit
@@ -55,8 +55,8 @@ Near the top of `display_gc9a01.ino`:
 
 - `BENCH_TEST` — leave `true` until your own code calls `onWakeWord()` and `showReply()`. Then set it to `false`.
 - `DISPLAY_ROTATION` — change `0` to `2` if the picture is upside down.
-- `DISPLAY_INVERT` — set `true` if black and white are swapped.
-- `SPI_HZ` — `16000000` is for jumper wires. `32000000` is fine on a short cable if the picture stays clean.
+- `DISPLAY_INVERT` — `true` for this panel. `false` swaps black and white and turns red into yellow.
+- `SPI_HZ` — `8000000` is for jumper wires. `16000000` is fine on a short cable if the picture stays clean.
 
 ## If the screen stays blank
 

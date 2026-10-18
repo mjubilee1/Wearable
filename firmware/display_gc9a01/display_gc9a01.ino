@@ -10,7 +10,9 @@
     "Seeed nRF52 mbed-enabled Boards" by Seeed Studio, version 2.9.2 or newer.
     Older releases have a broken PIN_VBAT and will not read the LiPo.
   Tools > Board:
-    Seeed nRF52 mbed-enabled Boards > Seeed XIAO nRF52840 Sense
+    Seeed nRF52 mbed-enabled Boards > XIAO nRF52840 Sense (No Updates)
+    In Boards Manager 2.9.3 that row is the mbed package. The row named
+    "Seeed XIAO nRF52840 Sense" is the other package and will not compile.
 
   Libraries (Library Manager). Install these three:
     1. Adafruit GC9A01A      by Adafruit
@@ -32,9 +34,10 @@
     The cell is charged when USB is plugged in. Do not wire the cell
     to a GPIO.
 
-  D1 is the display chip-select in this sketch. The wake-word firmware
-  in firmware/wakeword uses D1 as its backup button. This file is a
-  separate Arduino sketch. Flashing it replaces whatever is on the board.
+  D1 is the display chip select. The wake-word button is D0.
+  This file is a separate Arduino sketch. Flashing it replaces
+  whatever is on the board. For a red/green/blue wiring check, open
+  firmware/display_rgb_test/display_rgb_test.ino first.
 
   This sketch does not open the microphone. When your Edge Impulse
   "hello nearby" code accepts a wake, call onWakeWord() from loop().
@@ -46,31 +49,41 @@
     REPLY      short centered text, then back to the clock after 6 seconds
 */
 
+// These have to be macros. The Arduino IDE copies wrapReply()'s signature
+// to the top of the sketch, above any const declared next to that function.
+#define MAX_REPLY_LINES 6
+#define MAX_REPLY_CHARS 28
+
 #include <Adafruit_GC9A01A.h>
 #include <Adafruit_GFX.h>
 #include <SPI.h>
 #include <math.h>
 #include <string.h>
 
-#if !defined(PIN_VBAT) || !defined(PIN_VBAT_ENABLE) || !defined(AR_INTERNAL2V4)
-#error "Pick Seeed nRF52 mbed-enabled Boards > Seeed XIAO nRF52840 Sense, version 2.9.2 or newer."
+// Library discovery compiles the sketch before the board headers exist, so
+// pin names are missing in that pass. Check only on the real compile.
+// AR_INTERNAL2V4 is an enum in this package, not a macro. PIN_VBAT_ENABLE
+// exists only on the mbed core.
+#if ARDUINO_LIBRARY_DISCOVERY_PHASE != 1
+#if !defined(PIN_VBAT) || !defined(PIN_VBAT_ENABLE)
+#error "Pick Seeed nRF52 mbed-enabled Boards > XIAO nRF52840 Sense (No Updates), version 2.9.2 or newer."
 #endif
-
 // Hardware SPI uses the board's fixed SCK and MOSI pins. On this package
 // those are D8 and D10, which is the wiring above. The 3-pin constructor
 // is hardware SPI. The 5-pin constructor bit-bangs and is too slow here.
 static_assert(D8 == PIN_SPI_SCK, "D8 is not the hardware SPI clock on this board package.");
 static_assert(D10 == PIN_SPI_MOSI, "D10 is not the hardware SPI data pin on this board package.");
+#endif
 
 const int TFT_CS = D1;
 const int TFT_DC = D2;
 const int TFT_RST = D3;
 
-// 16 MHz is reliable on jumper wires. 32000000 is fine on a short cable
-// if the picture stays clean.
-const uint32_t SPI_HZ = 16000000;
+// 8 MHz is for jumper wires. 16 MHz is fine on a short cable if the
+// picture stays clean. Faint vertical lines mean the clock is too fast.
+const uint32_t SPI_HZ = 8000000;
 const uint8_t DISPLAY_ROTATION = 0;  // use 2 if the picture is upside down
-const bool DISPLAY_INVERT = false;   // use true if black and white are swapped
+const bool DISPLAY_INVERT = true;    // this panel shows yellow/purple until inverted
 
 const int16_t SCREEN = 240;
 const int16_t CENTER = 120;
@@ -321,8 +334,8 @@ void paintWave() {
   const int barW = 6;
   int used = bars * barW + (bars - 1) * gap;
   int origin = (WAVE_W - used) / 2;
-  uint16_t glow = waveCanvas.color565(80, 28, 150);
-  uint16_t mid = waveCanvas.color565(176, 110, 255);
+  uint16_t glow = tft.color565(80, 28, 150);
+  uint16_t mid = tft.color565(176, 110, 255);
 
   for (int i = 0; i < bars; i++) {
     float swell = 0.5f + 0.5f * sinf(wavePhase + i * 0.48f);
@@ -371,9 +384,6 @@ int16_t chordWidthAt(int16_t screenY) {
 
 // Greedy word wrap. Returns the line count, or -1 if this size cannot
 // keep every line inside the circle.
-const int MAX_REPLY_LINES = 6;
-const int MAX_REPLY_CHARS = 28;
-
 int wrapReply(const char *message, uint8_t textSize, int16_t maxWidth,
               char lines[][MAX_REPLY_CHARS]) {
   int count = 0;
@@ -613,6 +623,12 @@ void setup() {
 
   captureCompileTime();
   startBatterySense();
+
+  pinMode(TFT_RST, OUTPUT);
+  digitalWrite(TFT_RST, LOW);
+  delay(100);
+  digitalWrite(TFT_RST, HIGH);
+  delay(100);
 
   tft.begin(SPI_HZ);
   tft.setRotation(DISPLAY_ROTATION);
