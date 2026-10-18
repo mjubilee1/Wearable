@@ -31,8 +31,8 @@ void roundDisplayPowerOk();
 // Hooks for wake-word and BLE code. They only raise flags. loop() draws,
 // so they are safe from a BLE callback.
 //
-//   onWakeWord()                 teal ring pulse + waveform
-//   showThinking()               spinning arc while the reply is on the way
+//   onWakeWord()                 the word Listening, and three quiet dots
+//   showThinking()               "One moment" while the reply is on the way
 //   showReply(text)              wrapped text, back to the clock after 6 s
 //   showNotice(title, body)      for example showNotice("Calendar", "Meeting in 10 min")
 void onWakeWord();

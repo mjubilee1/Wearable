@@ -72,20 +72,21 @@ idle clock -- "hello nearby" or D0 --> listening -- silence or 10 s --> thinking
                                  +-- phone away --> notice               +-- reply for 6 s --> idle
 ```
 
-The glass is a round watch face. Idle shows the 12-hour time, the date, a
-battery icon, and a Bluetooth mark. Listening pulses the teal ring and draws
-a waveform. Thinking is a spinning arc. A reply is wrapped inside the circle
-for 6 seconds. `showNotice("Calendar", "Meeting in 10 min")` holds a title
-and a line for 8 seconds.
+The glass is a round pendant face, not a watch. Idle shows the time and the
+date in cream and warm gray. A line appears only when something needs the
+wearer: no phone, low battery, or charge the battery. Listening and thinking
+are a short word and three dots. A reply is wrapped text for 6 seconds.
+`showNotice("Calendar", "Meeting in 10 min")` holds a title and a line for
+8 seconds.
 
 After 20 idle seconds the panel sleeps. The button wakes the clock; press it
 again to start a turn. "Hello Nearby" or a phone connection also wakes it.
 The backlight is tied to 3V3, so sleep turns the controller off, not that LED.
 
-Under 15% the battery icon turns red and a warning mark appears. Under 5%
-the screen and the radio turn off. The RTC keeps the time. Press the button
-to glance at the clock. The radio returns once the cell is back to 8%. A USB
-bench with no cell does not take this path.
+Under 15% the face says Low battery. Under 5% the screen and the radio turn
+off. The RTC keeps the time. Press the button to glance at the clock. The
+radio returns once the cell is back to 8%. A USB bench with no cell does not
+take this path.
 
 The onboard LED is the default cue. For a haptic motor, use a transistor and
 flyback protection on a free pin such as D4 or D6. Do not power a motor from
@@ -169,7 +170,7 @@ Clock service: `4e421010-0000-1000-8000-00805f9b34fb`
 
 The standard Current Time Service `0x1805` is also writable (`0x2A2B` current time, `0x2A0F` local time). The phone app uses the custom characteristic. iOS does not push `0x1805` by itself.
 
-Time is counted on RTC2 (the 32.768 kHz crystal), so it keeps moving while the CPU sleeps. Every few minutes, and again under 5%, that time is written to internal flash (`/time.bin`). A reboot shows the saved time immediately, with a small teal dot, until the phone writes a fresh one. Before the first sync ever, the face shows `--:--` and `Open Nearby app to sync`.
+Time is counted on RTC2 (the 32.768 kHz crystal), so it keeps moving while the CPU sleeps. Every few minutes, and again under 5%, that time is written to internal flash (`/time.bin`). A reboot shows the saved time in gray until the phone writes a fresh one. Before the first sync ever, the face shows `--:--` and `Open the Nearby app`.
 
 The clock service is in the GATT table after connect. It is not in the advertising packet, because two 128-bit UUIDs do not fit. Write it on every connect.
 
