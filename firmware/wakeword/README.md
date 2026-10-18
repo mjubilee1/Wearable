@@ -159,6 +159,7 @@ Service: `4e421000-0000-1000-8000-00805f9b34fb`
 | Audio | `1001` | Notify: little-endian PCM16, mono, 16 kHz |
 | Wake settings | `1002` | Read/write two bytes: `[enabled, threshold_percent]`; default `[1, 85]` |
 | Trigger event | `1003` | Notify two bytes: `[source, confidence_percent]`; source 1=word, 2=button |
+| Reply | `1004` | Write UTF-8 text, at most 96 bytes. The round face shows it, then returns to the clock. |
 
 Clock service: `4e421010-0000-1000-8000-00805f9b34fb`
 

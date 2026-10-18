@@ -24,8 +24,9 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { locationForTurn, offerDeviceLocationOnce } from "@/lib/device-location";
 import { colors } from "@/lib/theme";
-import { PendantCard } from "@/components/PendantSession";
+import { PendantCard, usePendant } from "@/components/PendantSession";
 import { VoiceMemoPanel } from "@/components/VoiceMemoPanel";
+import { speak, stop } from "@/lib/speech";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -43,18 +44,9 @@ function deviceTimeZone(): string {
   }
 }
 
-function speak(text: string) {
-  try {
-    const Speech = require("expo-speech") as typeof import("expo-speech");
-    Speech.stop();
-    Speech.speak(text, { rate: 1, language: "en-US" });
-  } catch (error) {
-    console.warn("Spoken reply unavailable until the next dev build", error);
-  }
-}
-
 export function TalkPanel() {
   const { user } = useAuth();
+  const { chat, sendReplyText } = usePendant();
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
@@ -130,6 +122,7 @@ export function TalkPanel() {
   async function ask(spoken: string) {
     const next = spoken.trim();
     if (!next || busy) return;
+    void stop();
     const needsLocation = turnNeedsDeviceLocation(next);
     setLastRequest(next);
     setBusy(true);
@@ -145,7 +138,8 @@ export function TalkPanel() {
       });
       setReply(result.reply);
       setText("");
-      speak(result.reply);
+      void speak(result.reply);
+      void sendReplyText(result.reply);
       await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
       await queryClient.invalidateQueries({ queryKey: ["agent-history"] });
     } catch (err) {
@@ -211,12 +205,23 @@ export function TalkPanel() {
       newest.request === lastRequest,
   );
   const showLive = !turnSaved && Boolean(busy || reply);
+  const pendantSaved = Boolean(
+    chat?.reply &&
+      history.some(
+        (item) =>
+          item.reply === chat.reply &&
+          (chat.request == null || item.request === chat.request),
+      ),
+  );
+  const showPendant = Boolean(
+    chat && (chat.busy || chat.error || (chat.reply && !pendantSaved)),
+  );
   const usage = historyQuery.data?.usage;
-  const showExamples = history.length === 0 && !showLive;
+  const showExamples = history.length === 0 && !showLive && !showPendant;
 
   useEffect(() => {
     threadRef.current?.scrollToEnd({ animated: true });
-  }, [history.length, reply, busy, error, memoryOpen]);
+  }, [history.length, reply, busy, error, memoryOpen, showPendant, chat?.request, chat?.reply]);
 
   return (
     <KeyboardAvoidingView
@@ -287,6 +292,27 @@ export function TalkPanel() {
             </View>
           </View>
         ))}
+
+        {showPendant && chat ? (
+          <View style={styles.turn}>
+            <View style={styles.mineRow}>
+              <View style={styles.mineBubble}>
+                <Text style={styles.mineText}>{chat.request ?? "Listening…"}</Text>
+              </View>
+            </View>
+            <View style={styles.theirRow}>
+              <View style={styles.theirBubble}>
+                {chat.busy ? (
+                  <ActivityIndicator color={colors.teal} />
+                ) : chat.error ? (
+                  <Text style={styles.error}>{chat.error}</Text>
+                ) : (
+                  <Text style={styles.theirText}>{chat.reply}</Text>
+                )}
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         {showLive ? (
           <View style={styles.turn}>

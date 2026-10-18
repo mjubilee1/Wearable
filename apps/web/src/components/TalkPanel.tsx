@@ -102,6 +102,7 @@ function unlockSpeech() {
   }
 }
 
+// PARITY: mobile — Voice replies on/off and speed live in phone Settings. Web always speaks.
 function speak(text: string) {
   try {
     if (typeof window === "undefined" || !window.speechSynthesis) return;

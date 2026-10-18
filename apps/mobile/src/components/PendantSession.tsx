@@ -18,11 +18,13 @@ import {
   Text,
   View,
 } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { BleManager, State, type Device, type Subscription } from "react-native-ble-plx";
 import { pendantCodeFromName, pendantDisplayName } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
 import { readDeviceLocation } from "@/lib/device-location";
 import { colors } from "@/lib/theme";
+import { speak, stop } from "@/lib/speech";
 import { updateUserProfile } from "@/lib/users";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -31,6 +33,8 @@ const GAP_SERVICE = "00001800-0000-1000-8000-00805f9b34fb";
 const GAP_NAME = "00002a00-0000-1000-8000-00805f9b34fb";
 const AUDIO = "4e421001-0000-1000-8000-00805f9b34fb";
 const EVENT = "4e421003-0000-1000-8000-00805f9b34fb";
+const REPLY = "4e421004-0000-1000-8000-00805f9b34fb";
+const REPLY_MAX_BYTES = 96;
 const TIME_SERVICE = "4e421010-0000-1000-8000-00805f9b34fb";
 const TIME_CHAR = "4e421011-0000-1000-8000-00805f9b34fb";
 
@@ -40,14 +44,23 @@ export type FoundPendant = {
   name: string;
 };
 
+export type PendantChat = {
+  request: string | null;
+  reply: string | null;
+  busy: boolean;
+  error: string | null;
+};
+
 type PendantContextValue = {
   status: string;
   scanning: boolean;
   found: FoundPendant[];
   pairedCode: string | null;
+  chat: PendantChat | null;
   find: () => Promise<void>;
   pair: (pendant: FoundPendant) => Promise<void>;
   forget: () => Promise<void>;
+  sendReplyText: (text: string) => Promise<void>;
 };
 
 const PendantContext = createContext<PendantContextValue | null>(null);
@@ -182,18 +195,19 @@ async function ensureBluetoothPermission(): Promise<void> {
   if (!granted) throw new Error("Bluetooth permission is required to add a pendant.");
 }
 
-function speak(text: string) {
-  try {
-    const Speech = require("expo-speech") as typeof import("expo-speech");
-    Speech.stop();
-    Speech.speak(text, { rate: 1, language: "en-US" });
-  } catch (error) {
-    console.warn("Spoken reply unavailable until the next dev build", error);
-  }
+function clipUtf8(text: string, maxBytes: number): Uint8Array {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!compact || maxBytes < 1) return new Uint8Array();
+  const bytes = new TextEncoder().encode(compact);
+  if (bytes.length <= maxBytes) return bytes;
+  let end = maxBytes;
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end -= 1;
+  return bytes.slice(0, end);
 }
 
 export function PendantProvider({ children }: { children: ReactNode }) {
   const { user, profile, refreshProfile } = useAuth();
+  const queryClient = useQueryClient();
   const userRef = useRef(user);
   userRef.current = user;
   const managerRef = useRef<BleManager | null>(null);
@@ -202,11 +216,21 @@ export function PendantProvider({ children }: { children: ReactNode }) {
   const collectingRef = useRef(false);
   const quietTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sendingRef = useRef(false);
+  const deviceRef = useRef<Device | null>(null);
+  const replyLimitRef = useRef(20);
   const [status, setStatus] = useState("Pendant not added");
   const [scanning, setScanning] = useState(false);
   const [found, setFound] = useState<FoundPendant[]>([]);
+  const [chat, setChat] = useState<PendantChat | null>(null);
 
   const pairedCode = profile?.pendantId ?? null;
+  const pairedCodeRef = useRef(pairedCode);
+  pairedCodeRef.current = pairedCode;
+
+  const connectedStatus = useCallback(() => {
+    const code = pairedCodeRef.current;
+    return code ? `Connected to ${pendantDisplayName(code)}` : "Pendant not added";
+  }, []);
 
   const manager = useCallback(() => {
     if (!bluetoothReady()) {
@@ -216,15 +240,48 @@ export function PendantProvider({ children }: { children: ReactNode }) {
     return managerRef.current;
   }, []);
 
+  const sendReplyText = useCallback(async (text: string) => {
+    const device = deviceRef.current;
+    if (!device) return;
+    const payload = clipUtf8(text, replyLimitRef.current);
+    if (payload.length === 0) return;
+    try {
+      await device.writeCharacteristicWithResponseForService(
+        SERVICE,
+        REPLY,
+        encodeBase64(payload),
+      );
+    } catch (error) {
+      console.warn("Pendant display did not accept the reply", error);
+    }
+  }, []);
+
   const finishTurn = useCallback(async () => {
     const signedIn = userRef.current;
     if (sendingRef.current || !signedIn) return;
     const bytes = Uint8Array.from(pcmRef.current);
     pcmRef.current = [];
     collectingRef.current = false;
-    if (bytes.length < 1600) return;
+    if (quietTimerRef.current) {
+      clearTimeout(quietTimerRef.current);
+      quietTimerRef.current = null;
+    }
+    if (bytes.length < 1600) {
+      setChat(null);
+      setStatus(connectedStatus());
+      return;
+    }
     sendingRef.current = true;
+    setChat({ request: null, reply: null, busy: true, error: null });
     setStatus("Sending what you said…");
+    const publish = async (request: string | null, reply: string) => {
+      setChat({ request, reply, busy: false, error: null });
+      setStatus(connectedStatus());
+      void speak(reply);
+      void sendReplyText(reply);
+      await queryClient.invalidateQueries({ queryKey: ["agent-history"] });
+      await queryClient.invalidateQueries({ queryKey: ["agent-memories"] });
+    };
     try {
       const token = await signedIn.getIdToken();
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -240,6 +297,7 @@ export function PendantProvider({ children }: { children: ReactNode }) {
         | { reply?: string; error?: string; code?: string; text?: string }
         | null;
       if (res.status === 409 && payload?.code === "location_required" && payload.text) {
+        setChat({ request: payload.text, reply: null, busy: true, error: null });
         setStatus("Nearby needs your location for that.");
         const location = await readDeviceLocation();
         const retry = await fetch(`${API_URL}/v1/agent`, {
@@ -260,21 +318,21 @@ export function PendantProvider({ children }: { children: ReactNode }) {
         if (!retry.ok || !answered?.reply) {
           throw new Error(answered?.error ?? "The assistant didn't answer");
         }
-        setStatus(answered.reply);
-        speak(answered.reply);
+        await publish(payload.text, answered.reply);
         return;
       }
       if (!res.ok || !payload?.reply) {
         throw new Error(payload?.error ?? "The assistant didn't answer");
       }
-      setStatus(payload.reply);
-      speak(payload.reply);
+      await publish(payload.text ?? null, payload.reply);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not send that turn");
+      const message = error instanceof Error ? error.message : "Could not send that turn";
+      setChat({ request: null, reply: null, busy: false, error: message });
+      setStatus(message);
     } finally {
       sendingRef.current = false;
     }
-  }, []);
+  }, [connectedStatus, queryClient, sendReplyText]);
 
   const noteAudio = useCallback(
     (chunk: Uint8Array) => {
@@ -327,12 +385,15 @@ export function PendantProvider({ children }: { children: ReactNode }) {
     subsRef.current = [];
     const connected = await device.connect();
     await connected.discoverAllServicesAndCharacteristics();
-    await connected.requestMTU(247).catch(() => connected);
-    await writeNearbyTime(connected).catch((error: unknown) => {
+    const negotiated = await connected.requestMTU(247).catch(() => connected);
+    const mtu = negotiated.mtu > 3 ? negotiated.mtu : 23;
+    replyLimitRef.current = Math.min(REPLY_MAX_BYTES, mtu - 3);
+    deviceRef.current = negotiated;
+    await writeNearbyTime(negotiated).catch((error: unknown) => {
       console.warn("Pendant clock sync failed", error);
     });
     setStatus(`Connected to ${pendantDisplayName(code)}`);
-    const audioSub = connected.monitorCharacteristicForService(
+    const audioSub = negotiated.monitorCharacteristicForService(
       SERVICE,
       AUDIO,
       (error, characteristic) => {
@@ -340,23 +401,30 @@ export function PendantProvider({ children }: { children: ReactNode }) {
         noteAudio(decodeBase64(characteristic.value));
       },
     );
-    const eventSub = connected.monitorCharacteristicForService(
+    const eventSub = negotiated.monitorCharacteristicForService(
       SERVICE,
       EVENT,
       (error) => {
         if (error) return;
+        void stop();
         pcmRef.current = [];
         collectingRef.current = true;
+        setChat({ request: null, reply: null, busy: true, error: null });
         setStatus("Heard you");
+        if (quietTimerRef.current) clearTimeout(quietTimerRef.current);
+        quietTimerRef.current = setTimeout(() => {
+          void finishTurn();
+        }, 8000);
       },
     );
-    const disconnectSub = bleDisconnect(connected, code);
+    const disconnectSub = bleDisconnect(negotiated, code);
     subsRef.current = [audioSub, eventSub, disconnectSub];
   }
   listenRef.current = listen;
 
   function bleDisconnect(device: Device, code: string): Subscription {
     return manager().onDeviceDisconnected(device.id, () => {
+      if (deviceRef.current?.id === device.id) deviceRef.current = null;
       setStatus(`${pendantDisplayName(code)} disconnected. Looking again…`);
       setTimeout(() => {
         void connectPaired(code).catch((error: unknown) => {
@@ -377,6 +445,7 @@ export function PendantProvider({ children }: { children: ReactNode }) {
     });
     return () => {
       cancelled = true;
+      deviceRef.current = null;
       manager().stopDeviceScan();
       subsRef.current.forEach((sub) => sub.remove());
     };
@@ -471,6 +540,7 @@ export function PendantProvider({ children }: { children: ReactNode }) {
   const forget = useCallback(async () => {
     if (!profile) return;
     manager().stopDeviceScan();
+    deviceRef.current = null;
     subsRef.current.forEach((sub) => sub.remove());
     await updateUserProfile(profile.id, { pendantId: null });
     await refreshProfile();
@@ -478,8 +548,8 @@ export function PendantProvider({ children }: { children: ReactNode }) {
   }, [manager, profile, refreshProfile]);
 
   const value = useMemo(
-    () => ({ status, scanning, found, pairedCode, find, pair, forget }),
-    [status, scanning, found, pairedCode, find, pair, forget],
+    () => ({ status, scanning, found, pairedCode, chat, find, pair, forget, sendReplyText }),
+    [status, scanning, found, pairedCode, chat, find, pair, forget, sendReplyText],
   );
 
   return <PendantContext.Provider value={value}>{children}</PendantContext.Provider>;
@@ -500,7 +570,7 @@ export function PendantCard() {
         <Text style={styles.status}>
           {pairedCode
             ? `${pendantDisplayName(pairedCode)} is saved on this account. Open the Nearby app on your iPhone to connect.`
-            : "No pendant yet. Open the Nearby app on your iPhone and tap Add pendant."}
+            : "No pendant yet. On your iPhone, open Talk, tap More, then Add."}
         </Text>
         {pairedCode ? (
           <Pressable onPress={() => void forget()} style={styles.secondary}>

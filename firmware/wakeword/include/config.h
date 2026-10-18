@@ -46,6 +46,11 @@ static const char kWakeSettingsCharacteristicUuid[] =
     "4E421002-0000-1000-8000-00805F9B34FB";
 static const char kWakeEventCharacteristicUuid[] =
     "4E421003-0000-1000-8000-00805F9B34FB";
+// Phone writes the spoken reply here. UTF-8, at most 96 bytes, no terminator.
+// The round face wraps it, then returns to the clock.
+static const char kReplyCharacteristicUuid[] =
+    "4E421004-0000-1000-8000-00805F9B34FB";
+static constexpr uint16_t kReplyMaxBytes = 96;
 
 // Clock service. The phone writes this on every connect. RTC2 keeps
 // counting after that, including while the CPU sleeps. Eight bytes,

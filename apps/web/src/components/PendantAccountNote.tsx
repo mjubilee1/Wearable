@@ -21,7 +21,7 @@ export function PendantAccountNote({
 
   return (
     <p className={className}>
-      No pendant yet. Open the Nearby app on your iPhone and tap Add pendant.
+      No pendant yet. On your iPhone, open Talk, tap More, then Add.
       {APP_LINK ? (
         <>
           {" "}

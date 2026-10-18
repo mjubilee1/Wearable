@@ -12,7 +12,6 @@ import {
 import { useRouter } from "expo-router";
 import { isEmailLikeName } from "@nearby/shared";
 import { BrandMark } from "@/components/BrandMark";
-import { PendantCard } from "@/components/PendantSession";
 import { useAuth } from "@/lib/auth-context";
 import { updateUserProfile } from "@/lib/users";
 import { colors } from "@/lib/theme";
@@ -97,8 +96,6 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.settingsOpen}>Open</Text>
         </Pressable>
-
-        <PendantCard />
 
         <Pressable
           onPress={() => router.push("/settings")}

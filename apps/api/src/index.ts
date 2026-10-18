@@ -444,13 +444,12 @@ app.post("/v1/agent/speech", async (c) => {
     if (turnNeedsDeviceLocation(text) && !deviceLocation) {
       return c.json({ code: "location_required", text }, 409);
     }
-    return c.json(
-      await runAgentTurn(auth.uid, {
-        text,
-        timeZone: typeof timeZone === "string" ? timeZone : undefined,
-        location: deviceLocation ?? undefined,
-      }),
-    );
+    const turn = await runAgentTurn(auth.uid, {
+      text,
+      timeZone: typeof timeZone === "string" ? timeZone : undefined,
+      location: deviceLocation ?? undefined,
+    });
+    return c.json({ ...turn, text });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed";
     console.error("[agent-speech]", message);

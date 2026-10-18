@@ -35,6 +35,7 @@ static BLECharacteristic audioCharacteristic(kAudioCharacteristicUuid);
 static BLECharacteristic settingsCharacteristic(
     kWakeSettingsCharacteristicUuid);
 static BLECharacteristic eventCharacteristic(kWakeEventCharacteristicUuid);
+static BLECharacteristic replyCharacteristic(kReplyCharacteristicUuid);
 
 static WakeSettings wakeSettings = {
     1, static_cast<uint8_t>(NEARBY_WAKE_THRESHOLD * 100.0f + 0.5f)};
@@ -279,6 +280,17 @@ static void processWakeWordAudio() {
   }
 }
 
+static void onReplyWrite(uint16_t, BLECharacteristic *, uint8_t *data,
+                         uint16_t length) {
+  if (data == nullptr || length == 0) return;
+  char text[kReplyMaxBytes + 1];
+  const uint16_t count = length > kReplyMaxBytes ? kReplyMaxBytes : length;
+  memcpy(text, data, count);
+  text[count] = '\0';
+  showReply(String(text));
+  Serial.printf("[display] reply bytes=%u\n", static_cast<unsigned>(count));
+}
+
 static void onSettingsWrite(uint16_t, BLECharacteristic *, uint8_t *data,
                             uint16_t length) {
   if (data == nullptr || length != sizeof(WakeSettings)) {
@@ -353,6 +365,12 @@ static void setupBle() {
   eventCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
   eventCharacteristic.setFixedLen(2);
   eventCharacteristic.begin();
+
+  replyCharacteristic.setProperties(CHR_PROPS_WRITE);
+  replyCharacteristic.setPermission(SECMODE_NO_ACCESS, SECMODE_OPEN);
+  replyCharacteristic.setMaxLen(kReplyMaxBytes);
+  replyCharacteristic.setWriteCallback(onReplyWrite);
+  replyCharacteristic.begin();
   clockAddService();
 
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
