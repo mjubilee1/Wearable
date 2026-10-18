@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Analytics } from "@vercel/analytics/next";
 import { IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { AuthGate } from "@/components/AuthGate";
+import { DeferredAnalytics } from "@/components/DeferredAnalytics";
 import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 import { Providers } from "@/components/Providers";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
@@ -93,7 +93,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${plex.variable} ${newsreader.variable} antialiased`}>
         <GoogleAnalytics />
-        <Analytics />
+        <DeferredAnalytics />
         <Providers>
           <AuthGate>{children}</AuthGate>
         </Providers>

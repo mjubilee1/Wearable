@@ -88,6 +88,19 @@ export function captureAttribution(search?: string): FirstTouch {
  * Prefer the first-touch source, then the current URL, then this tab.
  * Falls back to "marketing" when no channel was posted.
  */
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign"] as const;
+
+/** Signup URL that keeps the campaign params from this request. */
+export function signupHref(params: { get(name: string): string | null }): string {
+  const next = new URLSearchParams();
+  for (const key of UTM_KEYS) {
+    const value = sanitizeUtmSource(params.get(key));
+    if (value) next.set(key, value);
+  }
+  const query = next.toString();
+  return query ? `/signup?${query}` : "/signup";
+}
+
 export function captureUtmSource(search?: string): string {
   const touch = captureAttribution(search);
   if (touch.utm_source) return touch.utm_source;

@@ -6,6 +6,7 @@ import { isEmailLikeName } from "@nearby/shared";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { captureAttribution } from "@/lib/attribution";
+import { trackGaEvent } from "@/lib/ga";
 import { trackFunnel } from "@/lib/funnel";
 import { hasFoundingOffer, storedReferralCode } from "@/lib/offers";
 
@@ -61,6 +62,13 @@ export default function SignupPage() {
         utmMedium: touch.utm_medium,
         utmCampaign: touch.utm_campaign,
         referredByCode: storedReferralCode(),
+      });
+      trackGaEvent("sign_up", {
+        method: "email",
+        utm_source: touch.utm_source,
+        utm_campaign: touch.utm_campaign,
+        campaign_source: touch.utm_source,
+        campaign_name: touch.utm_campaign,
       });
     } catch (err) {
       try {

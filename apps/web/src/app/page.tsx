@@ -8,8 +8,10 @@ import { NecklaceMessages } from "@/components/NecklaceMessages";
 import { BrandMark } from "@/components/BrandMark";
 import { MarketingNav } from "@/components/MarketingNav";
 import { PricingSection } from "@/components/PricingSection";
+import { ScrollToDemo } from "@/components/ScrollToDemo";
 import { WaitlistForm } from "@/components/WaitlistForm";
 import { Testimonials } from "@/components/Testimonials";
+import { sanitizeUtmSource, signupHref } from "@/lib/attribution";
 import {
   CONNECTOR_PRIVACY_LINE,
   SITE_DESCRIPTION,
@@ -204,7 +206,33 @@ function audienceFrom(value: string | string[] | undefined): AudienceKey {
   return key ? (AUDIENCE_ALIASES[key.toLowerCase()] ?? "general") : "general";
 }
 
-type HomeSearchParams = Promise<{ for?: string | string[] }>;
+type HomeSearch = {
+  for?: string | string[];
+  utm_source?: string | string[];
+  utm_medium?: string | string[];
+  utm_campaign?: string | string[];
+  v?: string | string[];
+};
+
+type HomeSearchParams = Promise<HomeSearch>;
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function isFacebookLanding(params: HomeSearch): boolean {
+  if (sanitizeUtmSource(firstParam(params.utm_source)) === "facebook") return true;
+  return firstParam(params.v)?.trim().toLowerCase() === "fb";
+}
+
+function homeSignupHref(params: HomeSearch): string {
+  const query = new URLSearchParams();
+  for (const key of ["utm_source", "utm_medium", "utm_campaign"] as const) {
+    const value = firstParam(params[key]);
+    if (value) query.set(key, value);
+  }
+  return signupHref(query);
+}
 
 export async function generateMetadata({
   searchParams,
@@ -243,7 +271,10 @@ export default async function HomePage({
 }: {
   searchParams: HomeSearchParams;
 }) {
-  const audience = AUDIENCES[audienceFrom((await searchParams).for)];
+  const params = await searchParams;
+  const audience = AUDIENCES[audienceFrom(params.for)];
+  const facebook = isFacebookLanding(params);
+  const accountHref = homeSignupHref(params);
   return (
     <div id="top" className="min-h-dvh text-ink">
       <script
@@ -251,33 +282,62 @@ export default async function HomePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd()) }}
       />
       <LandingView />
-      <MarketingNav />
+      <MarketingNav signupHref={accountHref} />
       <main>
-        <section className="mx-auto grid max-w-5xl items-end gap-10 px-5 pb-16 pt-12 sm:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] sm:pt-16">
-          <div>
-            <h1 className="font-display max-w-[8ch] text-6xl font-medium leading-[0.9] text-ink sm:text-8xl">
-              Talk. It does it.
+        {facebook ? (
+          <section className="mx-auto max-w-5xl px-5 pb-3 pt-4">
+            <h1 className="font-display text-[2rem] font-medium leading-[1.05] text-ink">
+              Just wrapped a call? Say one sentence. Done.
             </h1>
-            <p className="mt-6 max-w-sm text-lg leading-snug text-ink">
-              {audience.subhead}
+            <p className="mt-3 max-w-md text-base leading-snug text-ink">
+              Nearby books the follow-up, drafts the email, and adds the task while you walk to your next meeting.
             </p>
-            <p className="mt-3 text-sm text-muted">{audience.builtFor}</p>
-            <Link
-              href="/signup"
-              className="mt-8 inline-flex bg-ink px-5 py-3 text-sm font-semibold text-white"
-            >
-              Start free
-            </Link>
-          </div>
-          <CalendarDemo
-            request={audience.demo.request}
-            receipt={audience.demo.receipt}
-          />
-        </section>
+            <p className="mt-2 text-sm text-muted">
+              Built for sales reps, recruiters, and consultants.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+              <ScrollToDemo className="inline-flex bg-ink px-5 py-2.5 text-sm font-semibold text-white">
+                Try it free, no signup
+              </ScrollToDemo>
+              <Link
+                href={accountHref}
+                className="text-sm font-semibold text-ink underline decoration-teal decoration-2 underline-offset-4"
+              >
+                Create free account
+              </Link>
+            </div>
+          </section>
+        ) : (
+          <section className="mx-auto grid max-w-5xl items-end gap-10 px-5 pb-16 pt-12 sm:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] sm:pt-16">
+            <div>
+              <h1 className="font-display max-w-[8ch] text-6xl font-medium leading-[0.9] text-ink sm:text-8xl">
+                Talk. It does it.
+              </h1>
+              <p className="mt-6 max-w-sm text-lg leading-snug text-ink">
+                {audience.subhead}
+              </p>
+              <p className="mt-3 text-sm text-muted">{audience.builtFor}</p>
+              <Link
+                href={accountHref}
+                className="mt-8 inline-flex bg-ink px-5 py-3 text-sm font-semibold text-white"
+              >
+                Start free
+              </Link>
+            </div>
+            <CalendarDemo
+              request={audience.demo.request}
+              receipt={audience.demo.receipt}
+            />
+          </section>
+        )}
+
+        {facebook ? (
+          <HomepageLiveDemo variant="facebook" signupHref={accountHref} />
+        ) : null}
 
         <NecklaceMessages />
 
-        <HomepageLiveDemo />
+        {facebook ? null : <HomepageLiveDemo signupHref={accountHref} />}
 
         <section className="px-5 pb-16" aria-label="Example requests">
           <ol className="mx-auto max-w-5xl border-t border-ink/15">
@@ -339,7 +399,7 @@ export default async function HomePage({
               <Link href="/pricing" className="text-muted hover:text-ink">
                 FAQ
               </Link>
-              <Link href="/signup" className="text-muted hover:text-ink">
+              <Link href={accountHref} className="text-muted hover:text-ink">
                 Start free
               </Link>
             </div>

@@ -5,9 +5,11 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
+import { useSignupHref } from "@/lib/use-signup-href";
 
 export default function LoginPage() {
   const { signIn } = useAuth();
+  const signupHref = useSignupHref();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,7 +90,7 @@ export default function LoginPage() {
 
       <p className="mt-6 text-center text-sm text-muted">
         New here?{" "}
-        <Link href="/signup" className="font-semibold text-ink underline decoration-teal decoration-2 underline-offset-4">
+        <Link href={signupHref} className="font-semibold text-ink underline decoration-teal decoration-2 underline-offset-4">
           Create an account
         </Link>
       </p>

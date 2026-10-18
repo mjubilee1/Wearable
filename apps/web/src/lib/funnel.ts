@@ -1,5 +1,6 @@
 import { track } from "@vercel/analytics";
-import { readFirstTouch } from "@/lib/attribution";
+import { captureAttribution } from "@/lib/attribution";
+import { trackGaEvent } from "@/lib/ga";
 
 export type FunnelEvent =
   | "landing_view"
@@ -33,11 +34,21 @@ export function trackFunnel(
       // If storage is blocked, still emit the event.
     }
   }
-  const touch = readFirstTouch();
+  const touch = captureAttribution();
   const data: FunnelProps = {
+    ...(touch.utm_source ? { utm_source: touch.utm_source } : {}),
+    ...(touch.utm_medium ? { utm_medium: touch.utm_medium } : {}),
+    ...(touch.utm_campaign ? { utm_campaign: touch.utm_campaign } : {}),
     plan: props?.plan ?? "free",
     ...props,
   };
-  if (touch.utm_source) data.utm_source = touch.utm_source;
   track(event, data);
+  if (event === "signup_start" || event === "signup_complete") {
+    trackGaEvent(event, {
+      method: "email",
+      campaign_source: touch.utm_source,
+      campaign_name: touch.utm_campaign,
+      ...data,
+    });
+  }
 }

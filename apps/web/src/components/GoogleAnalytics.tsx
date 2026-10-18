@@ -3,6 +3,7 @@
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
+import { readFirstTouch } from "@/lib/attribution";
 
 const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID;
 /** Google Ads tag. Public sitewide ID, same snippet Google gives in Ads. */
@@ -30,8 +31,21 @@ function GoogleAnalyticsPageViews() {
       return;
     }
 
-    const query = searchParams.toString();
-    const page_path = query ? `${pathname}?${query}` : pathname;
+    const query = new URLSearchParams(searchParams.toString());
+    if (pathname === "/signup") {
+      const touch = readFirstTouch();
+      if (!query.get("utm_source") && touch.utm_source) {
+        query.set("utm_source", touch.utm_source);
+      }
+      if (!query.get("utm_medium") && touch.utm_medium) {
+        query.set("utm_medium", touch.utm_medium);
+      }
+      if (!query.get("utm_campaign") && touch.utm_campaign) {
+        query.set("utm_campaign", touch.utm_campaign);
+      }
+    }
+    const nextQuery = query.toString();
+    const page_path = nextQuery ? `${pathname}?${nextQuery}` : pathname;
     if (GA_MEASUREMENT_ID) {
       window.gtag("config", GA_MEASUREMENT_ID, { page_path });
     }
@@ -48,9 +62,9 @@ export function GoogleAnalytics() {
     <>
       <Script
         src={`https://www.googletagmanager.com/gtag/js?id=${loaderId}`}
-        strategy="afterInteractive"
+        strategy="lazyOnload"
       />
-      <Script id="google-analytics" strategy="afterInteractive">
+      <Script id="google-analytics" strategy="lazyOnload">
         {`
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}

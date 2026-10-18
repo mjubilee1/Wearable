@@ -14,6 +14,7 @@ import { startProCheckout } from "@/lib/billing";
 import { trackFunnel } from "@/lib/funnel";
 import type { BillingInterval } from "@nearby/shared";
 import { hasFoundingOffer } from "@/lib/offers";
+import { useSignupHref } from "@/lib/use-signup-href";
 
 const FREE = [
   `${FREE_DAILY_REQUESTS} requests a day`,
@@ -31,10 +32,14 @@ const PRO = [
 
 export function PricingSection({
   showHeading = true,
+  proTrialCta = false,
 }: {
   showHeading?: boolean;
+  /** Pricing page Pro button. Homepage keeps "Start free". */
+  proTrialCta?: boolean;
 }) {
   const { user, profile } = useAuth();
+  const accountHref = useSignupHref();
   const pro = profile ? hasProAccess(profile) : false;
   const [busy, setBusy] = useState<BillingInterval | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +82,7 @@ export function PricingSection({
             ))}
           </ul>
           <Link
-            href="/signup"
+            href={accountHref}
             className="mt-6 inline-flex w-full items-center justify-center border border-ink/20 px-4 py-3 text-sm font-semibold text-ink"
           >
             Start free
@@ -121,12 +126,19 @@ export function PricingSection({
               </button>
             </div>
           ) : (
-            <Link
-              href={user ? "/profile" : "/signup"}
-              className="mt-6 inline-flex w-full items-center justify-center bg-ink px-4 py-3 text-sm font-semibold text-white"
-            >
-              {pro ? "Manage plan" : "Start free"}
-            </Link>
+            <div className={proTrialCta && !pro ? "mt-6 flex items-center gap-3" : "mt-6"}>
+              <Link
+                href={user ? "/profile" : accountHref}
+                className={`inline-flex items-center justify-center bg-ink px-4 py-3 text-sm font-semibold text-white ${
+                  proTrialCta && !pro ? "min-w-0 flex-1" : "w-full"
+                }`}
+              >
+                {pro ? "Manage plan" : proTrialCta ? "Start 7-day free trial" : "Start free"}
+              </Link>
+              {proTrialCta && !pro ? (
+                <span className="shrink-0 text-sm text-muted">card required</span>
+              ) : null}
+            </div>
           )}
         </div>
       </div>

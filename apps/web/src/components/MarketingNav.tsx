@@ -3,14 +3,18 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
+import { useSignupHref } from "@/lib/use-signup-href";
 
 const LINKS = [
   { href: "/#messages", label: "Messages" },
   { href: "/pricing", label: "Pricing" },
 ] as const;
 
-export function MarketingNav() {
+export function MarketingNav({ signupHref }: { signupHref?: string }) {
   const { user, loading } = useAuth();
+  const storedHref = useSignupHref();
+  const accountHref =
+    signupHref && signupHref !== "/signup" ? signupHref : storedHref;
   const signedIn = !loading && Boolean(user);
 
   return (
@@ -26,8 +30,8 @@ export function MarketingNav() {
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-5">
-          {loading ? null : signedIn ? (
+        <div className="flex h-9 min-w-36 items-center justify-end gap-5">
+          {signedIn ? (
             <Link href="/activity" className="bg-ink px-3 py-2 text-sm font-semibold text-white">
               Talk
             </Link>
@@ -36,7 +40,7 @@ export function MarketingNav() {
               <Link href="/login" className="text-sm text-muted hover:text-ink">
                 Sign in
               </Link>
-              <Link href="/signup" className="bg-ink px-3 py-2 text-sm font-semibold text-white">
+              <Link href={accountHref} className="bg-ink px-3 py-2 text-sm font-semibold text-white">
                 Sign up
               </Link>
             </>

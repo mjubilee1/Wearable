@@ -57,7 +57,17 @@ function unlockSpeech() {
   window.speechSynthesis.speak(warmup);
 }
 
-export function HomepageLiveDemo() {
+const FACEBOOK_PLACEHOLDER =
+  "Follow up with Dana Thursday at 2 and send her the proposal.";
+
+export function HomepageLiveDemo({
+  variant = "default",
+  signupHref = "/signup",
+}: {
+  variant?: "default" | "facebook";
+  signupHref?: string;
+}) {
+  const facebook = variant === "facebook";
   const [tries, setTries] = useState(0);
   const [text, setText] = useState("");
   const [heard, setHeard] = useState("");
@@ -65,16 +75,16 @@ export function HomepageLiveDemo() {
   const [receipt, setReceipt] = useState<AgentActionReceipt | null>(null);
   const [listening, setListening] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showText, setShowText] = useState(false);
+  const [showText, setShowText] = useState(facebook);
   const [error, setError] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   useEffect(() => {
     const saved = Number(window.localStorage.getItem(STORAGE_KEY) ?? 0);
     setTries(Number.isFinite(saved) ? Math.min(DEMO_TRY_LIMIT, Math.max(0, saved)) : 0);
-    setShowText(!createRecognition());
+    if (!facebook) setShowText(!createRecognition());
     return () => recognitionRef.current?.stop();
-  }, []);
+  }, [facebook]);
 
   const exhausted = tries >= DEMO_TRY_LIMIT;
 
@@ -166,25 +176,103 @@ export function HomepageLiveDemo() {
     void runTask(text);
   }
 
+  const savedPrompt = facebook && Boolean(reply);
+  const triesLeft = `${DEMO_TRY_LIMIT - tries} demo ${DEMO_TRY_LIMIT - tries === 1 ? "try" : "tries"} left`;
+  const status = listening ? "Listening…" : loading ? "Doing it…" : triesLeft;
+
+  const mic = (size: "size-12" | "size-16", icon: "size-6" | "size-7") =>
+    !exhausted ? (
+      <button
+        type="button"
+        onClick={startListening}
+        disabled={loading || listening}
+        aria-label={listening ? "Listening" : "Start voice demo"}
+        className={`flex ${size} shrink-0 items-center justify-center bg-ink text-white disabled:opacity-60`}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" className={`${icon} fill-none stroke-current stroke-2`}>
+          <rect x="9" y="3" width="6" height="11" rx="3" />
+          <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6" />
+        </svg>
+      </button>
+    ) : (
+      <div className={`${size} shrink-0 bg-teal-soft`} aria-hidden />
+    );
+
+  const result = (reply || receipt) && (
+    <div className="mt-5 border-t border-ink/10 pt-4" aria-live="polite">
+      {heard && <p className="font-display text-lg italic text-ink">“{heard}”</p>}
+      {reply && <p className="mt-2 text-sm text-ink">{reply}</p>}
+      {receipt && (
+        <p className="mt-3 text-sm text-ink">
+          <span className="font-semibold">Done.</span> {receipt.action}
+        </p>
+      )}
+      {savedPrompt ? (
+        <Link
+          href={signupHref}
+          className="mt-4 inline-flex max-w-full whitespace-normal bg-ink px-4 py-2.5 text-left text-sm font-semibold text-white"
+        >
+          Like that? Save it to your real calendar → Create free account
+        </Link>
+      ) : null}
+    </div>
+  );
+
+  if (facebook) {
+    return (
+      <section id="live-demo" className="scroll-mt-14 px-5 pb-5" aria-labelledby="live-demo-title">
+        <div className="mx-auto flex max-w-5xl flex-col gap-3 border border-ink/20 bg-white px-4 py-3">
+          <div className="flex items-start gap-3">
+            {mic("size-12", "size-6")}
+            <div className="min-w-0">
+              <h2 id="live-demo-title" className="font-display text-2xl font-medium leading-none">
+                Try it. Say a task.
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                No signup. This sandbox uses a fake calendar and inbox.
+              </p>
+              {!exhausted ? (
+                <p className="mt-2 text-sm text-ink">{status}</p>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-ink">Connect your Google to make it real</p>
+                  <Link href={signupHref} className="mt-3 inline-flex bg-ink px-4 py-2.5 text-sm font-semibold text-white">
+                    Sign up
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+          {!exhausted ? (
+            <form onSubmit={submit} className="flex gap-2">
+              <label htmlFor="demo-task" className="sr-only">Task</label>
+              <input
+                id="demo-task"
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder={FACEBOOK_PLACEHOLDER}
+                className="min-w-0 flex-1 border border-ink/20 bg-paper px-3 py-2.5 text-sm outline-none focus:border-ink"
+              />
+              <button
+                type="submit"
+                disabled={!text.trim() || loading}
+                className="bg-ink px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Run
+              </button>
+            </form>
+          ) : null}
+          {error && <p className="text-sm text-coral" role="alert">{error}</p>}
+          {result}
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="px-5 pb-16" aria-labelledby="live-demo-title">
+    <section id="live-demo" className="px-5 pb-16" aria-labelledby="live-demo-title">
       <div className="mx-auto grid max-w-5xl gap-8 border border-ink/20 bg-white px-5 py-6 sm:grid-cols-[auto_1fr] sm:items-center sm:px-8">
-        {!exhausted ? (
-          <button
-            type="button"
-            onClick={startListening}
-            disabled={loading || listening}
-            aria-label={listening ? "Listening" : "Start voice demo"}
-            className="flex size-16 items-center justify-center bg-ink text-white disabled:opacity-60"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="size-7 fill-none stroke-current stroke-2">
-              <rect x="9" y="3" width="6" height="11" rx="3" />
-              <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6" />
-            </svg>
-          </button>
-        ) : (
-          <div className="size-16 bg-teal-soft" aria-hidden />
-        )}
+        {mic("size-16", "size-7")}
         <div>
           <h2 id="live-demo-title" className="font-display text-3xl font-medium leading-none">
             Try it. Say a task.
@@ -194,9 +282,7 @@ export function HomepageLiveDemo() {
           </p>
           {!exhausted ? (
             <>
-              <p className="mt-3 text-sm text-ink">
-                {listening ? "Listening…" : loading ? "Doing it…" : `${DEMO_TRY_LIMIT - tries} demo ${DEMO_TRY_LIMIT - tries === 1 ? "try" : "tries"} left`}
-              </p>
+              <p className="mt-3 text-sm text-ink">{status}</p>
               <button
                 type="button"
                 onClick={() => setShowText(true)}
@@ -227,23 +313,13 @@ export function HomepageLiveDemo() {
           ) : (
             <div className="mt-4">
               <p className="text-ink">Connect your Google to make it real</p>
-              <Link href="/signup" className="mt-3 inline-flex bg-ink px-4 py-2.5 text-sm font-semibold text-white">
+              <Link href={signupHref} className="mt-3 inline-flex bg-ink px-4 py-2.5 text-sm font-semibold text-white">
                 Sign up
               </Link>
             </div>
           )}
           {error && <p className="mt-4 text-sm text-coral" role="alert">{error}</p>}
-          {(reply || receipt) && (
-            <div className="mt-5 border-t border-ink/10 pt-4" aria-live="polite">
-              {heard && <p className="font-display text-lg italic text-ink">“{heard}”</p>}
-              {reply && <p className="mt-2 text-sm text-ink">{reply}</p>}
-              {receipt && (
-                <p className="mt-3 text-sm text-ink">
-                  <span className="font-semibold">Done.</span> {receipt.action}
-                </p>
-              )}
-            </div>
-          )}
+          {result}
         </div>
       </div>
     </section>

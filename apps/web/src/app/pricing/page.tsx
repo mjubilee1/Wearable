@@ -23,7 +23,7 @@ export default function PricingPage() {
           trial is 7 days, and the card is charged when it ends.
         </p>
         <div className="mt-10">
-          <PricingSection showHeading={false} />
+          <PricingSection showHeading={false} proTrialCta />
         </div>
         <PricingFaq />
       </main>
