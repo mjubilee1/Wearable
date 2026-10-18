@@ -5,6 +5,7 @@
 #include <math.h>
 
 #include "config.h"
+#include "round_display.h"
 #include "turn_cache.h"
 #include "wakeword_model.h"
 
@@ -470,10 +471,23 @@ void setup() {
   setupBle();
   turnCacheBegin();
   setupMicrophone();
+  roundDisplayBegin();
   Serial.printf(
-      "[ready] wake=on threshold=%.2f; button=D%d; 's'=stats 'f'=false "
-      "'c'=one training clip\n",
-      wakeSettings.thresholdPercent / 100.0f, NEARBY_BUTTON_PIN);
+      "[ready] wake=on threshold=%.2f; button=D%d; display=%s; 's'=stats "
+      "'f'=false 'c'=one training clip\n",
+      wakeSettings.thresholdPercent / 100.0f, NEARBY_BUTTON_PIN,
+      roundDisplayReady() ? "on" : "off");
+}
+
+static PendantFace pendantFace() {
+  if (clipArmed) return PendantFace::Clip;
+  if (capturing && holdingTurn) return PendantFace::Holding;
+  if (capturing) return PendantFace::Listening;
+  if (turnCachePending()) {
+    return connectionHandle == BLE_CONN_HANDLE_INVALID ? PendantFace::Holding
+                                                       : PendantFace::Sending;
+  }
+  return PendantFace::Idle;
 }
 
 static void sendHeldTurn() {
@@ -523,6 +537,8 @@ void loop() {
   } else {
     processWakeWordAudio();
   }
+
+  roundDisplayShow(pendantFace());
 
   // Let the Cortex-M4 sleep between PDM/BLE interrupts. Continuous PDM and
   // inference still dominate idle current; this is not a system-off mode.

@@ -10,12 +10,13 @@ static constexpr size_t kPdmReadSamples = 256;
 static constexpr size_t kAudioRingSamples = 4096;  // 256 ms; absorbs BLE stalls.
 static constexpr size_t kBlePacketSamples = 80;    // 160 bytes per notification.
 
+// D0. D1, D2, D3, D8, and D10 belong to the round display.
 #ifndef NEARBY_BUTTON_PIN
-#define NEARBY_BUTTON_PIN 1
+#define NEARBY_BUTTON_PIN 0
 #endif
 
-// Set to a GPIO connected to a transistor-driven haptic motor, never directly
-// to a motor. -1 leaves haptics disabled and uses the onboard LED only.
+// Set to a free GPIO on a transistor-driven haptic motor, never directly
+// to a motor, and never to D0–D3 or D8–D10. -1 leaves haptics off.
 #ifndef NEARBY_HAPTIC_PIN
 #define NEARBY_HAPTIC_PIN -1
 #endif

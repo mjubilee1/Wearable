@@ -12,7 +12,8 @@ This project adds the missing device-side path:
 ```text
 PDM mic (16 kHz PCM16)
   -> local inference only while idle
-  -> "hello nearby" >= threshold OR D1 button
+  -> "hello nearby" >= threshold OR D0 button
+  -> round display shows Listening, Holding, or Sending
   -> 80 ms onboard LED cue (optional haptic GPIO)
   -> BLE PCM notifications when the phone is connected
   -> otherwise one clip on the onboard flash, sent when the phone returns
@@ -38,9 +39,48 @@ pio run -e xiaoblesense -t upload
 pio device monitor -e xiaoblesense -b 115200
 ```
 
-Wire a normally-open backup button from **D1 to GND**. The onboard LED is the
-default cue. For a haptic motor, use a transistor/driver and flyback protection;
-do not power a motor from a GPIO. Set its control pin with
+This is the image that runs the microphone and the round display together.
+`firmware/round-display` is the waveform bench only. Flashing it replaces this
+image.
+
+## Wiring
+
+Confirm the board enumerates as USB `2886:8045` before flashing. One setup
+covers both jobs. The display chip select is D1, so the backup button is D0.
+
+```text
+GC9A01 1.28"                         XIAO nRF52840 Sense
+GND  ------------------------------ GND
+VCC  ------------------------------ 3V3
+SCK / SCL ------------------------- D8
+MOSI / SDA ------------------------ D10
+CS   ------------------------------ D1
+DC   ------------------------------ D2
+RST  ------------------------------ D3
+BL, if the module has one -------- 3V3
+
+Backup button, normally open
+  one side ---------------------- D0
+  other side -------------------- GND
+
+Leave D9 open. The panel has no MISO.
+```
+
+```text
+idle -- "hello nearby" or D0 --> listening -- silence or 10 s --> idle
+                                 |
+                                 +-- phone away --> holding
+                                                       |
+                                                       +-- phone back --> sending --> idle
+```
+
+The screen redraws only when that state changes. Idle says Nearby, listening
+says Listening, a turn held for a missing phone says Holding, and the replay
+says Sending.
+
+The onboard LED is the default cue. For a haptic motor, use a transistor and
+flyback protection on a free pin such as D4 or D6. Do not power a motor from
+a GPIO, and do not use D0–D3 or D8–D10. Set the pin with
 `-DNEARBY_HAPTIC_PIN=<pin>`.
 
 ## Collect training audio
