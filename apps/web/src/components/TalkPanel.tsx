@@ -11,7 +11,6 @@ import {
   isLimitReachedBody,
   isPlaceholderNote,
   turnNeedsDeviceLocation,
-  pendantDisplayName,
   type AgentActionReceipt,
   type AgentConfirmPreview,
   type AgentDraftChoicesPreview,
@@ -38,6 +37,7 @@ import { locationForTurn, offerDeviceLocationOnce } from "@/lib/device-location"
 import { updateUserProfile } from "@/lib/users";
 import { trackFunnel } from "@/lib/funnel";
 import { CONNECTOR_PRIVACY_LINE } from "@/lib/site";
+import { PendantAccountNote } from "@/components/PendantAccountNote";
 import { VoiceMemoPanel } from "@/components/VoiceMemoPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -1105,11 +1105,7 @@ export function TalkPanel() {
               {libraryPanel}
               {menuOpen ? (
                 <div className="mb-2 rounded-3xl border border-black/10 bg-card px-4 py-3 text-sm text-ink shadow-lg">
-                  <p>
-                    {profile?.pendantId
-                      ? `${pendantDisplayName(profile.pendantId)} is saved on this account. The phone app connects to it.`
-                      : "No pendant yet. Open the Nearby app on your iPhone and tap Add pendant."}
-                  </p>
+                  <PendantAccountNote pendantId={profile?.pendantId} className="text-sm text-ink" />
                   <div className="mt-3">
                     <VoiceMemoPanel />
                   </div>
@@ -1142,11 +1138,7 @@ export function TalkPanel() {
             {library ? <div className="absolute inset-x-4 bottom-full mb-2">{libraryPanel}</div> : null}
             {menuOpen ? (
               <div className="absolute inset-x-4 bottom-full z-10 mb-2 rounded-3xl border border-black/10 bg-card px-4 py-3 shadow-lg">
-                <p className="text-sm text-ink">
-                  {profile?.pendantId
-                    ? `${pendantDisplayName(profile.pendantId)} is saved on this account. The phone app connects to it.`
-                    : "No pendant yet. Open the Nearby app on your iPhone and tap Add pendant."}
-                </p>
+                <PendantAccountNote pendantId={profile?.pendantId} className="text-sm text-ink" />
                 <div className="mt-3">
                   <VoiceMemoPanel />
                 </div>

@@ -2,7 +2,8 @@
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { isEmailLikeName, pendantDisplayName } from "@nearby/shared";
+import { isEmailLikeName } from "@nearby/shared";
+import { PendantAccountNote } from "@/components/PendantAccountNote";
 import { PlansCard } from "@/components/PlansCard";
 import { ReferralCard } from "@/components/ReferralCard";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
@@ -104,11 +105,7 @@ export default function ProfilePage() {
 
         <section className="mb-6 rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm">
           <p className="text-sm font-bold text-ink">Pendant</p>
-          <p className="mt-1 text-sm text-muted">
-            {profile.pendantId
-              ? `${pendantDisplayName(profile.pendantId)} is saved on this account. The phone app connects to it.`
-              : "No pendant yet. Open the Nearby app on your iPhone and tap Add pendant."}
-          </p>
+          <PendantAccountNote pendantId={profile.pendantId} className="mt-1 text-sm text-muted" />
         </section>
 
         <Link
