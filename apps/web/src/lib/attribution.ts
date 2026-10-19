@@ -90,13 +90,15 @@ export function captureAttribution(search?: string): FirstTouch {
  */
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign"] as const;
 
-/** Signup URL that keeps the campaign params from this request. */
+/** Signup URL that keeps campaign and audience params from this request. */
 export function signupHref(params: { get(name: string): string | null }): string {
   const next = new URLSearchParams();
   for (const key of UTM_KEYS) {
     const value = sanitizeUtmSource(params.get(key));
     if (value) next.set(key, value);
   }
+  const audience = sanitizeUtmSource(params.get("for"));
+  if (audience) next.set("for", audience);
   const query = next.toString();
   return query ? `/signup?${query}` : "/signup";
 }

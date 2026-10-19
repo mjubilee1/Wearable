@@ -21,114 +21,103 @@ import {
 
 const AUDIENCES = {
   general: {
+    headline: "Hang up. Say the follow-up. Keep driving.",
     builtFor: "Built for recruiters, sales reps, and consultants.",
     subhead:
-      "Your voice assistant for busy days. Talk to it, and it handles your calendar, follow-ups, and emails.",
+      "You say what happened. Nearby drafts the email, puts the time on your calendar, and parks the task in Google Tasks — in the accounts you already use.",
     examples: [
-      { title: "Move a call", body: "Move my 2 PM call to tomorrow at 10." },
+      { title: "Move a call", body: "Move my 2 PM prospect call to tomorrow at 10." },
       {
-        title: "Draft a follow-up",
-        body: "Draft a follow-up to Sarah about the proposal.",
+        title: "Draft the follow-up",
+        body: "Draft a follow-up to Maya after today's demo.",
       },
       {
-        title: "Set a reminder",
-        body: "Remind me to send the candidate feedback Friday.",
-      },
-      {
-        title: "Check the day",
-        body: "What's on my calendar before my 4 PM meeting?",
+        title: "Remember the pricing",
+        body: "Remind me to send Maya the pricing recap Friday.",
       },
     ],
     demo: {
-      request: "Move my 2 PM call to tomorrow at 10.",
-      receipt: "Moved 2 PM call to tomorrow at 10:00 AM",
+      request: "Follow up with Dana Thursday about pricing.",
+      receipt: "Draft in Gmail · hold on calendar · task saved",
     },
   },
   recruiters: {
+    headline: "Off a screen? Capture the next step before the next call.",
     builtFor: "Built for recruiters.",
     subhead:
-      "Your voice assistant for packed interview days. Talk to it, and it handles your calendar, candidate follow-ups, and emails.",
+      "You say what happened. Nearby drafts the email, puts the time on your calendar, and parks the task in Google Tasks — in the accounts you already use.",
     examples: [
       {
-        title: "Move an interview",
-        body: "Move my 2 PM candidate call to tomorrow at 10.",
+        title: "Draft candidate feedback",
+        body: "Draft feedback for Maya after today's product screen.",
       },
       {
-        title: "Draft a follow-up",
-        body: "Draft a follow-up to Sarah about the product role.",
+        title: "Hold a screen time",
+        body: "Hold Thursday at 2 for Jordan's next screen.",
       },
       {
-        title: "Set a reminder",
-        body: "Remind me to send the candidate feedback Friday.",
-      },
-      {
-        title: "Check the day",
-        body: "What's on my calendar before my 4 PM interview?",
+        title: "Ping the hiring manager",
+        body: "Remind me Friday to ask Sam for feedback.",
       },
     ],
     demo: {
-      request: "Move my 2 PM candidate call to tomorrow at 10.",
-      receipt: "Moved 2 PM candidate call to tomorrow at 10:00 AM",
+      request: "Follow up with Dana Thursday about the next interview.",
+      receipt: "Draft in Gmail · hold on calendar · task saved",
     },
   },
   sales: {
+    headline: "Hang up. Say the follow-up. Keep driving.",
     builtFor: "Built for sales reps.",
     subhead:
-      "Your voice assistant for back-to-back sales calls. Talk to it, and it handles your calendar, follow-ups, and emails.",
+      "You say what happened. Nearby drafts the email, puts the time on your calendar, and parks the task in Google Tasks — in the accounts you already use.",
     examples: [
       {
-        title: "Move a demo",
+        title: "Move a call",
         body: "Move my 2 PM prospect call to tomorrow at 10.",
       },
       {
-        title: "Draft a follow-up",
-        body: "Draft a follow-up to Sarah about the proposal.",
+        title: "Draft the follow-up",
+        body: "Draft a follow-up to Maya after today's demo.",
       },
       {
-        title: "Set a reminder",
-        body: "Remind me to send the pricing recap Friday.",
-      },
-      {
-        title: "Check the day",
-        body: "What's on my calendar before my 4 PM demo?",
+        title: "Remember the pricing",
+        body: "Remind me to send Maya the pricing recap Friday.",
       },
     ],
     demo: {
-      request: "Move my 2 PM prospect call to tomorrow at 10.",
-      receipt: "Moved 2 PM prospect call to tomorrow at 10:00 AM",
+      request: "Follow up with Dana Thursday about pricing.",
+      receipt: "Draft in Gmail · hold on calendar · task saved",
     },
   },
   consultants: {
+    headline: "Between clients, get the email out of your head.",
     builtFor: "Built for consultants.",
     subhead:
-      "Your voice assistant for client-heavy days. Talk to it, and it handles your calendar, follow-ups, and emails.",
+      "You say what happened. Nearby drafts the email, puts the time on your calendar, and parks the task in Google Tasks — in the accounts you already use.",
     examples: [
       {
-        title: "Move a client call",
-        body: "Move my 2 PM client call to tomorrow at 10.",
+        title: "Draft the client recap",
+        body: "Draft a recap for Maya from today's strategy session.",
       },
       {
-        title: "Draft a follow-up",
-        body: "Draft a follow-up to Sarah about the proposal.",
+        title: "Move the kickoff",
+        body: "Move the Acme kickoff to Thursday at 10.",
       },
       {
-        title: "Set a reminder",
-        body: "Remind me to send the workshop notes Friday.",
-      },
-      {
-        title: "Check the day",
-        body: "What's on my calendar before my 4 PM meeting?",
+        title: "Send the proposal",
+        body: "Remind me Friday to send Maya the proposal.",
       },
     ],
     demo: {
-      request: "Move my 2 PM client call to tomorrow at 10.",
-      receipt: "Moved 2 PM client call to tomorrow at 10:00 AM",
+      request: "Follow up with Dana Thursday about the proposal.",
+      receipt: "Draft in Gmail · hold on calendar · task saved",
     },
   },
   managers: {
+    headline: "Leave the meeting. Capture what happens next.",
     builtFor: "Built for managers.",
     subhead:
-      "Your voice assistant for meeting-heavy days. Talk to it, and it handles your calendar, team follow-ups, and emails.",
+      "You say what happened. Nearby drafts the email, puts the time on your calendar, and parks the task in Google Tasks — in the accounts you already use.",
     examples: [
       {
         title: "Move a meeting",
@@ -153,9 +142,10 @@ const AUDIENCES = {
     },
   },
   realestate: {
+    headline: "Leave the showing. Say the next step before you drive.",
     builtFor: "Built for real estate agents.",
     subhead:
-      "Your voice assistant between showings. Talk to it, and it handles your calendar, follow-ups, and emails.",
+      "You say what happened. Nearby drafts the email, puts the time on your calendar, and parks the task in Google Tasks — in the accounts you already use.",
     examples: [
       {
         title: "Move a showing",
@@ -225,13 +215,27 @@ function isFacebookLanding(params: HomeSearch): boolean {
   return firstParam(params.v)?.trim().toLowerCase() === "fb";
 }
 
-function homeSignupHref(params: HomeSearch): string {
+function homePassthroughQuery(params: HomeSearch): URLSearchParams {
   const query = new URLSearchParams();
-  for (const key of ["utm_source", "utm_medium", "utm_campaign"] as const) {
+  for (const key of ["utm_source", "utm_medium", "utm_campaign", "for"] as const) {
     const value = firstParam(params[key]);
     if (value) query.set(key, value);
   }
-  return signupHref(query);
+  return query;
+}
+
+function homeSignupHref(params: HomeSearch): string {
+  return signupHref(homePassthroughQuery(params));
+}
+
+function homePricingHref(params: HomeSearch): string {
+  const suffix = homePassthroughQuery(params).toString();
+  return suffix ? `/pricing?${suffix}` : "/pricing";
+}
+
+function homeMessagesHref(params: HomeSearch): string {
+  const suffix = homePassthroughQuery(params).toString();
+  return suffix ? `/?${suffix}#messages` : "/#messages";
 }
 
 export async function generateMetadata({
@@ -241,7 +245,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const audienceKey = audienceFrom((await searchParams).for);
   const audience = AUDIENCES[audienceKey];
-  const title = audienceKey === "general" ? SITE_TITLE : audience.builtFor;
+  const title = audienceKey === "general" ? SITE_TITLE : audience.headline;
   const description =
     audienceKey === "general" ? SITE_DESCRIPTION : audience.subhead;
 
@@ -275,6 +279,8 @@ export default async function HomePage({
   const audience = AUDIENCES[audienceFrom(params.for)];
   const facebook = isFacebookLanding(params);
   const accountHref = homeSignupHref(params);
+  const pricingHref = homePricingHref(params);
+  const messagesHref = homeMessagesHref(params);
   return (
     <div id="top" className="min-h-dvh text-ink">
       <script
@@ -282,7 +288,11 @@ export default async function HomePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd()) }}
       />
       <LandingView />
-      <MarketingNav signupHref={accountHref} />
+      <MarketingNav
+        signupHref={accountHref}
+        pricingHref={pricingHref}
+        messagesHref={messagesHref}
+      />
       <main>
         {facebook ? (
           <section className="mx-auto max-w-5xl px-5 pb-3 pt-4">
@@ -290,7 +300,8 @@ export default async function HomePage({
               Just wrapped a call? Say one sentence. Done.
             </h1>
             <p className="mt-3 max-w-md text-base leading-snug text-ink">
-              Nearby books the follow-up, drafts the email, and adds the task while you walk to your next meeting.
+              Say what happened. Nearby drafts the email, puts the time on your
+              Google Calendar, and saves the task in Google Tasks.
             </p>
             <p className="mt-2 text-sm text-muted">
               Built for sales reps, recruiters, and consultants.
@@ -310,8 +321,8 @@ export default async function HomePage({
         ) : (
           <section className="mx-auto grid max-w-5xl items-end gap-10 px-5 pb-16 pt-12 sm:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] sm:pt-16">
             <div>
-              <h1 className="font-display max-w-[8ch] text-6xl font-medium leading-[0.9] text-ink sm:text-8xl">
-                Talk. It does it.
+              <h1 className="font-display max-w-[11ch] text-5xl font-medium leading-[0.95] text-ink sm:text-7xl">
+                {audience.headline}
               </h1>
               <p className="mt-6 max-w-sm text-lg leading-snug text-ink">
                 {audience.subhead}
@@ -321,7 +332,7 @@ export default async function HomePage({
                 href={accountHref}
                 className="mt-8 inline-flex bg-ink px-5 py-3 text-sm font-semibold text-white"
               >
-                Start free
+                Try it free
               </Link>
             </div>
             <CalendarDemo
@@ -331,13 +342,12 @@ export default async function HomePage({
           </section>
         )}
 
-        {facebook ? (
-          <HomepageLiveDemo variant="facebook" signupHref={accountHref} />
-        ) : null}
+        <HomepageLiveDemo
+          variant={facebook ? "facebook" : "default"}
+          signupHref={accountHref}
+        />
 
         <NecklaceMessages />
-
-        {facebook ? null : <HomepageLiveDemo signupHref={accountHref} />}
 
         <section className="px-5 pb-16" aria-label="Example requests">
           <ol className="mx-auto max-w-5xl border-t border-ink/15">
@@ -371,11 +381,28 @@ export default async function HomePage({
 
         <Testimonials />
 
+        <section className="px-5 pb-20" aria-labelledby="same-apps-heading">
+          <div className="mx-auto max-w-5xl border-y border-ink/15 py-10">
+            <h2
+              id="same-apps-heading"
+              className="font-display max-w-2xl text-4xl font-medium leading-none sm:text-5xl"
+            >
+              Same Google apps. No new dashboard to live in.
+            </h2>
+            <ul className="mt-7 grid gap-4 text-sm leading-relaxed text-ink sm:grid-cols-2">
+              <li>Works with the Google Calendar, Gmail, and Tasks you already open every day</li>
+              <li>Nothing goes out until you approve the draft</li>
+              <li>Talk or type — whichever is faster between calls</li>
+              <li>Connect Google and try it free</li>
+            </ul>
+          </div>
+        </section>
+
         <section id="pricing" className="scroll-mt-16 px-5 pb-20">
           <div className="mx-auto max-w-5xl">
             <PricingSection />
             <p className="mt-4 text-sm text-muted">
-              <Link href="/pricing" className="text-ink underline decoration-teal decoration-2 underline-offset-4">
+              <Link href={pricingHref} className="text-ink underline decoration-teal decoration-2 underline-offset-4">
                 Pricing details
               </Link>
             </p>
@@ -396,7 +423,7 @@ export default async function HomePage({
               <a href="#pricing" className="text-muted hover:text-ink">
                 Pricing
               </a>
-              <Link href="/pricing" className="text-muted hover:text-ink">
+              <Link href={pricingHref} className="text-muted hover:text-ink">
                 FAQ
               </Link>
               <Link href={accountHref} className="text-muted hover:text-ink">

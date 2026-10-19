@@ -9,7 +9,7 @@ export function NecklaceMessages() {
     <section id="messages" className="scroll-mt-16 px-5 pb-20" aria-labelledby="messages-heading">
       <div className="mx-auto grid max-w-5xl items-center gap-10 border-t border-ink/15 pt-10 sm:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div>
-          <p className="text-sm text-muted">From the necklace</p>
+          <p className="text-sm text-muted">Necklace coming soon</p>
           <h2
             id="messages-heading"
             className="font-display mt-3 max-w-[14ch] text-4xl font-medium leading-tight text-ink sm:text-5xl"
@@ -17,7 +17,8 @@ export function NecklaceMessages() {
             Message someone without taking your phone out.
           </h2>
           <p className="mt-4 max-w-md text-lg leading-snug text-ink">
-            Say who and what. It lands in a normal chat, the same kind of thread you already use.
+            Say who and what. It lands in Nearby Messages, not SMS, in the same
+            kind of thread you already use.
           </p>
           <ol className="mt-6 space-y-3">
             {SPOKEN.map((line) => (
@@ -29,9 +30,8 @@ export function NecklaceMessages() {
         </div>
 
         <figure className="w-full border border-ink/20 bg-white">
-          <div className="flex items-baseline justify-between border-b border-ink/10 px-4 py-2">
-            <p className="text-xs text-muted">You said</p>
-            <p className="font-display text-sm italic text-teal">nearby</p>
+          <div className="border-b border-ink/10 px-4 py-2">
+            <p className="text-xs font-semibold text-muted">You</p>
           </div>
           <p className="font-display px-4 py-5 text-2xl italic leading-snug text-ink">
             “Message Maya. Running five minutes late.”

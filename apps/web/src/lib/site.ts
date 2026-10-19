@@ -3,9 +3,9 @@ import { FREE_DAILY_REQUESTS } from "@nearby/shared";
 
 export const SITE_URL = "https://www.nearbyhello.com";
 export const SITE_NAME = "Nearby";
-export const SITE_TITLE = "Nearby: voice assistant for busy professionals";
+export const SITE_TITLE = "Nearby: finish the follow-up before the next call";
 export const SITE_DESCRIPTION =
-  "Your voice assistant for busy days. Talk to Nearby for your calendar, follow-ups, and emails, and message someone from the necklace.";
+  "Say what happened. Nearby drafts the email, puts the time on Google Calendar, and saves the task in Google Tasks — in the accounts you already use.";
 export const SITE_TAGLINE = "Speak, and it answers out loud.";
 export const CONNECTOR_PRIVACY_LINE =
   "Nearby only uses a connector when you ask. You can disconnect anytime.";
@@ -17,11 +17,11 @@ export const PRICING_FAQ = [
   },
   {
     q: "How much is Pro?",
-    a: "Pro is $29 a month or $249 a year, with a 7-day free trial. Cancel anytime.",
+    a: "Pro is $29 a month or $249 a year, with a 7-day free trial. Use FOUNDING19 for $19 a month for life. A card is required for the trial. Cancel anytime.",
   },
   {
     q: "What does Pro include?",
-    a: "Pro includes unlimited requests and voice memo recaps that turn into follow-ups.",
+    a: "Pro includes unlimited requests for days packed with calls, plus voice memo recaps that turn a long call into follow-ups.",
   },
   {
     q: "Does Nearby send emails on its own?",
@@ -132,7 +132,7 @@ export function llmsText() {
 
 > ${SITE_DESCRIPTION}
 
-Nearby is a voice and type assistant for busy professionals who live on calls, including recruiters, sales reps, consultants, and real estate agents. Use it from a laptop, phone, or headphones to handle calendar changes, follow-ups, and email drafts throughout the day. The pendant is coming soon.
+Nearby helps recruiters, sales reps, consultants, and real estate agents handle the work between calls. Talk or type from a laptop, phone, or headphones to make calendar changes, capture follow-ups, and draft emails throughout the day. The pendant is coming soon.
 
 ## Canonical
 
