@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Nearby — Voice assistant that answers out loud";
+export const alt = "Nearby — Finish the follow-up before the next call";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -58,7 +58,7 @@ export default function OpenGraphImage() {
               lineHeight: 1.05,
             }}
           >
-            Speak, and it answers out loud.
+            Finish the follow-up before the next call.
           </div>
           <div
             style={{
@@ -68,7 +68,7 @@ export default function OpenGraphImage() {
               color: "#CBD5E1",
             }}
           >
-            A voice assistant for calendar, notes, and reminders.
+            Talk or type. Keep using Google Calendar, Gmail, and Tasks.
           </div>
         </div>
         <div style={{ fontSize: 26, color: "#2DD4BF" }}>nearbyhello.com</div>

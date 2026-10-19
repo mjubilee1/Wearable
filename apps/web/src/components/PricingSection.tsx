@@ -24,8 +24,8 @@ const FREE = [
 ];
 
 const PRO = [
-  "Unlimited requests",
-  "Voice memo recaps that turn into follow-ups.",
+  "Unlimited requests when your day is stacked with calls",
+  "Voice memo recaps that turn a long call into follow-ups",
   "7-day free trial, card required",
   "Cancel anytime",
 ];
@@ -97,6 +97,11 @@ export function PricingSection({
           <p className="mt-1 text-sm text-muted">
             or ${PRO_YEARLY_USD}/year · save ~28% · {PRO_TRIAL_DAYS} days free
           </p>
+          <p className="mt-3 border border-teal/30 bg-teal-soft px-3 py-2 text-sm text-teal">
+            {foundingOffer
+              ? "FOUNDING19 applied: $19/month for life."
+              : "Founding offer: use FOUNDING19 for $19/month for life."}
+          </p>
           <ul className="mt-4 space-y-2 text-sm text-muted">
             {PRO.map((item) => (
               <li key={item}>{item}</li>
@@ -126,23 +131,23 @@ export function PricingSection({
               </button>
             </div>
           ) : (
-            <div className={proTrialCta && !pro ? "mt-6 flex items-center gap-3" : "mt-6"}>
+            <div className="mt-6">
               <Link
                 href={user ? "/profile" : accountHref}
-                className={`inline-flex items-center justify-center bg-ink px-4 py-3 text-sm font-semibold text-white ${
-                  proTrialCta && !pro ? "min-w-0 flex-1" : "w-full"
-                }`}
+                className="inline-flex w-full items-center justify-center bg-ink px-4 py-3 text-center text-sm font-semibold text-white"
               >
-                {pro ? "Manage plan" : proTrialCta ? "Start 7-day free trial" : "Start free"}
+                {pro
+                  ? "Manage plan"
+                  : proTrialCta
+                    ? "Start 7-day free trial, card required"
+                    : "Start free"}
               </Link>
-              {proTrialCta && !pro ? (
-                <span className="shrink-0 text-sm text-muted">card required</span>
-              ) : null}
             </div>
           )}
         </div>
       </div>
       {error ? <p className="mt-3 text-sm text-coral">{error}</p> : null}
+      {/* TODO(Montrell): Add the first-month money-back sentence only after confirming it is current product policy. */}
     </div>
   );
 }
