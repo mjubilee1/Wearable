@@ -57,7 +57,7 @@ export default function SignupScreen() {
         <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Create your account</Text>
         <Text style={styles.subtitle}>
-          Explore Nearby Hello without contributing sensor data.
+          Look around first. Sharing is always optional.
         </Text>
 
         <View style={styles.field}>

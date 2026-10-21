@@ -27,10 +27,10 @@ export function MarketingNav({
           <BrandMark className="font-display text-2xl italic leading-none text-ink" />
           <nav className="hidden items-center gap-6 text-sm text-muted md:flex">
             <Link href={messagesHref} className="hover:text-ink">
-              How it works
+              The story
             </Link>
             <Link href={pricingHref} className="hover:text-ink">
-              Privacy
+              Your privacy
             </Link>
           </nav>
         </div>

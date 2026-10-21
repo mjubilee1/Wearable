@@ -75,7 +75,7 @@ export default function SignupPage() {
         Create your account
       </h1>
       <p className="mt-2 text-sm text-muted">
-        Explore Nearby Hello without contributing sensor data.
+        Look around first. Sharing is always optional.
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">

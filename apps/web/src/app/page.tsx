@@ -293,28 +293,28 @@ export default async function HomePage({
         <section className="mx-auto grid max-w-5xl items-center gap-10 px-5 pb-20 pt-16 sm:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)] sm:pt-24">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
-              Hyperlocal spatial intelligence
+              A clearer sense of place
             </p>
-            <h1 className="font-display mt-4 max-w-[11ch] text-5xl font-medium leading-[0.95] text-ink sm:text-7xl">
-              Understand the space around you.
+            <h1 className="font-display mt-4 max-w-[12ch] text-5xl font-medium leading-[0.95] text-ink sm:text-7xl">
+              Know what a place feels like before you go.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-snug text-ink">
-              Nearby Hello turns permission-based environmental measurements
-              into clear, local context—what is happening now, what changed,
-              and what is typical here.
+              You are heading out, but you cannot tell if the park is peaceful
+              or the block feels lively. Nearby Hello gives you a simple look
+              at what is happening there now—and what is normal for that time.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href={accountHref}
                 className="inline-flex bg-ink px-5 py-3 text-sm font-semibold text-white"
               >
-                Explore Nearby Hello
+                See what&apos;s nearby
               </Link>
               <a
                 href="#how-it-works"
                 className="inline-flex border border-ink/20 px-5 py-3 text-sm font-semibold text-ink"
               >
-                How it works
+                Follow the story
               </a>
             </div>
           </div>
@@ -338,11 +338,11 @@ export default async function HomePage({
             </div>
             <div className="mt-3 flex items-center justify-between rounded-2xl bg-white/85 px-4 py-3">
               <div>
-                <p className="text-sm font-bold text-ink">Soundscape</p>
-                <p className="text-xs text-muted">Clearly labeled demonstration</p>
+                <p className="text-sm font-bold text-ink">Right now</p>
+                <p className="text-xs text-muted">Example view</p>
               </div>
               <span className="rounded-full bg-teal-soft px-3 py-1 text-xs font-bold text-teal">
-                Moderate
+                A little lively
               </span>
             </div>
           </div>
@@ -351,13 +351,22 @@ export default async function HomePage({
         <section id="how-it-works" className="border-y border-ink/15 bg-card px-5 py-20">
           <div className="mx-auto max-w-5xl">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
-              What Nearby Hello measures
+              A day with Nearby Hello
             </p>
             <div className="mt-7 grid gap-6 sm:grid-cols-3">
               {[
-                ["Soundscape", "Relative ambient intensity processed locally. Raw audio is never stored or uploaded."],
-                ["Activity", "Broad movement from participating devices—not occupancy or pedestrian counts."],
-                ["Patterns", "Historical differences by time once enough measurements support a baseline."],
+                [
+                  "Before you leave",
+                  "Check whether the place nearby seems calm or lively, without guessing.",
+                ],
+                [
+                  "When you arrive",
+                  "See what changed recently and how fresh the information is.",
+                ],
+                [
+                  "After a few visits",
+                  "Learn the rhythm of a place—quiet mornings, lively afternoons, and everything between.",
+                ],
               ].map(([title, body]) => (
                 <article key={title} className="border-t border-ink/15 pt-5">
                   <h2 className="font-display text-3xl font-medium text-ink">{title}</h2>
@@ -372,17 +381,18 @@ export default async function HomePage({
           <div className="mx-auto grid max-w-5xl gap-8 sm:grid-cols-2">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
-                Privacy by architecture
+                Your choice, every time
               </p>
               <h2 className="font-display mt-4 text-4xl font-medium leading-tight text-ink">
-                Sensors only when you choose.
+                It only helps when you ask it to.
               </h2>
             </div>
             <ul className="space-y-4 text-sm leading-relaxed text-ink">
-              <li>Foreground-only collection by default, with visible start and stop controls.</li>
-              <li>Separate permission for location, relative sound, and device motion.</li>
-              <li>Community insights stay unavailable below privacy thresholds.</li>
-              <li>Explore without contributing, and delete eligible observations anytime.</li>
+              <li>Nothing starts until you say yes.</li>
+              <li>A clear stop button ends sharing whenever you want.</li>
+              <li>Nearby Hello notices quiet and lively moments—it does not save conversations.</li>
+              <li>Your exact trips are never shown to other people.</li>
+              <li>Look around without sharing anything at all.</li>
             </ul>
           </div>
         </section>
@@ -392,7 +402,7 @@ export default async function HomePage({
           <div>
             <BrandMark className="font-display text-3xl italic text-ink" />
             <p className="mt-2 max-w-xs text-sm text-muted">
-              Make the physical world understandable, one location at a time.
+              See more than a map can tell you.
             </p>
           </div>
           <div className="w-full max-w-md">

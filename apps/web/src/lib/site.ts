@@ -3,10 +3,10 @@ import { FREE_DAILY_REQUESTS } from "@nearby/shared";
 
 export const SITE_URL = "https://www.nearbyhello.com";
 export const SITE_NAME = "Nearby Hello";
-export const SITE_TITLE = "Nearby Hello: understand the space around you";
+export const SITE_TITLE = "Nearby Hello: know what a place feels like before you go";
 export const SITE_DESCRIPTION =
-  "Privacy-first hyperlocal spatial intelligence from permission-based environmental measurements and historical patterns.";
-export const SITE_TAGLINE = "Make the physical world understandable, one location at a time.";
+  "See whether a nearby place feels calm or lively, what changed, and what is normal for that time.";
+export const SITE_TAGLINE = "See more than a map can tell you.";
 export const CONNECTOR_PRIVACY_LINE =
   "Nearby Hello only collects a sensor category after explicit permission. You can stop collection or delete eligible observations anytime.";
 
