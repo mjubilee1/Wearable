@@ -154,6 +154,32 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Environmental sensing is authorized and privacy-filtered by the API.
+    // Clients never read raw observations, sessions, consent, or aggregates.
+    match /spatialZones/{zoneId} {
+      allow read, write: if false;
+    }
+
+    match /sensorSessions/{sessionId} {
+      allow read, write: if false;
+    }
+
+    match /sensorConsents/{userId} {
+      allow read, write: if false;
+    }
+
+    match /environmentalObservations/{observationId} {
+      allow read, write: if false;
+    }
+
+    match /environmentalAggregates/{aggregateId} {
+      allow read, write: if false;
+    }
+
+    match /historicalPatterns/{patternId} {
+      allow read, write: if false;
+    }
+
     // OAuth tokens for agent tools — API (Admin SDK) only.
     match /agentConnectors/{uid} {
       allow read, write: if false;
