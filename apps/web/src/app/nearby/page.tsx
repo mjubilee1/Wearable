@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { NearbyHelloDashboard } from "@/components/NearbyHelloDashboard";
 
 export default function NearbyPage() {
-  redirect("/activity");
+  return <NearbyHelloDashboard view="nearby" />;
 }

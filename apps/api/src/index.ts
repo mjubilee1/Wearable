@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import {
@@ -12,6 +12,7 @@ import {
   hasProAccess,
   mockFacilitate,
   isDeviceLocation,
+  isGeoPoint,
   normalizeDeviceId,
   turnNeedsDeviceLocation,
   vibeCaption,
@@ -85,6 +86,35 @@ import {
   sendMessage,
   startConversation,
 } from "./messaging.js";
+import {
+  SpatialError,
+  deleteContributions,
+  getSensorConsent,
+  getSpatialSnapshot,
+  startSensorSession,
+  stopSensorSession,
+  submitObservation,
+  updateSensorConsent,
+} from "./spatial.js";
+import {
+  PlaceError,
+  nearbyPlaces,
+  parseNearbyPlaceQuery,
+  placeIngestionMetrics,
+  searchLocations,
+  syncConfiguredPilotPlaces,
+} from "./places.js";
+import {
+  ObservationError,
+  answerSpatialQuery,
+  getObservationSubmission,
+  getPlaceInsights,
+  observationMetrics,
+  submitImageObservation,
+  submitObservationFeedback,
+  subscribePlaceInsights,
+} from "./observation-pipeline.js";
+import { streamSSE } from "hono/streaming";
 
 // Load apps/api/.env whether started from repo root or apps/api
 const apiDir = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -92,6 +122,7 @@ loadEnv({ path: resolve(apiDir, ".env") });
 
 const app = new Hono();
 const port = Number(process.env.PORT ?? 4000);
+const billingEnabled = process.env.BILLING_ENABLED === "true";
 
 function seedAsProfiles(): UserProfile[] {
   const now = Date.now();
@@ -190,6 +221,17 @@ app.get("/health", (c) =>
     firebase: isFirebaseConfigured(),
     llm: Boolean(process.env.OPENAI_API_KEY),
     stripe: isStripeConfigured(),
+    billingEnabled,
+    places: {
+      provider: "openstreetmap",
+      overpassConfigured: true,
+      metrics: placeIngestionMetrics,
+    },
+    observations: {
+      visionConfigured: Boolean(process.env.OPENAI_API_KEY),
+      visionMode: process.env.OPENAI_API_KEY ? "openai" : "fixture",
+      metrics: observationMetrics,
+    },
     stripeWebhook: isStripeWebhookConfigured(),
     googleCalendar: isGoogleCalendarConfigured(),
     twilioVerify: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID),
@@ -197,6 +239,343 @@ app.get("/health", (c) =>
       process.env.TWILIO_ENABLE_PHONE_PURCHASES === "true",
   }),
 );
+
+function spatialFailure(c: Context, error: unknown) {
+  const status =
+    error instanceof SpatialError ||
+    error instanceof PlaceError ||
+    error instanceof ObservationError
+      ? error.status
+      : 500;
+  return c.json(
+    {
+      code:
+        error instanceof SpatialError ||
+        error instanceof PlaceError ||
+        error instanceof ObservationError
+          ? error.code
+          : "spatial_error",
+      error: error instanceof Error ? error.message : "Spatial request failed",
+    },
+    status as 400,
+  );
+}
+
+function spatialQuery(c: Context) {
+  const latitude = Number(c.req.query("latitude"));
+  const longitude = Number(c.req.query("longitude"));
+  const accuracyMeters = c.req.query("accuracyMeters");
+  const location = {
+    latitude,
+    longitude,
+    ...(accuracyMeters ? { accuracyMeters: Number(accuracyMeters) } : {}),
+  };
+  if (!isGeoPoint(location)) {
+    throw new SpatialError("Valid latitude and longitude query parameters are required.");
+  }
+  const requestedMode = c.req.query("mode");
+  const mode: "demo" | "community" | "personal" =
+    requestedMode === "demo" || requestedMode === "community"
+      ? requestedMode
+      : "personal";
+  return { location, mode };
+}
+
+app.get("/v1/spatial/consent", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  return c.json({ consent: await getSensorConsent(auth.uid) });
+});
+
+app.patch("/v1/spatial/consent", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as
+    | Partial<Record<"location" | "sound" | "motion" | "bluetooth", boolean>>
+    | null;
+  if (!body || typeof body !== "object") {
+    return c.json({ error: "Consent settings are required." }, 400);
+  }
+  return c.json({ consent: await updateSensorConsent(auth.uid, body) });
+});
+
+app.post("/v1/spatial/sessions", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    consent?: Partial<Record<"location" | "sound" | "motion" | "bluetooth", boolean>>;
+    enabledSensors?: Array<"location" | "sound" | "motion" | "bluetooth">;
+  } | null;
+  try {
+    const session = await startSensorSession(auth.uid, {
+      consent: body?.consent ?? {},
+      enabledSensors: Array.isArray(body?.enabledSensors)
+        ? body.enabledSensors
+        : [],
+    });
+    return c.json({ session }, 201);
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.patch("/v1/spatial/sessions/:sessionId", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json({
+      session: await stopSensorSession(auth.uid, c.req.param("sessionId")),
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.post("/v1/spatial/observations", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return c.json({ error: "Observation body is required." }, 400);
+  }
+  try {
+    return c.json(
+      {
+        observation: await submitObservation(
+          auth.uid,
+          body as Parameters<typeof submitObservation>[1],
+        ),
+      },
+      201,
+    );
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/zones", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const { location, mode } = spatialQuery(c);
+    const snapshot = await getSpatialSnapshot(auth.uid, location, mode);
+    return c.json({ zones: [snapshot.zone], mode: snapshot.mode });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/aggregates", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const { location, mode } = spatialQuery(c);
+    const snapshot = await getSpatialSnapshot(auth.uid, location, mode);
+    return c.json({
+      zone: snapshot.zone,
+      mode: snapshot.mode,
+      aggregates: snapshot.aggregates,
+      generatedAt: snapshot.generatedAt,
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/patterns", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const { location, mode } = spatialQuery(c);
+    const snapshot = await getSpatialSnapshot(auth.uid, location, mode);
+    return c.json({
+      zone: snapshot.zone,
+      mode: snapshot.mode,
+      patterns: snapshot.patterns,
+      generatedAt: snapshot.generatedAt,
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/places/nearby", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const query = parseNearbyPlaceQuery({
+      latitude: c.req.query("latitude"),
+      longitude: c.req.query("longitude"),
+      lat: c.req.query("lat"),
+      lng: c.req.query("lng"),
+      radiusMeters: c.req.query("radiusMeters"),
+      radius: c.req.query("radius"),
+      category: c.req.query("category"),
+      page: c.req.query("page"),
+      limit: c.req.query("limit"),
+    });
+    return c.json(await nearbyPlaces(auth.uid, query));
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/places/search", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json({
+      results: await searchLocations(auth.uid, c.req.query("q") ?? ""),
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.post("/v1/internal/spatial/places/sync", async (c) => {
+  const configuredSecret = process.env.SPATIAL_SYNC_SECRET;
+  if (
+    !configuredSecret ||
+    c.req.header("x-spatial-sync-secret") !== configuredSecret
+  ) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  try {
+    return c.json({
+      ok: true,
+      placeCount: await syncConfiguredPilotPlaces(),
+      syncedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.post("/v1/spatial/observations", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as
+    | Parameters<typeof submitImageObservation>[1]
+    | null;
+  if (!body) return c.json({ error: "Observation body is required." }, 400);
+  try {
+    return c.json(
+      { submission: await submitImageObservation(auth.uid, body) },
+      202,
+    );
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/observations/:id", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json({
+      submission: await getObservationSubmission(auth.uid, c.req.param("id")),
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/places/:id/insights", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json(await getPlaceInsights(c.req.param("id")));
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/places/:id/insights/stream", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const placeId = c.req.param("id");
+  return streamSSE(c, async (stream) => {
+    const snapshot = await getPlaceInsights(placeId);
+    await stream.writeSSE({
+      event: "snapshot",
+      data: JSON.stringify(snapshot),
+    });
+    const unsubscribe = subscribePlaceInsights(placeId, (insight) => {
+      void stream.writeSSE({
+        event: "insight",
+        data: JSON.stringify(insight),
+      });
+    });
+    const heartbeat = setInterval(() => {
+      void stream.writeSSE({ event: "ping", data: "{}" });
+    }, 15_000);
+    await new Promise<void>((resolve) => {
+      stream.onAbort(() => {
+        clearInterval(heartbeat);
+        unsubscribe();
+        resolve();
+      });
+    });
+  });
+});
+
+app.post("/v1/spatial/query", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    question?: string;
+    location?: { latitude?: number; longitude?: number };
+    radiusMeters?: number;
+  } | null;
+  if (!body?.question || !body.location) {
+    return c.json({ error: "question and location are required." }, 400);
+  }
+  try {
+    return c.json(
+      await answerSpatialQuery(
+        auth.uid,
+        body.question,
+        {
+          latitude: Number(body.location.latitude),
+          longitude: Number(body.location.longitude),
+        },
+        body.radiusMeters,
+      ),
+    );
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.post("/v1/spatial/insights/feedback", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    insightId?: string;
+    helpful?: boolean;
+    note?: string;
+  } | null;
+  try {
+    await submitObservationFeedback(auth.uid, {
+      insightId: String(body?.insightId ?? ""),
+      helpful: body?.helpful === true,
+      note: body?.note,
+    });
+    return c.json({ ok: true });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.delete("/v1/spatial/contributions", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json({ deleted: await deleteContributions(auth.uid) });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
 
 /** Public marketing waitlist. Body: { email, source? } */
 app.post("/v1/waitlist", async (c) => {
@@ -247,6 +626,7 @@ app.post("/v1/billing/webhook", async (c) => {
 
 /** Checkout is not verification-exempt. Unverified password accounts get 403. */
 app.post("/v1/billing/checkout", async (c) => {
+  if (!billingEnabled) return c.json({ error: "Billing is not available." }, 404);
   if (!isStripeConfigured()) {
     return c.json({ error: "Billing not configured" }, 503);
   }
@@ -289,6 +669,7 @@ app.post("/v1/billing/checkout", async (c) => {
 });
 
 app.get("/v1/referrals", async (c) => {
+  if (!billingEnabled) return c.json({ error: "Billing is not available." }, 404);
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
   const summary = await referralSummary(auth.uid);
@@ -299,6 +680,7 @@ app.get("/v1/referrals", async (c) => {
 });
 
 app.post("/v1/billing/portal", async (c) => {
+  if (!billingEnabled) return c.json({ error: "Billing is not available." }, 404);
   if (!isStripeConfigured()) {
     return c.json({ error: "Billing not configured" }, 503);
   }

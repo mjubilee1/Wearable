@@ -27,17 +27,17 @@ export function MarketingNav({
           <BrandMark className="font-display text-2xl italic leading-none text-ink" />
           <nav className="hidden items-center gap-6 text-sm text-muted md:flex">
             <Link href={messagesHref} className="hover:text-ink">
-              Messages
+              The story
             </Link>
             <Link href={pricingHref} className="hover:text-ink">
-              Pricing
+              Your privacy
             </Link>
           </nav>
         </div>
         <div className="flex h-9 min-w-36 items-center justify-end gap-5">
           {signedIn ? (
-            <Link href="/activity" className="bg-ink px-3 py-2 text-sm font-semibold text-white">
-              Talk
+            <Link href="/nearby" className="bg-ink px-3 py-2 text-sm font-semibold text-white">
+              Open Nearby Hello
             </Link>
           ) : (
             <>

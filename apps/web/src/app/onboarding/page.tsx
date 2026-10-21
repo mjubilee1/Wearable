@@ -82,7 +82,7 @@ export default function OnboardingPage() {
 
   function onSkip() {
     finishLocally();
-    router.replace("/activity");
+    router.replace("/nearby");
   }
 
   return (

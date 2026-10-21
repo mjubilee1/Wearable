@@ -20,7 +20,6 @@ function AuthGate({ children }: { children: ReactNode }) {
   const root = segments[0];
   const inAuthGroup = root === "(auth)";
   const onIndex = root === undefined || root === "index";
-  const onOnboarding = root === "onboarding";
   const onInvite = root === "invite";
   const createdAtMs = user
     ? Date.parse(user.metadata.creationTime ?? "") || 0
@@ -62,15 +61,10 @@ function AuthGate({ children }: { children: ReactNode }) {
     if (!user) return;
     if (needsEmail) return;
     if (!profile) return;
-    if (profile.phoneOnboardingRequired && !onOnboarding && !onInvite) {
-      router.replace("/onboarding");
-      return;
+    if (inAuthGroup || onIndex) {
+      router.replace("/(tabs)/nearby");
     }
-
-    if ((inAuthGroup || onIndex) && !profile.phoneOnboardingRequired) {
-      router.replace("/(tabs)/activity");
-    }
-  }, [user, profile, loading, needsEmail, inAuthGroup, onIndex, onOnboarding, onInvite, navigationState?.key, router]);
+  }, [user, profile, loading, needsEmail, inAuthGroup, onIndex, onInvite, navigationState?.key, router]);
 
   if (loading || (user && !profile && !needsEmail)) {
     return (

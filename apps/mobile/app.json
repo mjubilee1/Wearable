@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Nearby",
+    "name": "Nearby Hello",
     "slug": "wearable",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -11,10 +11,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.nearby.app",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Nearby uses Bluetooth to connect a wearable when that radio is available.",
-        "NSBluetoothPeripheralUsageDescription": "Nearby uses Bluetooth to connect a wearable.",
-        "NSMicrophoneUsageDescription": "Nearby uses the microphone when you talk to it.",
-        "NSLocationWhenInUseUsageDescription": "Nearby uses your location when you ask about the weather, places nearby, or directions."
+        "NSBluetoothAlwaysUsageDescription": "Nearby Hello uses Bluetooth only for a wearable you explicitly connect.",
+        "NSBluetoothPeripheralUsageDescription": "Nearby Hello uses Bluetooth only for a wearable you explicitly connect.",
+        "NSMicrophoneUsageDescription": "Nearby Hello uses the microphone for a 10-second spot loudness reading. Raw audio is never saved.",
+        "NSLocationWhenInUseUsageDescription": "Nearby Hello uses your location during a spot reading to save sensor numbers to an approximate spatial zone.",
+        "NSCameraUsageDescription": "Nearby Hello uses the camera only when you tap Scan surroundings to capture one authorized photo. The photo is not kept after processing."
       }
     },
     "android": {
@@ -43,25 +44,24 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Nearby to use your photos for your profile."
+          "photosPermission": "Allow Nearby Hello to use your photos for your profile.",
+          "cameraPermission": "Nearby Hello uses the camera only when you tap Scan surroundings to capture one authorized photo. The photo is not kept after processing."
         }
       ],
       "expo-font",
       [
         "react-native-ble-plx",
         {
-          "isBackgroundEnabled": true,
-          "modes": [
-            "central"
-          ],
-          "bluetoothAlwaysPermission": "Nearby uses Bluetooth to connect a wearable when that radio is available."
+          "isBackgroundEnabled": false,
+          "modes": [],
+          "bluetoothAlwaysPermission": "Nearby Hello uses Bluetooth only for a wearable you explicitly connect."
         }
       ],
       "expo-audio",
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Nearby uses your location when you ask about the weather, places nearby, or directions."
+          "locationWhenInUsePermission": "Nearby Hello uses your location during a spot reading to save sensor numbers to an approximate spatial zone."
         }
       ]
     ],

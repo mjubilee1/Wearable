@@ -50,3 +50,19 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: BILLING_ENABLED
+        value: "false"
+      - key: OVERPASS_API_URLS
+        value: https://overpass-api.de/api/interpreter,https://overpass.kumi.systems/api/interpreter,https://overpass.private.coffee/api/interpreter
+      - key: NOMINATIM_API_URL
+        value: https://nominatim.openstreetmap.org
+      - key: OSM_USER_AGENT
+        value: NearbyHello/0.1 (https://nearbyhello.com)
+      - key: SPATIAL_SYNC_SECRET
+        sync: false
+      - key: SPATIAL_PILOT_LATITUDE
+        value: "38.9072"
+      - key: SPATIAL_PILOT_LONGITUDE
+        value: "-77.0369"
+      - key: SPATIAL_PILOT_RADIUS_METERS
+        value: "1000"

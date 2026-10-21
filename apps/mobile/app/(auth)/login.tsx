@@ -27,7 +27,7 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       await signIn(email.trim(), password);
-      router.replace("/(tabs)/activity");
+      router.replace("/(tabs)/nearby");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
     } finally {
@@ -46,7 +46,7 @@ export default function LoginScreen() {
       >
         <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>Sign in to talk.</Text>
+        <Text style={styles.subtitle}>Sign in to explore nearby.</Text>
 
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>

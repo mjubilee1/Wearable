@@ -276,6 +276,153 @@ export default async function HomePage({
   searchParams: HomeSearchParams;
 }) {
   const params = await searchParams;
+  const accountHref = homeSignupHref(params);
+  return (
+    <div id="top" className="min-h-dvh text-ink">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd()) }}
+      />
+      <LandingView />
+      <MarketingNav
+        signupHref={accountHref}
+        pricingHref="/#privacy"
+        messagesHref="/#how-it-works"
+      />
+      <main>
+        <section className="mx-auto grid max-w-5xl items-center gap-10 px-5 pb-20 pt-16 sm:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)] sm:pt-24">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
+              A clearer sense of place
+            </p>
+            <h1 className="font-display mt-4 max-w-[12ch] text-5xl font-medium leading-[0.95] text-ink sm:text-7xl">
+              Know what a place is like before you walk in.
+            </h1>
+            <p className="mt-6 max-w-xl text-lg leading-snug text-ink">
+              You are heading out, but you cannot tell if the park is peaceful
+              or the block feels lively. Nearby Hello gives you a simple look
+              at what is happening there now—and what is normal for that time.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href={accountHref}
+                className="inline-flex bg-ink px-5 py-3 text-sm font-semibold text-white"
+              >
+                See what&apos;s nearby
+              </Link>
+              <a
+                href="#how-it-works"
+                className="inline-flex border border-ink/20 px-5 py-3 text-sm font-semibold text-ink"
+              >
+                Follow the story
+              </a>
+            </div>
+          </div>
+          <div className="rounded-[2rem] border border-ink/10 bg-[#dcebe8] p-4 shadow-xl">
+            <div className="grid aspect-square grid-cols-3 gap-2">
+              {Array.from({ length: 9 }, (_, index) => (
+                <div
+                  key={index}
+                  className={[
+                    "relative rounded-2xl border border-white/80",
+                    index === 4 ? "bg-teal/25 ring-2 ring-teal" : "bg-white/45",
+                  ].join(" ")}
+                >
+                  {index === 4 ? (
+                    <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-teal text-xs font-bold text-white shadow-lg">
+                      You
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-between rounded-2xl bg-white/85 px-4 py-3">
+              <div>
+                <p className="text-sm font-bold text-ink">Right now</p>
+                <p className="text-xs text-muted">Example view</p>
+              </div>
+              <span className="rounded-full bg-teal-soft px-3 py-1 text-xs font-bold text-teal">
+                A little lively
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section id="how-it-works" className="border-y border-ink/15 bg-card px-5 py-20">
+          <div className="mx-auto max-w-5xl">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
+              A day with Nearby Hello
+            </p>
+            <div className="mt-7 grid gap-6 sm:grid-cols-3">
+              {[
+                [
+                  "Before you leave",
+                  "Check whether the place nearby seems calm or lively, without guessing.",
+                ],
+                [
+                  "When you arrive",
+                  "See what changed recently and how fresh the information is.",
+                ],
+                [
+                  "After a few visits",
+                  "Learn the rhythm of a place—quiet mornings, lively afternoons, and everything between.",
+                ],
+              ].map(([title, body]) => (
+                <article key={title} className="border-t border-ink/15 pt-5">
+                  <h2 className="font-display text-3xl font-medium text-ink">{title}</h2>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">{body}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="privacy" className="scroll-mt-16 px-5 py-20">
+          <div className="mx-auto grid max-w-5xl gap-8 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
+                Your choice, every time
+              </p>
+              <h2 className="font-display mt-4 text-4xl font-medium leading-tight text-ink">
+                It only helps when you ask it to.
+              </h2>
+            </div>
+            <ul className="space-y-4 text-sm leading-relaxed text-ink">
+              <li>Nothing starts until you say yes.</li>
+              <li>A clear stop button ends sharing whenever you want.</li>
+              <li>Nearby Hello notices quiet and lively moments—it does not save conversations.</li>
+              <li>Your exact trips are never shown to other people.</li>
+              <li>Look around without sharing anything at all.</li>
+            </ul>
+          </div>
+        </section>
+      </main>
+      <footer className="border-t border-ink/15 px-5 py-12">
+        <div className="mx-auto flex max-w-5xl flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <BrandMark className="font-display text-3xl italic text-ink" />
+            <p className="mt-2 max-w-xs text-sm text-muted">
+              See more than a map can tell you.
+            </p>
+          </div>
+          <div className="w-full max-w-md">
+            <p className="mb-3 text-sm text-muted">Get Nearby Hello updates</p>
+            <WaitlistForm />
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// Preserved for future voice integration; not mounted in the spatial MVP.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function LegacyVoiceLanding({
+  searchParams,
+}: {
+  searchParams: HomeSearchParams;
+}) {
+  const params = await searchParams;
   const audience = AUDIENCES[audienceFrom(params.for)];
   const facebook = isFacebookLanding(params);
   const accountHref = homeSignupHref(params);

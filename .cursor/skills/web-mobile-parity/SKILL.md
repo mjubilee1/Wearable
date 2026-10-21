@@ -11,7 +11,9 @@ description: >-
 
 Nearby’s **web app is the UX reference** for shared screens. Mobile should mirror the same screens, flows, copy, CTAs, and data rules — with platform-native chrome only where required (navigation bars, safe areas, BLE/Scan).
 
-Product decisions in `nearby-product-and-icp.md` win. The Oct 9 color-clip locks are retired. The social hello layer is out of scope until that file says otherwise.
+Product decisions in `nearby-product-and-icp.md` win. Nearby Hello is now a
+location-first spatial intelligence platform. Voice, messaging, and social
+code remains preserved but outside primary navigation.
 
 ## When this skill applies
 
@@ -21,23 +23,31 @@ Product decisions in `nearby-product-and-icp.md` win. The Oct 9 color-clip locks
 
 ## Non-negotiables
 
-1. **Same IA** — Tabs: Talk · Messages · Connectors · Profile. The Talk route stays `/activity` on web and `(tabs)/activity` on mobile. Messages is `/messages` on both. Connectors is `/connectors` on both. Nearby matches and Connections stay in the repo and redirect to Talk. Auth routes: login, signup, forgot-password. Do not invent another product tab.
+1. **Same IA** — Tabs: Nearby · Explore · Patterns · Profile. Web uses
+   `/nearby`, `/explore`, `/patterns`, and `/profile`; Expo mirrors them under
+   `(tabs)`. Preserve Talk, Messages, Connectors, and Connections as hidden
+   routes. Auth routes remain login, signup, and forgot-password.
 2. **Same identity & data** — Firebase Auth + Firestore profiles/connections. No `Bearer dev` in shipped flows. API calls use real ID tokens.
 3. **Domain logic lives in `@nearby/shared`** — Types, scoring (`compatibilityScore`, `walkByScore`), sanitize helpers, option banks (`VIBE_OPTIONS`, `LOOKING_FOR_OPTIONS`, prompts, interests). Never fork rules between clients.
-4. **Same copy & CTAs** — Match web wording (`Help me say hi`, `Send a hello`, Connections subtabs Incoming/Sent/Connected, accept/decline/cancel/block).
+4. **Same copy & CTAs** — Use Nearby Hello consistently. Clearly label
+   personal, community, historical, demonstration, and unavailable data.
 5. **Same design tokens** — Port hex values from `apps/web/src/app/globals.css` `@theme`:
    - teal `#0d9488`, teal-soft `#ccfbf1`
    - coral `#f97066`, coral-soft `#fee4e2`
    - ink `#111827`, muted `#6b7280`
    - surface `#f3f4f6`, card `#ffffff`, amber-glow `#f59e0b`
-6. **Same card hierarchy, after a mutual hello** — until both people choose to say hello, show color only (no name, photo, or bio). After that, match web: photo → name/age/role/bio → interest/vibe chips → compatibility score → primary actions.
+6. **Same information hierarchy** — location and collection state →
+   environmental measurements → freshness and confidence → provenance and
+   limitations → controls. Never present participating-device activity as
+   occupancy or raw sound intensity as calibrated decibels.
 
 ## Canonical references (web)
 
 | Concern | Look here first |
 |---|---|
-| Nearby / facilitate / hello | `apps/web/src/components/NearbyMatches.tsx`, `HelloComposer.tsx`, `ProfileCard.tsx`, `CompatibilityScore.tsx` |
-| Talk | `apps/web/src/components/TalkPanel.tsx` |
+| Nearby Hello | `apps/web/src/app/nearby`, spatial components under `apps/web/src/components` |
+| Explore / Patterns | `apps/web/src/app/explore`, `apps/web/src/app/patterns` |
+| Legacy Talk | `apps/web/src/components/TalkPanel.tsx` |
 | Connections | `apps/web/src/app/connections/page.tsx`, `apps/web/src/lib/connections.ts` |
 | Profile | `apps/web/src/app/profile/page.tsx` — account only: name, email, sign out. Match fields and Nearby+ stay off this screen. |
 | Auth | `apps/web/src/lib/auth-context.tsx`, `AuthGate.tsx`, `login`/`signup`/`forgot-password` pages |
@@ -45,7 +55,7 @@ Product decisions in `nearby-product-and-icp.md` win. The Oct 9 color-clip locks
 | Shared domain | `packages/shared/src/index.ts` |
 | Tokens | `apps/web/src/app/globals.css` |
 
-Mobile lives under `apps/mobile/` (today largely `App.tsx` — split to mirror web routes as parity lands).
+Mobile lives under `apps/mobile/app/` and mirrors web routes with Expo Router.
 
 ## Workflow for every change
 
@@ -76,17 +86,21 @@ Parity checklist:
 
 ### Mobile-only affordances
 
-Allowed: haptics, push, native share, safe-area layout. The color-clip BLE scan is removed. Do not add it back. Talk is the Activity route on both clients (tab label Talk).
+Allowed: haptics, push, native share, safe-area layout, and supported native
+foreground sensors. The color-clip BLE scan stays removed. Do not add
+individual proximity matching.
 Not allowed: different auth model, or omitting Profile while claiming parity. Nearby matches and Connections are off the tab bar on both clients.
 
 ## Anti-patterns
 
 - Hardcoding `Bearer dev` or seeding-only UX as the permanent mobile path
 - Duplicating scoring/connection rules in `App.tsx` instead of `@nearby/shared`
-- Replacing Connections with Scan in the main tab bar
+- Adding Scan, Talk, Messages, or Connections to the primary tab bar
 - Divergent colors, score thresholds, or CTA labels “just for mobile”
 - Shipping a web feature without a mobile counterpart or an explicit `PARITY:` deferral
 
 ## Current known gap (update as parity lands)
 
-Mobile mirrors web IA via Expo Router: Firebase auth (login/signup/forgot-password), tabs Talk · Messages · Connectors · Profile, and the Talk screen on the Activity route. Nearby and Connections routes redirect to Talk. Plans and referral stay on the web profile.
+The target parity state is Nearby · Explore · Patterns · Profile on both
+clients. Talk, Messages, Connectors, and Connections remain available only
+through preserved hidden routes or Profile links.

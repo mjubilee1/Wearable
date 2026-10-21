@@ -215,6 +215,9 @@ export {
   isInviteCode,
 } from "./invite.js";
 
+export * from "./spatial.js";
+export * from "./spatial-intelligence.js";
+
 export {
   applyNationalPhoneInput,
   DEFAULT_PHONE_COUNTRY,

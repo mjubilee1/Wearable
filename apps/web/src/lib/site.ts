@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { FREE_DAILY_REQUESTS } from "@nearby/shared";
 
 export const SITE_URL = "https://www.nearbyhello.com";
-export const SITE_NAME = "Nearby";
-export const SITE_TITLE = "Nearby: finish the follow-up before the next call";
+export const SITE_NAME = "Nearby Hello";
+export const SITE_TITLE = "Nearby Hello: know what a place is like before you walk in";
 export const SITE_DESCRIPTION =
-  "Say what happened. Nearby drafts the email, puts the time on Google Calendar, and saves the task in Google Tasks — in the accounts you already use.";
-export const SITE_TAGLINE = "Speak, and it answers out loud.";
+  "See whether a nearby place feels calm or lively, what changed, and what is normal for that time.";
+export const SITE_TAGLINE = "See more than a map can tell you.";
 export const CONNECTOR_PRIVACY_LINE =
-  "Nearby only uses a connector when you ask. You can disconnect anytime.";
+  "Nearby Hello only collects a sensor category after explicit permission. You can stop collection or delete eligible observations anytime.";
 
 export const PRICING_FAQ = [
   {
@@ -38,6 +38,8 @@ const PRIVATE_PATHS = [
   "/signup",
   "/forgot-password",
   "/activity",
+  "/explore",
+  "/patterns",
   "/profile",
   "/connectors",
   "/onboarding",
@@ -82,94 +84,59 @@ export function siteJsonLd() {
         "@id": `${SITE_URL}/#app`,
         name: SITE_NAME,
         url: SITE_URL,
-        applicationCategory: "UtilitiesApplication",
+        applicationCategory: "LifestyleApplication",
         operatingSystem: "Web",
         description: SITE_DESCRIPTION,
         featureList: [
-          "Spoken questions and short spoken answers",
-          "Google Calendar, Gmail, and Google Tasks",
-          "Laptop, phone, or headphones",
-          "Email drafts are sent only with your approval",
-          "Voice memo recaps that turn into follow-ups",
-        ],
-        offers: [
-          {
-            "@type": "Offer",
-            name: "Free",
-            price: "0",
-            priceCurrency: "USD",
-            url: `${SITE_URL}/pricing`,
-          },
-          {
-            "@type": "Offer",
-            name: "Pro monthly",
-            price: "29",
-            priceCurrency: "USD",
-            url: `${SITE_URL}/pricing`,
-          },
+          "Foreground location-based environmental context",
+          "Local digital loudness processing without saved audio",
+          "Participating-device motion intensity",
+          "Historical spatial patterns",
+          "Privacy-thresholded community aggregates",
         ],
         publisher: { "@id": `${SITE_URL}/#organization` },
-      },
-      {
-        "@type": "FAQPage",
-        "@id": `${SITE_URL}/#faq`,
-        url: `${SITE_URL}/#questions`,
-        mainEntity: PRICING_FAQ.map((item) => ({
-          "@type": "Question",
-          name: item.q,
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: item.a,
-          },
-        })),
       },
     ],
   };
 }
 
 export function llmsText() {
-  return `# Nearby
+  return `# Nearby Hello
 
 > ${SITE_DESCRIPTION}
 
-Nearby helps recruiters, sales reps, consultants, and real estate agents handle the work between calls. Talk or type from a laptop, phone, or headphones to make calendar changes, capture follow-ups, and draft emails throughout the day. The pendant is coming soon.
+Nearby Hello helps people understand nearby physical spaces using supported,
+permission-based smartphone measurements and historical spatial patterns.
 
 ## Canonical
 
 - Site: ${SITE_URL}
-- Name: Nearby
+- Name: Nearby Hello
 - Domain: nearbyhello.com
 - Language: English
-- Category: voice and type assistant
+- Category: hyperlocal spatial intelligence
 
 ## What it does
 
-- Works with Google Calendar, Google Tasks, Gmail, and Notes.
-- Reschedules calendar events with a confirmation step before making the change.
-- Adds tasks and follow-ups.
-- Summarizes unread email.
-- Drafts replies for you to review and approve. Nearby never sends email on its own.
-- Saves notes.
-- Accepts voice or typed requests and can answer out loud.
-- Messages someone from the necklace. The thread is a normal chat with people you know. Nearby does not send carrier SMS.
-
-## Plans
-
-- Free: ${FREE_DAILY_REQUESTS} requests per day. Reschedules and email drafts count as requests. Messages are free.
-- Pro: $29 per month or $249 per year, with a 7-day free trial.
+- Shows approximate location and privacy-preserving spatial zones.
+- Measures digital ambient loudness locally without storing raw audio.
+- Measures motion intensity of participating devices only.
+- Builds historical patterns after enough measurements exist.
+- Distinguishes measured, estimated, historical, example, and
+  unavailable information.
 
 ## Privacy and control
 
-- Nearby does not record the room.
-- Nearby acts when you ask, then stops.
-- Email drafts require your approval. Nearby never sends them on its own.
-- Connector access can be disconnected at any time.
+- Sensor permissions are explicit and granular.
+- Each spot reading is foreground-only and stops automatically.
+- Community aggregates require minimum contributor thresholds.
+- Nearby Hello does not expose individual movement histories.
+- Users can explore without contributing and delete eligible observations.
 
 ## Pages
 
 - [Home](${SITE_URL}/): Product overview
-- [Pricing](${SITE_URL}/pricing): Free and Pro plan details
-- [Sign up](${SITE_URL}/signup): Create a Nearby account
+- [Sign up](${SITE_URL}/signup): Create a Nearby Hello account
 
 ## Machine-readable
 
