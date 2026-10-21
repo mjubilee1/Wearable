@@ -487,6 +487,21 @@ async function persistPlaces(key: string, cache: PlaceCache): Promise<void> {
   ]);
 }
 
+export async function getSpatialPlaceById(
+  placeId: string,
+): Promise<SpatialPlace | null> {
+  if (!/^osm_(node|way|relation)_\d+$/.test(placeId)) return null;
+  if (!isFirebaseConfigured()) return memoryPlaces.get(placeId) ?? null;
+  const snapshot = await getFirebaseAdmin()
+    .firestore()
+    .collection("spatialPlaces")
+    .doc(placeId)
+    .get();
+  return snapshot.exists
+    ? normalizeStoredPlace(snapshot.data())
+    : null;
+}
+
 function pagePlaces(
   places: SpatialPlace[],
   center: GeoPoint,
@@ -642,4 +657,24 @@ export function resetPlacesForTest(): void {
   placeIngestionMetrics.cacheHits = 0;
   placeIngestionMetrics.normalizedPlaces = 0;
   placeIngestionMetrics.upsertedPlaces = 0;
+}
+
+/** Test-only helper to seed normalized places without calling Overpass. */
+export function seedPlacesForTest(
+  center: GeoPoint,
+  places: SpatialPlace[],
+  radiusMeters = DEFAULT_PLACE_RADIUS_METERS,
+): void {
+  const now = Date.now();
+  const key = cacheKey(center, radiusMeters);
+  const cache: PlaceCache = {
+    center,
+    radiusMeters,
+    category: null,
+    places,
+    fetchedAt: now,
+    expiresAt: now + CACHE_TTL_MS,
+  };
+  memoryCache.set(key, cache);
+  for (const place of places) memoryPlaces.set(place.id, place);
 }

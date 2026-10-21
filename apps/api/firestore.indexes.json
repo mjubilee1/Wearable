@@ -56,6 +56,22 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "observedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "spatialObservations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "placeId", "order": "ASCENDING" },
+        { "fieldPath": "observedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "observationSubmissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "imageSha256", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

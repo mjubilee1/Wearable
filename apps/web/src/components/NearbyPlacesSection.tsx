@@ -14,6 +14,7 @@ import {
   getNearbyPlaces,
   searchSpatialLocations,
 } from "@/lib/spatial-api";
+import { ScanSurroundingsSection } from "@/components/ScanSurroundingsSection";
 
 const CATEGORIES = [
   ["", "All"],
@@ -192,6 +193,7 @@ export function NearbyPlacesSection({
   const permissionText = locationPermissionMessage(permission);
 
   return (
+    <>
     <section className="rounded-3xl border border-black/5 bg-card p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -318,5 +320,10 @@ export function NearbyPlacesSection({
         </p>
       ) : null}
     </section>
+    <ScanSurroundingsSection
+      location={center}
+      places={response?.places ?? []}
+    />
+    </>
   );
 }

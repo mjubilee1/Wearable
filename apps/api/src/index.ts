@@ -104,6 +104,17 @@ import {
   searchLocations,
   syncConfiguredPilotPlaces,
 } from "./places.js";
+import {
+  ObservationError,
+  answerSpatialQuery,
+  getObservationSubmission,
+  getPlaceInsights,
+  observationMetrics,
+  submitImageObservation,
+  submitObservationFeedback,
+  subscribePlaceInsights,
+} from "./observation-pipeline.js";
+import { streamSSE } from "hono/streaming";
 
 // Load apps/api/.env whether started from repo root or apps/api
 const apiDir = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -216,6 +227,11 @@ app.get("/health", (c) =>
       overpassConfigured: true,
       metrics: placeIngestionMetrics,
     },
+    observations: {
+      visionConfigured: Boolean(process.env.OPENAI_API_KEY),
+      visionMode: process.env.OPENAI_API_KEY ? "openai" : "fixture",
+      metrics: observationMetrics,
+    },
     stripeWebhook: isStripeWebhookConfigured(),
     googleCalendar: isGoogleCalendarConfigured(),
     twilioVerify: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID),
@@ -226,13 +242,17 @@ app.get("/health", (c) =>
 
 function spatialFailure(c: Context, error: unknown) {
   const status =
-    error instanceof SpatialError || error instanceof PlaceError
+    error instanceof SpatialError ||
+    error instanceof PlaceError ||
+    error instanceof ObservationError
       ? error.status
       : 500;
   return c.json(
     {
       code:
-        error instanceof SpatialError || error instanceof PlaceError
+        error instanceof SpatialError ||
+        error instanceof PlaceError ||
+        error instanceof ObservationError
           ? error.code
           : "spatial_error",
       error: error instanceof Error ? error.message : "Spatial request failed",
@@ -426,6 +446,122 @@ app.post("/v1/internal/spatial/places/sync", async (c) => {
       placeCount: await syncConfiguredPilotPlaces(),
       syncedAt: new Date().toISOString(),
     });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.post("/v1/spatial/observations", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as
+    | Parameters<typeof submitImageObservation>[1]
+    | null;
+  if (!body) return c.json({ error: "Observation body is required." }, 400);
+  try {
+    return c.json(
+      { submission: await submitImageObservation(auth.uid, body) },
+      202,
+    );
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/observations/:id", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json({
+      submission: await getObservationSubmission(auth.uid, c.req.param("id")),
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/places/:id/insights", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json(await getPlaceInsights(c.req.param("id")));
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/places/:id/insights/stream", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const placeId = c.req.param("id");
+  return streamSSE(c, async (stream) => {
+    const snapshot = await getPlaceInsights(placeId);
+    await stream.writeSSE({
+      event: "snapshot",
+      data: JSON.stringify(snapshot),
+    });
+    const unsubscribe = subscribePlaceInsights(placeId, (insight) => {
+      void stream.writeSSE({
+        event: "insight",
+        data: JSON.stringify(insight),
+      });
+    });
+    const heartbeat = setInterval(() => {
+      void stream.writeSSE({ event: "ping", data: "{}" });
+    }, 15_000);
+    await new Promise<void>((resolve) => {
+      stream.onAbort(() => {
+        clearInterval(heartbeat);
+        unsubscribe();
+        resolve();
+      });
+    });
+  });
+});
+
+app.post("/v1/spatial/query", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    question?: string;
+    location?: { latitude?: number; longitude?: number };
+    radiusMeters?: number;
+  } | null;
+  if (!body?.question || !body.location) {
+    return c.json({ error: "question and location are required." }, 400);
+  }
+  try {
+    return c.json(
+      await answerSpatialQuery(
+        auth.uid,
+        body.question,
+        {
+          latitude: Number(body.location.latitude),
+          longitude: Number(body.location.longitude),
+        },
+        body.radiusMeters,
+      ),
+    );
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.post("/v1/spatial/insights/feedback", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => null)) as {
+    insightId?: string;
+    helpful?: boolean;
+    note?: string;
+  } | null;
+  try {
+    await submitObservationFeedback(auth.uid, {
+      insightId: String(body?.insightId ?? ""),
+      helpful: body?.helpful === true,
+      note: body?.note,
+    });
+    return c.json({ ok: true });
   } catch (error) {
     return spatialFailure(c, error);
   }

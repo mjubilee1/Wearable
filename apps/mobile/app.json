@@ -14,7 +14,8 @@
         "NSBluetoothAlwaysUsageDescription": "Nearby Hello uses Bluetooth only for a wearable you explicitly connect.",
         "NSBluetoothPeripheralUsageDescription": "Nearby Hello uses Bluetooth only for a wearable you explicitly connect.",
         "NSMicrophoneUsageDescription": "Nearby Hello uses the microphone for a 10-second spot loudness reading. Raw audio is never saved.",
-        "NSLocationWhenInUseUsageDescription": "Nearby Hello uses your location during a spot reading to save sensor numbers to an approximate spatial zone."
+        "NSLocationWhenInUseUsageDescription": "Nearby Hello uses your location during a spot reading to save sensor numbers to an approximate spatial zone.",
+        "NSCameraUsageDescription": "Nearby Hello uses the camera only when you tap Scan surroundings to capture one authorized photo. The photo is not kept after processing."
       }
     },
     "android": {
@@ -43,7 +44,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Nearby Hello to use your photos for your profile."
+          "photosPermission": "Allow Nearby Hello to use your photos for your profile.",
+          "cameraPermission": "Nearby Hello uses the camera only when you tap Scan surroundings to capture one authorized photo. The photo is not kept after processing."
         }
       ],
       "expo-font",

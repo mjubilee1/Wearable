@@ -216,6 +216,7 @@ export {
 } from "./invite.js";
 
 export * from "./spatial.js";
+export * from "./spatial-intelligence.js";
 
 export {
   applyNationalPhoneInput,

@@ -45,6 +45,23 @@ powers the manual city/address/place fallback. Place cards show only sourced
 static metadata; they do not claim that seating, outlets, crowds, or other
 conditions are currently available.
 
+### Scan surroundings (AI observations)
+
+Users can tap **Scan surroundings**, choose the place shown in the photo, and
+submit one authorized image. The API validates the payload, matches the place
+only with enough confidence or an explicit selection, runs a vision provider,
+and stores structured observations—not the image.
+
+- With `OPENAI_API_KEY`, vision uses `OPENAI_VISION_MODEL` (default
+  `gpt-4o-mini`) at low detail for cost control.
+- Without a key, or with `VISION_FIXTURE_MODE=true`, the free local fixture
+  provider is used so development and tests do not require paid inference.
+- Dynamic attributes such as apparently empty seats expire quickly.
+- Natural-language nearby questions use deterministic intent parsing and
+  geospatial filtering before any grounded answer is returned.
+- Unsupported claims (Wi‑Fi quality, total occupancy, working outlets) are
+  never invented.
+
 If foreground location was already granted, the app refreshes it on open and
 watches only significant changes while active. A first-time prompt still
 requires the user to tap **Read this spot**. Tracking stops when the discovery
@@ -114,6 +131,10 @@ OSM_USER_AGENT=NearbyHello/0.1 (https://nearbyhello.com)
 PLACES_CACHE_TTL_MS=21600000
 # Optional secret for POST /v1/internal/spatial/places/sync
 SPATIAL_SYNC_SECRET=
+# Vision: leave OPENAI_API_KEY empty for the free fixture provider.
+OPENAI_VISION_MODEL=gpt-4o-mini
+VISION_FIXTURE_MODE=true
+
 SPATIAL_PILOT_LATITUDE=38.9072
 SPATIAL_PILOT_LONGITUDE=-77.0369
 SPATIAL_PILOT_RADIUS_METERS=1000
@@ -136,6 +157,12 @@ high-volume traffic.
 | `GET /v1/spatial/patterns` | Historical time-bucket patterns |
 | `GET /v1/spatial/places/nearby` | Sourced places ordered by distance |
 | `GET /v1/spatial/places/search` | Manual location search |
+| `POST /v1/spatial/observations` | Submit one authorized image observation |
+| `GET /v1/spatial/observations/:id` | Observation processing status |
+| `GET /v1/spatial/places/:id/insights` | Published place insights |
+| `GET /v1/spatial/places/:id/insights/stream` | SSE insight updates |
+| `POST /v1/spatial/query` | Grounded nearby spatial question |
+| `POST /v1/spatial/insights/feedback` | Lightweight insight feedback |
 | `DELETE /v1/spatial/contributions` | Delete the signed-in user's observations |
 | `POST /v1/agent` | Preserved legacy voice turn |
 | `GET /v1/matches` | Preserved compatibility endpoint; not in primary UI |

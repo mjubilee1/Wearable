@@ -131,17 +131,6 @@ export type PlaceSearchResult = {
   attribution: string;
 };
 
-export type SpatialObservation = {
-  id: string;
-  placeId: string;
-  attribute: string;
-  value: unknown;
-  sourceType: string;
-  confidence: number;
-  observedAt: string;
-  expiresAt: string | null;
-};
-
 export type SpatialZone = {
   id: string;
   center: GeoPoint;

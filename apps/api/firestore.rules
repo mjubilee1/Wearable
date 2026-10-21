@@ -194,6 +194,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /observationSubmissions/{submissionId} {
+      allow read, write: if false;
+    }
+
+    match /observationFeedback/{feedbackId} {
+      allow read, write: if false;
+    }
+
     // OAuth tokens for agent tools — API (Admin SDK) only.
     match /agentConnectors/{uid} {
       allow read, write: if false;

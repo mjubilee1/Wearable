@@ -200,6 +200,18 @@ Each phase must remain deployable with the spatial feature flag off.
    outlet, seating, crowd, queue, or noise observations without a legitimate
    source.
 
+## Phase 2 AI observation pipeline
+
+1. User-initiated **Scan surroundings** only. No continuous camera capture.
+2. Compress images client-side, submit once, and do not retain raw imagery.
+3. Vision adapter: OpenAI when keyed, otherwise free local fixture provider.
+4. Place matching requires explicit selection or a high-confidence unambiguous
+   match; nearest alone never auto-publishes.
+5. Confidence uses transparent weighted rules with conflict preservation.
+6. Deterministic insight templates and grounded spatial query intents.
+7. Async submission states, retries, duplicate suppression, SSE updates, and
+   cost/latency metrics.
+
 ## Principal risks
 
 - **Product transition:** hidden legacy routes and current user data must

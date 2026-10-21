@@ -5,8 +5,12 @@ import type {
   SensorSession,
   SpatialSnapshot,
   NearbyPlacesResponse,
+  ObservationSubmission,
+  PlaceInsightsResponse,
   PlaceSearchResult,
+  SpatialQueryResult,
   StartSensorSessionRequest,
+  SubmitImageObservationRequest,
   SubmitObservationRequest,
 } from "@nearby/shared";
 
@@ -141,4 +145,61 @@ export async function searchSpatialLocations(
     `/v1/spatial/places/search?q=${encodeURIComponent(query)}`,
   );
   return body.results;
+}
+
+export async function submitImageObservation(
+  token: string,
+  request: SubmitImageObservationRequest,
+): Promise<ObservationSubmission> {
+  const body = await api<{ submission: ObservationSubmission }>(
+    token,
+    "/v1/spatial/observations",
+    { method: "POST", body: JSON.stringify(request) },
+  );
+  return body.submission;
+}
+
+export async function getObservationSubmission(
+  token: string,
+  submissionId: string,
+): Promise<ObservationSubmission> {
+  const body = await api<{ submission: ObservationSubmission }>(
+    token,
+    `/v1/spatial/observations/${encodeURIComponent(submissionId)}`,
+  );
+  return body.submission;
+}
+
+export async function getPlaceInsights(
+  token: string,
+  placeId: string,
+): Promise<PlaceInsightsResponse> {
+  return api<PlaceInsightsResponse>(
+    token,
+    `/v1/spatial/places/${encodeURIComponent(placeId)}/insights`,
+  );
+}
+
+export async function askSpatialQuery(
+  token: string,
+  question: string,
+  location: GeoPoint,
+  radiusMeters = 1_000,
+): Promise<SpatialQueryResult> {
+  return api<SpatialQueryResult>(token, "/v1/spatial/query", {
+    method: "POST",
+    body: JSON.stringify({ question, location, radiusMeters }),
+  });
+}
+
+export async function sendInsightFeedback(
+  token: string,
+  insightId: string,
+  helpful: boolean,
+  note?: string,
+): Promise<void> {
+  await api<{ ok: boolean }>(token, "/v1/spatial/insights/feedback", {
+    method: "POST",
+    body: JSON.stringify({ insightId, helpful, note }),
+  });
 }
