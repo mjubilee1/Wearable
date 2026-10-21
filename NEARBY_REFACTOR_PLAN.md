@@ -1,20 +1,17 @@
-# Nearby architecture audit and spatial-platform decision gate
+# Nearby Hello spatial-platform refactor plan
 
 Updated: October 21, 2026
 
 ## Decision status
 
-The requested hyperlocal spatial-intelligence product is **not approved for
-implementation in the current repository state**. The binding product source
-of truth, [`nearby-product-and-icp.md`](nearby-product-and-icp.md), defines
-Nearby as a voice-first wearable assistant and makes the social/spatial layer a
-later phase. It also requires the color-clip scanning UI to remain disabled.
+Option A was approved on October 21, 2026. Nearby Hello is officially
+pivoting from a voice-first assistant to a privacy-first hyperlocal spatial
+intelligence platform. Existing voice, messaging, authentication, agent, and
+wearable infrastructure will be preserved for future integration but removed
+from the primary experience.
 
-Nearby Pulse would replace the approved product's primary experience, sensing
-model, data model, and positioning. This document therefore records the audit
-and a reversible proposal, but no spatial collection, map UI, or production
-schema is enabled. Implementation requires an explicit update to
-`nearby-product-and-icp.md` and `.cursor/rules/nearby-product.mdc`.
+The consumer-facing name is always **Nearby Hello**. "Nearby Pulse" and
+"Pulse" are prohibited in UI, navigation, onboarding, and marketing.
 
 ## Current architecture
 
@@ -64,9 +61,9 @@ schema is enabled. Implementation requires an explicit update to
 - Legacy `/v1/matches` and `/v1/ble/sightings` compatibility endpoints,
   disabled from navigation as required by the current product decision.
 
-## Components to modify if the pivot is approved
+## Components to modify
 
-- Replace the Talk-first information architecture with Pulse, Explore,
+- Replace the Talk-first information architecture with Nearby, Explore,
   Patterns, and Profile on both web and mobile.
 - Add explicit, per-sensor consent and session controls; existing auth consent
   is not permission to collect environmental data.
@@ -116,7 +113,7 @@ This is a design proposal, not an enabled implementation.
      permission; never raw audio or transcription.
    - Broad device movement state where platform APIs support it.
    - Unsupported web capabilities represented explicitly.
-4. **Pulse clients**
+4. **Nearby Hello clients**
    - A map abstraction shared at the domain level, with platform-specific
      renderers.
    - Demo, personal, and thresholded community modes with visible provenance,
@@ -154,7 +151,7 @@ high-volume ad hoc space-time analysis. If that threshold is reached, use a
 dual-write migration with reconciliation before changing reads; do not perform
 an irreversible cutover.
 
-## Implementation phases after approval
+## Implementation phases
 
 1. **Product and privacy gate:** update the product source of truth; define
    pilot geography configuration, retention periods, zone resolution,
@@ -165,8 +162,8 @@ an irreversible cutover.
 3. **Additive backend:** add server-only Firestore collections, indexes,
    authenticated APIs, rate limits, ownership checks, and demo fixtures that
    are visibly synthetic.
-4. **Pulse UI:** ship map-first web and mobile surfaces behind one feature
-   flag, with demo and unavailable states before real sensing.
+4. **Nearby Hello UI:** ship map-first web and mobile surfaces with demo and
+   unavailable states before real sensing.
 5. **Personal foreground collection:** add granular consent and start/stop
    sessions. Keep sound processing local and upload only relative intensity
    measurements and quality metadata.
@@ -180,8 +177,8 @@ Each phase must remain deployable with the spatial feature flag off.
 
 ## Principal risks
 
-- **Product contradiction:** implementing Pulse now would directly conflict
-  with the approved M1 voice-agent milestone.
+- **Product transition:** hidden legacy routes and current user data must
+  remain functional while the primary experience changes.
 - **Reidentification:** sparse observations can expose routines even when
   names are removed; coarse zones and thresholds are necessary but not always
   sufficient.
@@ -199,10 +196,11 @@ Each phase must remain deployable with the spatial feature flag off.
 - **Operational gaps:** no CI, incomplete retention enforcement, and no
   account-wide deletion/export endpoint.
 
-## Current implementation boundary
+## Implementation boundary
 
-No application code, schema, sensor permissions, map dependency, or
-environmental data collection should be added until the product decision gate
-at the top of this document is resolved. The safe next change is to update the
-two product source-of-truth files, including whether the voice assistant is
-replaced or whether Pulse is a separately flagged experiment.
+The approved MVP includes additive spatial contracts, protected APIs,
+location-first web and Expo experiences, foreground permission-based sensor
+collection, deterministic aggregation, privacy thresholds, deletion controls,
+tests, and documentation. It excludes destructive legacy cleanup, background
+tracking, individual proximity matching, wearable collection, and public
+social discovery.

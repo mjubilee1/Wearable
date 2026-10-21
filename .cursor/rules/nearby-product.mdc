@@ -1,31 +1,66 @@
 ---
-description: Nearby is a voice-first wearable assistant. Current target is a laptop or AirPods voice loop. The Oct 9 color-clip locks no longer apply.
+description: Nearby Hello is a privacy-first hyperlocal spatial intelligence platform.
 alwaysApply: true
 ---
 
-# Nearby product decision
+# Nearby Hello product decision
 
-Source of truth: `nearby-product-and-icp.md` (Fri Oct 16, 2026). The Oct 9 color-clip brief is retired. Do not apply those locks, and do not extend the color-ring demo.
+Source of truth: `nearby-product-and-icp.md` (updated October 21, 2026).
 
-Nearby is a voice-first wearable AI assistant. You speak, it uses tools, and it answers out loud. Domain: nearbyhello.com. The social "say hello" layer is later and out of scope for this phase.
+Nearby Hello helps people understand the physical environment around them
+through geospatial intelligence, permission-based smartphone sensors,
+environmental measurements, and historical spatial patterns.
 
 ## Current target
 
-M1: speak through the laptop, the phone, or AirPods and get a spoken answer. One agent endpoint (`POST /v1/agent`) that every input calls. The Talk screen is the Activity route on web and Expo. The agent lives in `apps/api`. The device and agent contract lives in `packages/shared`.
+Build a useful location-first experience that works with zero other Nearby
+Hello users. Web and Expo use the same primary navigation: Nearby, Explore,
+Patterns, and Profile. The Hono API remains in `apps/api`; shared spatial and
+sensor contracts live in `packages/shared`.
+
+The consumer-facing product name is always **Nearby Hello**. Do not use
+"Nearby Pulse" or "Pulse" in UI, navigation, onboarding, or marketing.
 
 ## Rules
 
-- Don't put permanent API secrets in firmware. Devices authenticate; the backend holds model keys.
-- Short spoken replies. A spoken request runs the tool in that turn. Nearby does not record the room, and it does not ask again before a note, reminder, memory, or calendar check.
-- Default trigger: the pendant's own mic listens for "hello nearby," and the button works too. The phone does not take a permanent microphone permission. After either trigger, the phone sends that one turn over the internet to `POST /v1/agent`.
-- Design against recent failures: not a phone-in-a-box (Rabbit), not an always-on recorder (Omi), not a chatty companion (Friend). Prove the daily job on laptop/AirPods before selling a gadget.
-- Leave the color-ring sketches under `firmware/` in place. Don't extend them. AirPods go through the laptop or phone, not the board.
-- Desk board (Oct 16 2026): Seeed XIAO nRF52840 Sense, the same module Omi's devkit uses. USB identity `2886:8045`. Flash `firmware/wakeword` with `-e xiaoblesense`. The old QT Py sketch is gone.
-- Third-party trees such as `third_party/omi` are read-only references. Before copying any of that code into `firmware/`, follow `.cursor/skills/third-party-nearby/SKILL.md` and keep every Nearby rule below. Omi's always-on recorder does not become Nearby firmware.
-- The color-clip BLE scan is removed from the phone and the website. Leave `/v1/matches` and `/v1/ble/sightings` in the API. Don't put the scan UI back.
-- First physical form is a necklace / pendant prototype, not a watch. Don't polish enclosure, industrial design, manufacturing, or battery yet.
-- Posted links use `?utm_source=instagram` (or `tiktok`, `linkedin`). The waitlist stores that value so the channel is visible on the signup.
+- Nearby Hello is not a chatbot, business recommendation app, review product,
+  traditional social network, or individual tracking system.
+- Prioritize measured environmental facts, interpretable estimates, and
+  historical patterns. Clearly distinguish all three and never fabricate live
+  data.
+- Sensor collection requires explicit consent per category and is foreground
+  only by default. Users can stop collection and delete eligible
+  contributions.
+- Process sound locally. Never store or upload raw room audio and never
+  transcribe bystanders. Uncalibrated values are relative sound intensity, not
+  decibels.
+- Activity reflects participating-device motion only. Never label it as total
+  pedestrian count, occupancy, or the behavior of other individuals.
+- Do not expose precise user locations, individual movement histories, or
+  sparse community aggregates. Apply spatial/temporal aggregation and minimum
+  contributor thresholds.
+- Keep Demo, Personal, and Community data modes visibly labeled. Community
+  insights remain unavailable below the privacy threshold.
+- Preserve authentication, messaging, voice, agent, and wearable code for
+  future integration, but keep Talk and social matching out of primary
+  navigation.
+- Do not destructively delete existing code or user data. Use hidden routes,
+  redirects, additive schemas, and reversible migrations.
+- Keep sensor providers modular so web, Expo, native mobile, and future
+  wearables can share backend contracts without claiming unsupported device
+  capabilities.
+- Do not put permanent API secrets in firmware. Devices authenticate and the
+  backend holds service keys.
+- Leave legacy color-ring firmware and `/v1/matches` and
+  `/v1/ble/sightings` compatibility APIs in place. Do not restore individual
+  proximity matching.
+- A Washington, DC pilot may be configured, but domain logic must remain
+  geography-independent.
+- Posted links use `?utm_source=instagram` (or `tiktok`, `linkedin`). The
+  waitlist stores that value.
 
 ## Still open
 
-Do not invent: who buys it, device only or a subscription, the price, or the one job it does better than a phone plus AirPods plus ChatGPT voice. The trigger is decided: "hello nearby" or the button.
+Do not invent pricing, subscription packaging, target customer, production
+map-provider commitments, or public social-presence behavior. Any future
+social discovery requires a separate explicit opt-in.
