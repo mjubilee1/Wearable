@@ -37,7 +37,7 @@ export default function LoginPage() {
         Welcome back
       </h1>
       <p className="mt-2 text-sm text-muted">
-        Sign in to talk.
+        Sign in to explore nearby.
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">

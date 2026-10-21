@@ -39,6 +39,7 @@ import { trackFunnel } from "@/lib/funnel";
 import { CONNECTOR_PRIVACY_LINE } from "@/lib/site";
 import { PendantAccountNote } from "@/components/PendantAccountNote";
 import { VoiceMemoPanel } from "@/components/VoiceMemoPanel";
+import { BILLING_UI_ENABLED } from "@/lib/features";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -366,6 +367,10 @@ export function TalkPanel() {
 
   function noteLimit(payload: unknown): boolean {
     if (!isLimitReachedBody(payload)) return false;
+    if (!BILLING_UI_ENABLED) {
+      setError("Today's limit is reached. Try again tomorrow.");
+      return true;
+    }
     setLimitHit(payload);
     trackFunnel(
       "limit_reached",
@@ -982,7 +987,7 @@ export function TalkPanel() {
         >
           More
         </button>
-        {usage?.plan !== "pro" ? (
+        {BILLING_UI_ENABLED && usage?.plan !== "pro" ? (
           <Link href="/pricing" className="rounded-full px-3 py-1.5 text-xs font-semibold text-teal">
             Upgrade
           </Link>
@@ -1016,11 +1021,11 @@ export function TalkPanel() {
     <div className="mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden pt-16">
       <header className="flex items-center justify-between px-4 py-2">
         <h1 className="text-sm font-semibold text-ink">Talk</h1>
-        {usage?.plan === "pro" ? (
+        {BILLING_UI_ENABLED && usage?.plan === "pro" ? (
           <p className="rounded-full bg-teal-soft px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-teal">
             Pro
           </p>
-        ) : usage && usage.remaining !== null ? (
+        ) : BILLING_UI_ENABLED && usage && usage.remaining !== null ? (
           <p className="text-xs text-muted">{usage.remaining} left today</p>
         ) : null}
       </header>
@@ -1108,7 +1113,9 @@ export function TalkPanel() {
                 <div className="mb-2 rounded-3xl border border-black/10 bg-card px-4 py-3 text-sm text-ink shadow-lg">
                   <PendantAccountNote pendantId={profile?.pendantId} className="text-sm text-ink" />
                   <div className="mt-3">
-                    <VoiceMemoPanel />
+                    {BILLING_UI_ENABLED || usage?.plan === "pro" ? (
+                      <VoiceMemoPanel />
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -1141,7 +1148,9 @@ export function TalkPanel() {
               <div className="absolute inset-x-4 bottom-full z-10 mb-2 rounded-3xl border border-black/10 bg-card px-4 py-3 shadow-lg">
                 <PendantAccountNote pendantId={profile?.pendantId} className="text-sm text-ink" />
                 <div className="mt-3">
-                  <VoiceMemoPanel />
+                  {BILLING_UI_ENABLED || usage?.plan === "pro" ? (
+                    <VoiceMemoPanel />
+                  ) : null}
                 </div>
                 {history.length > 0 ? (
                   <button
@@ -1164,7 +1173,7 @@ export function TalkPanel() {
       )}
 
       <TabBar active="activity" />
-      {limitHit ? (
+      {BILLING_UI_ENABLED && limitHit ? (
         <UpgradeSheet feature={limitHit.feature} onClose={() => setLimitHit(null)} />
       ) : null}
     </div>

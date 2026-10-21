@@ -5,10 +5,10 @@ import type {
   DataMode,
   EnvironmentalAggregate,
   GeoPoint,
-  SensorSession,
   SpatialSnapshot,
 } from "@nearby/shared";
 import { TabBar } from "@/components/TabBar";
+import { NearbyPlacesSection } from "@/components/NearbyPlacesSection";
 import { useAuth } from "@/lib/auth-context";
 import {
   deleteSpatialContributions,
@@ -39,14 +39,17 @@ function freshness(timestamp: number): string {
 }
 
 function aggregateTitle(aggregate: EnvironmentalAggregate): string {
-  return aggregate.type === "sound_relative"
-    ? "Relative sound intensity"
+  return aggregate.type === "sound_dbfs"
+    ? "Ambient loudness"
     : "Participating-device activity";
 }
 
 function aggregateValue(aggregate: EnvironmentalAggregate): string {
-  if (aggregate.type === "sound_relative") {
-    return `${Math.round(Number(aggregate.value) * 100)} / 100`;
+  if (aggregate.type === "sound_dbfs") {
+    return `${Number(aggregate.value).toFixed(1)} dBFS`;
+  }
+  if (aggregate.type === "motion_intensity") {
+    return `${Number(aggregate.value).toFixed(2)} motion intensity`;
   }
   return String(aggregate.value);
 }
@@ -136,9 +139,6 @@ export function NearbyHelloDashboard({ view }: { view: View }) {
   const [usingDeviceLocation, setUsingDeviceLocation] = useState(false);
   const [mode, setMode] = useState<DataMode>("demo");
   const [snapshot, setSnapshot] = useState<SpatialSnapshot | null>(null);
-  const [session, setSession] = useState<SensorSession | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [motionEnabled, setMotionEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -168,125 +168,101 @@ export function NearbyHelloDashboard({ view }: { view: View }) {
     void loadSnapshot("demo", PILOT_LOCATION);
   }, [loadSnapshot]);
 
-  async function acquireCurrentLocation() {
-    setBusy(true);
-    setError(null);
-    try {
-      const reading = await browserLocationProvider.readCurrent();
-      if (!reading) {
-        setError("Location permission is off or unavailable in this browser.");
-        return;
-      }
-      setLocation(reading.value);
-      setUsingDeviceLocation(true);
-      await loadSnapshot("personal", reading.value);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Location failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function startCollection() {
+  async function readThisSpot() {
     if (!user) return;
     setBusy(true);
     setError(null);
     setNotice(null);
+    let sessionId: string | null = null;
     try {
-      const locationReading = await browserLocationProvider.readCurrent();
-      if (!locationReading) throw new Error("Foreground location permission is required.");
-      const enabledSensors = [
-        "location" as const,
-        ...(soundEnabled ? (["sound"] as const) : []),
-        ...(motionEnabled ? (["motion"] as const) : []),
-      ];
+      const [locationResult, soundResult, motionResult] =
+        await Promise.allSettled([
+          browserLocationProvider.readCurrent(),
+          browserSoundProvider.supported
+            ? browserSoundProvider.readRelativeIntensity()
+            : Promise.resolve(null),
+          browserMotionProvider.supported
+            ? browserMotionProvider.readMotionIntensity()
+            : Promise.resolve(null),
+        ]);
+      const locationReading =
+        locationResult.status === "fulfilled" ? locationResult.value : null;
+      if (!locationReading) {
+        setNotice(
+          "Location was not allowed, so no reading was saved. You can still explore the labeled example.",
+        );
+        return;
+      }
+      const sound =
+        soundResult.status === "fulfilled" ? soundResult.value : null;
+      const motion =
+        motionResult.status === "fulfilled" ? motionResult.value : null;
+      if (!sound && !motion) {
+        setNotice(
+          "Mic and motion were not available, so no sensor numbers were saved. The example view still works.",
+        );
+        return;
+      }
       const token = await user.getIdToken();
       const nextSession = await startSensorSession(token, {
         consent: {
           location: true,
-          sound: soundEnabled,
-          motion: motionEnabled,
+          sound: Boolean(sound),
+          motion: Boolean(motion),
         },
-        enabledSensors,
+        enabledSensors: [
+          "location",
+          ...(sound ? (["sound"] as const) : []),
+          ...(motion ? (["motion"] as const) : []),
+        ],
       });
+      sessionId = nextSession.id;
+      const submissions = [];
+      if (sound) {
+        submissions.push(
+          submitObservation(token, {
+            sessionId,
+            location: locationReading.value,
+            type: "sound_dbfs",
+            value: sound.value,
+            observedAt: sound.measuredAt,
+            source: "web",
+            quality: { qualityScore: sound.qualityScore, calibrated: false },
+          }),
+        );
+      }
+      if (motion) {
+        submissions.push(
+          submitObservation(token, {
+            sessionId,
+            location: locationReading.value,
+            type: "motion_intensity",
+            value: motion.value,
+            observedAt: motion.measuredAt,
+            source: "web",
+            quality: { qualityScore: motion.qualityScore, calibrated: false },
+          }),
+        );
+      }
+      await Promise.all(submissions);
       setLocation(locationReading.value);
       setUsingDeviceLocation(true);
       setMode("personal");
-      setSession(nextSession);
-      setNotice("Foreground collection is active. Nothing records in the background.");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not start collection.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function measureNow() {
-    if (!user || !session) return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const locationReading = await browserLocationProvider.readCurrent();
-      if (!locationReading) throw new Error("A current location fix is required.");
-      const token = await user.getIdToken();
-      let count = 0;
-      if (soundEnabled) {
-        if (!browserSoundProvider.supported) {
-          throw new Error("Relative sound measurement is not supported here.");
-        }
-        const sound = await browserSoundProvider.readRelativeIntensity();
-        if (!sound) throw new Error("Microphone permission was not granted.");
-        await submitObservation(token, {
-          sessionId: session.id,
-          location: locationReading.value,
-          type: "sound_relative",
-          value: sound.value,
-          observedAt: sound.measuredAt,
-          source: "web",
-          quality: { qualityScore: sound.qualityScore, calibrated: false },
-        });
-        count += 1;
-      }
-      if (motionEnabled) {
-        if (!browserMotionProvider.supported) {
-          throw new Error("Motion sensing is not supported in this browser.");
-        }
-        const motion = await browserMotionProvider.readMovementState();
-        if (!motion) throw new Error("Motion permission or readings are unavailable.");
-        await submitObservation(token, {
-          sessionId: session.id,
-          location: locationReading.value,
-          type: "motion_state",
-          value: motion.value,
-          observedAt: motion.measuredAt,
-          source: "web",
-          quality: { qualityScore: motion.qualityScore, calibrated: false },
-        });
-        count += 1;
-      }
       setNotice(
-        `${count} personal measurement${count === 1 ? "" : "s"} saved. Raw audio never left this device.`,
+        `${submissions.length} numeric reading${submissions.length === 1 ? "" : "s"} saved to this spot. Raw audio was discarded on this device.`,
       );
       await loadSnapshot("personal", locationReading.value);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Measurement failed.");
+      setError(caught instanceof Error ? caught.message : "Could not read this spot.");
     } finally {
-      setBusy(false);
-    }
-  }
-
-  async function stopCollection() {
-    if (!user || !session) return;
-    setBusy(true);
-    try {
-      const token = await user.getIdToken();
-      await stopSensorSession(token, session.id);
-      setSession(null);
-      setNotice("Collection stopped.");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not stop collection.");
-    } finally {
+      if (sessionId) {
+        try {
+          const token = await user.getIdToken();
+          await stopSensorSession(token, sessionId);
+        } catch {
+          // The reading is complete even if the session close retry is needed.
+        }
+      }
       setBusy(false);
     }
   }
@@ -318,7 +294,7 @@ export function NearbyHelloDashboard({ view }: { view: View }) {
         : "Compare conditions by hour once enough observations exist.";
 
   const modeLabel = useMemo(() => {
-    if (mode === "demo") return "Demonstration data";
+    if (mode === "demo") return "Example data";
     if (mode === "community") return "Community aggregate";
     return "Your measurements";
   }, [mode]);
@@ -341,22 +317,30 @@ export function NearbyHelloDashboard({ view }: { view: View }) {
       </header>
 
       <main className="flex-1 space-y-5">
+        {view === "nearby" ? (
+          <p className="rounded-2xl bg-teal-soft px-4 py-3 text-sm text-teal">
+            Tap once to let Nearby Hello use location, microphone loudness, and
+            phone motion for about 10 seconds. Raw audio is never saved.
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void acquireCurrentLocation()}
-            className="rounded-xl bg-teal px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {usingDeviceLocation ? "Refresh my location" : "Use my location"}
-          </button>
+          {view === "nearby" ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void readThisSpot()}
+              className="rounded-xl bg-teal px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {busy ? "Reading this spot… about 10 seconds" : "Read this spot"}
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={busy}
             onClick={() => void loadSnapshot("demo", usingDeviceLocation ? location : PILOT_LOCATION)}
             className="rounded-xl border border-black/10 bg-card px-4 py-2.5 text-sm font-bold text-ink disabled:opacity-50"
           >
-            View labeled demo
+            View example data
           </button>
           <button
             type="button"
@@ -372,6 +356,10 @@ export function NearbyHelloDashboard({ view }: { view: View }) {
         {notice ? <p className="rounded-2xl bg-teal-soft px-4 py-3 text-sm text-teal">{notice}</p> : null}
 
         <SpatialMap location={location} snapshot={snapshot} />
+
+        {view !== "patterns" ? (
+          <NearbyPlacesSection initialLocation={location} />
+        ) : null}
 
         {view !== "patterns" ? (
           <section className="grid gap-3 sm:grid-cols-2">
@@ -390,8 +378,8 @@ export function NearbyHelloDashboard({ view }: { view: View }) {
                 <p className="mt-4 text-xs text-muted">
                   Updated {freshness(aggregate.lastUpdatedAt)} · {aggregate.observationCount} observations · {aggregate.distinctContributorCount} contributing {aggregate.distinctContributorCount === 1 ? "device" : "devices"}
                 </p>
-                {aggregate.type === "sound_relative" ? (
-                  <p className="mt-2 text-xs text-muted">Relative intensity only—not calibrated decibels. No raw audio is stored.</p>
+                {aggregate.type === "sound_dbfs" ? (
+                  <p className="mt-2 text-xs text-muted">Uncalibrated digital loudness (dBFS), not sound-pressure dB. No raw audio is stored.</p>
                 ) : (
                   <p className="mt-2 text-xs text-muted">Participating-device activity only—not occupancy or pedestrian count.</p>
                 )}
@@ -403,7 +391,7 @@ export function NearbyHelloDashboard({ view }: { view: View }) {
                 <p className="mt-2 text-sm text-muted">
                   {mode === "community"
                     ? "Community insights stay unavailable until at least three distinct contributors support the aggregate."
-                    : "Start a personal foreground session or open the clearly labeled demonstration view."}
+                    : "Tap Read this spot or open the clearly labeled example view."}
                 </p>
               </div>
             ) : null}
@@ -413,9 +401,9 @@ export function NearbyHelloDashboard({ view }: { view: View }) {
         {view === "patterns" ? (
           <section className="space-y-3">
             {(snapshot?.patterns ?? []).map((pattern) => (
-              <article key={`${pattern.type}-${pattern.dayType}-${pattern.hour}`} className="rounded-3xl border border-black/5 bg-card p-5 shadow-sm">
-                <p className="text-xs font-bold uppercase tracking-[0.12em] text-teal">{pattern.dayType} · {String(pattern.hour).padStart(2, "0")}:00 UTC</p>
-                <p className="mt-2 text-xl font-bold text-ink">{pattern.type === "sound_relative" ? `${Math.round(Number(pattern.baseline) * 100)} / 100 relative sound` : String(pattern.baseline)}</p>
+              <article key={`${pattern.type}-${pattern.dayOfWeek}-${pattern.hour}`} className="rounded-3xl border border-black/5 bg-card p-5 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-teal">{["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][pattern.dayOfWeek]} · {String(pattern.hour).padStart(2, "0")}:00 UTC</p>
+                <p className="mt-2 text-xl font-bold text-ink">{pattern.type === "sound_dbfs" ? `${Number(pattern.baseline).toFixed(1)} dBFS usual` : `${Number(pattern.baseline).toFixed(2)} motion intensity`}</p>
                 <p className="mt-2 text-sm text-muted">{pattern.sampleCount} historical samples · {Math.round(pattern.confidence * 100)}% confidence</p>
               </article>
             ))}
@@ -430,37 +418,14 @@ export function NearbyHelloDashboard({ view }: { view: View }) {
 
         {view === "nearby" ? (
           <section className="rounded-3xl border border-black/5 bg-card p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-lg font-bold text-ink">Personal collection</p>
-                <p className="mt-1 max-w-xl text-sm text-muted">
-                  Foreground only. Each sensor requires separate permission. Closing or leaving this screen stops browser measurements.
-                </p>
-              </div>
-              <span className={session ? "rounded-full bg-teal-soft px-3 py-1 text-xs font-bold text-teal" : "rounded-full bg-surface px-3 py-1 text-xs font-bold text-muted"}>
-                {session ? "Sensing active" : "Sensing stopped"}
-              </span>
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <label className="flex items-start gap-3 rounded-2xl bg-surface p-4">
-                <input type="checkbox" checked={soundEnabled} disabled={Boolean(session)} onChange={(event) => setSoundEnabled(event.target.checked)} className="mt-1 accent-teal" />
-                <span><strong className="block text-sm text-ink">Relative sound</strong><span className="text-xs text-muted">One local one-second sample. Raw audio is discarded.</span></span>
-              </label>
-              <label className="flex items-start gap-3 rounded-2xl bg-surface p-4">
-                <input type="checkbox" checked={motionEnabled} disabled={Boolean(session)} onChange={(event) => setMotionEnabled(event.target.checked)} className="mt-1 accent-teal" />
-                <span><strong className="block text-sm text-ink">Device movement</strong><span className="text-xs text-muted">Broad state only; browser support varies.</span></span>
-              </label>
-            </div>
+            <p className="text-lg font-bold text-ink">Your spot readings</p>
+            <p className="mt-1 max-w-xl text-sm text-muted">
+              Each tap takes one short reading and stops automatically. If a
+              permission is denied, the rest of Nearby Hello still works.
+            </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {!session ? (
-                <button type="button" disabled={busy || (!soundEnabled && !motionEnabled)} onClick={() => void startCollection()} className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">Start foreground session</button>
-              ) : (
-                <>
-                  <button type="button" disabled={busy} onClick={() => void measureNow()} className="rounded-xl bg-teal px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">Measure now</button>
-                  <button type="button" disabled={busy} onClick={() => void stopCollection()} className="rounded-xl border border-coral/40 bg-coral-soft px-4 py-2.5 text-sm font-bold text-coral disabled:opacity-50">Stop sensing</button>
-                </>
-              )}
-              <button type="button" disabled={busy || Boolean(session)} onClick={() => void deleteContributions()} className="rounded-xl border border-black/10 bg-card px-4 py-2.5 text-sm font-bold text-muted disabled:opacity-50">Delete my observations</button>
+              <button type="button" disabled={busy} onClick={() => void readThisSpot()} className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy ? "Reading…" : "Read this spot"}</button>
+              <button type="button" disabled={busy} onClick={() => void deleteContributions()} className="rounded-xl border border-black/10 bg-card px-4 py-2.5 text-sm font-bold text-muted disabled:opacity-50">Delete my readings</button>
             </div>
           </section>
         ) : null}

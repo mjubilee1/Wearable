@@ -5,6 +5,7 @@ import {
   assignSpatialZone,
   canPublishCommunityAggregate,
   confidenceScore,
+  motionIntensityClassification,
   movementClassification,
   sensorCategoryFor,
   soundClassification,
@@ -96,7 +97,14 @@ function normalizeObservation(
 ): EnvironmentalObservation | null {
   const row = (value ?? {}) as Record<string, unknown>;
   const type = row.type;
-  if (type !== "sound_relative" && type !== "motion_state") return null;
+  if (
+    type !== "sound_dbfs" &&
+    type !== "motion_intensity" &&
+    type !== "sound_relative" &&
+    type !== "motion_state"
+  ) {
+    return null;
+  }
   return {
     id: observationId,
     userId: String(row.userId ?? ""),
@@ -104,10 +112,19 @@ function normalizeObservation(
     zoneId: String(row.zoneId ?? ""),
     type,
     value:
-      type === "sound_relative"
+      type === "sound_relative" ||
+      type === "sound_dbfs" ||
+      type === "motion_intensity"
         ? Number(row.value ?? 0)
         : (String(row.value ?? "stationary") as MotionState),
-    unit: type === "sound_relative" ? "relative" : "state",
+    unit:
+      type === "sound_dbfs"
+        ? "dbfs"
+        : type === "motion_intensity"
+          ? "intensity"
+          : type === "sound_relative"
+            ? "relative"
+            : "state",
     observedAt: Number(row.observedAt ?? 0),
     source:
       row.source === "mobile" || row.source === "wearable" || row.source === "demo"
@@ -297,7 +314,14 @@ export async function submitObservation(
     zoneId: zone.id,
     type: request.type,
     value: request.value,
-    unit: request.type === "sound_relative" ? "relative" : "state",
+    unit:
+      request.type === "sound_dbfs"
+        ? "dbfs"
+        : request.type === "motion_intensity"
+          ? "intensity"
+          : request.type === "sound_relative"
+            ? "relative"
+            : "state",
     observedAt: request.observedAt,
     source: request.source,
     quality: {
@@ -380,7 +404,9 @@ export function aggregateObservationRows(
     (row) => row.observedAt >= window.start && row.observedAt < window.end,
   );
   const value =
-    type === "sound_relative"
+    type === "sound_relative" ||
+    type === "sound_dbfs" ||
+    type === "motion_intensity"
       ? windowRows.reduce((sum, row) => sum + Number(row.value), 0) /
         windowRows.length
       : modeValue(windowRows);
@@ -402,8 +428,10 @@ export function aggregateObservationRows(
       ageMs: now - latest,
     }),
     classification:
-      type === "sound_relative"
+      type === "sound_relative" || type === "sound_dbfs"
         ? soundClassification(Number(value))
+        : type === "motion_intensity"
+          ? motionIntensityClassification(Number(value))
         : movementClassification(value as MotionState),
     lastUpdatedAt: latest,
     provenance: mode === "community" ? "estimated" : "measured",
@@ -417,8 +445,7 @@ export function historicalPatternsFromRows(
   const groups = new Map<string, EnvironmentalObservation[]>();
   for (const row of rows) {
     const date = new Date(row.observedAt);
-    const dayType = date.getUTCDay() === 0 || date.getUTCDay() === 6 ? "weekend" : "weekday";
-    const key = `${row.type}:${dayType}:${date.getUTCHours()}`;
+    const key = `${row.type}:${date.getUTCDay()}:${date.getUTCHours()}`;
     groups.set(key, [...(groups.get(key) ?? []), row]);
   }
   const result: HistoricalPattern[] = [];
@@ -426,19 +453,24 @@ export function historicalPatternsFromRows(
     const contributors = new Set(group.map((row) => row.userId)).size;
     if (group.length < 3) continue;
     if (mode === "community" && contributors < MIN_COMMUNITY_CONTRIBUTORS) continue;
-    const [type, dayType, hour] = key.split(":") as [
+    const [type, dayOfWeek, hour] = key.split(":") as [
       ObservationType,
-      "weekday" | "weekend",
+      string,
       string,
     ];
+    const day = Number(dayOfWeek);
+    const dayType = day === 0 || day === 6 ? "weekend" : "weekday";
     const baseline =
-      type === "sound_relative"
+      type === "sound_relative" ||
+      type === "sound_dbfs" ||
+      type === "motion_intensity"
         ? group.reduce((sum, row) => sum + Number(row.value), 0) / group.length
         : modeValue(group);
     result.push({
       zoneId: group[0].zoneId,
       type,
       dayType,
+      dayOfWeek: day,
       hour: Number(hour),
       baseline,
       sampleCount: group.length,
@@ -466,10 +498,10 @@ function demoSnapshot(location: GeoPoint, now: number): SpatialSnapshot {
     aggregates: [
       {
         zoneId: zone.id,
-        type: "sound_relative",
+        type: "sound_dbfs",
         windowStart: window.start,
         windowEnd: window.end,
-        value: 0.42,
+        value: -42,
         observationCount: 18,
         distinctContributorCount: 6,
         confidence: 0.78,
@@ -479,14 +511,14 @@ function demoSnapshot(location: GeoPoint, now: number): SpatialSnapshot {
       },
       {
         zoneId: zone.id,
-        type: "motion_state",
+        type: "motion_intensity",
         windowStart: window.start,
         windowEnd: window.end,
-        value: "walking",
+        value: 0.12,
         observationCount: 12,
         distinctContributorCount: 5,
         confidence: 0.72,
-        classification: "Participating devices show walking activity",
+        classification: "Light participating-device movement",
         lastUpdatedAt: now - 6 * 60 * 1000,
         provenance: "demonstration",
       },
@@ -504,14 +536,44 @@ export async function getSpatialSnapshot(
   if (mode === "demo") return demoSnapshot(location, now);
   const zone = assignSpatialZone(location, undefined, now);
   const rows = await queryObservations(userId, zone.id, mode);
-  const aggregates = (["sound_relative", "motion_state"] as const)
+  const patterns = historicalPatternsFromRows(rows, mode);
+  const aggregates = (["sound_dbfs", "motion_intensity"] as const)
     .map((type) => aggregateObservationRows(rows, type, now, mode))
     .filter((row): row is EnvironmentalAggregate => Boolean(row));
+  const sound = aggregates.find((row) => row.type === "sound_dbfs");
+  if (sound) {
+    const latest = new Date(sound.lastUpdatedAt);
+    const usual = patterns.find(
+      (pattern) =>
+        pattern.type === "sound_dbfs" &&
+        pattern.dayOfWeek === latest.getUTCDay() &&
+        pattern.hour === latest.getUTCHours() &&
+        pattern.sampleCount >= 3,
+    );
+    if (usual) {
+      const day = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ][usual.dayOfWeek];
+      const difference = Number(sound.value) - Number(usual.baseline);
+      sound.classification =
+        difference >= 3
+          ? `Louder than your usual ${day} at this time`
+          : difference <= -3
+            ? `Quieter than your usual ${day} at this time`
+            : `About as loud as your usual ${day} at this time`;
+    }
+  }
   return {
     zone,
     mode,
     aggregates,
-    patterns: historicalPatternsFromRows(rows, mode),
+    patterns,
     generatedAt: now,
   };
 }

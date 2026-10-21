@@ -18,9 +18,8 @@ The consumer-facing name is always **Nearby Hello**. "Nearby Pulse" and
 - **Monorepo:** pnpm workspace containing `apps/web`, `apps/mobile`,
   `apps/api`, and `packages/shared`.
 - **Web:** Next.js 15 App Router, React 19, Tailwind CSS 4, React Query,
-  Zustand, and Firebase client SDK. `/activity` is the Talk surface;
-  messaging, connectors, profile, settings, onboarding, and auth routes are
-  active. `/nearby` and `/connections` redirect to `/activity`.
+  Zustand, and Firebase client SDK. `/nearby`, `/explore`, and `/patterns`
+  are the primary spatial surfaces; preserved Talk remains at `/activity`.
 - **Mobile:** Expo Router / React Native with foreground location, audio,
   speech, and BLE libraries. Talk, messaging, connectors, profile, settings,
   auth, and pendant-session flows are active.
@@ -35,9 +34,10 @@ The consumer-facing name is always **Nearby Hello**. "Nearby Pulse" and
   memory embeddings. Tavily supports web search. Google Calendar, Tasks, and
   Gmail are available through the connector layer; Stripe and Twilio support
   billing and phone features.
-- **Location:** one-shot foreground coordinates are sent only when an agent
-  turn needs location. They are not persisted. Current proximity code models
-  legacy device sightings and compatibility, not place intelligence.
+- **Location:** one-shot foreground location is used for spot readings. The
+  location intelligence service can refresh and watch significant changes
+  while a spatial screen is active, but only after foreground permission has
+  already been granted. It stores no user location history.
 - **Delivery:** Vercel web configuration, Render API blueprint, Expo mobile
   configuration, and Firebase rules/index deployments. No checked-in CI
   workflow exists.
@@ -70,7 +70,7 @@ The consumer-facing name is always **Nearby Hello**. "Nearby Pulse" and
 - Split public profile data from private account data before adding any
   location-derived feature. Current authenticated reads of `users` documents
   are too broad for a spatial product.
-- Introduce typed provider interfaces for location, relative sound intensity,
+- Introduce typed provider interfaces for location, dBFS loudness,
   motion state, and future Bluetooth proximity. Browser implementations must
   report unsupported capabilities rather than simulate native sensing.
 - Add retention enforcement, contributor deletion, abuse controls, and
@@ -91,9 +91,7 @@ These must be feature-flagged or redirected, not deleted:
 Messaging, authentication, and existing user data remain available during any
 migration.
 
-## Proposed new components
-
-This is a design proposal, not an enabled implementation.
+## Spatial intelligence components
 
 1. **Shared contracts**
    - `SpatialZone`, `EnvironmentalObservation`, `EnvironmentalAggregate`,
@@ -109,18 +107,27 @@ This is a design proposal, not an enabled implementation.
      contributor thresholds.
 3. **Client sensor adapters**
    - Foreground location on web and Expo.
-   - Relative sound intensity computed locally with explicit microphone
+   - dBFS loudness computed locally with explicit microphone
      permission; never raw audio or transcription.
    - Broad device movement state where platform APIs support it.
    - Unsupported web capabilities represented explicitly.
 4. **Nearby Hello clients**
    - A map abstraction shared at the domain level, with platform-specific
      renderers.
-   - Demo, personal, and thresholded community modes with visible provenance,
+   - Example, personal, and thresholded community modes with visible provenance,
      freshness, confidence, and missing-data states.
 5. **Operations**
    - Retention jobs, rate limits, audit-safe deletion, metrics, API
      documentation, privacy documentation, and CI.
+6. **Place intelligence**
+   - Provider-independent `SpatialPlace`, source, external-ID, attribution,
+     and future `SpatialObservation` contracts.
+   - Server-side OpenStreetMap/Overpass ingestion with normalization,
+     duplicate detection, idempotent Firestore upserts, distance filtering,
+     category filters, pagination, retries, quotas, and TTL lookup caches.
+   - Nominatim manual location search as the permission-denied fallback.
+   - Nearby and Explore place cards on web and Expo. Static place metadata is
+     kept separate from unpopulated future dynamic observations.
 
 ## Persistence and migration strategy
 
@@ -138,6 +145,9 @@ Proposed collections:
 - `environmentalAggregates/{aggregateId}`
 - `historicalPatterns/{patternId}`
 - `sensorConsents/{userId}`
+- `spatialPlaces/{placeId}`
+- `spatialPlaceLookups/{lookupId}`
+- `spatialObservations/{observationId}` (reserved and unpopulated)
 
 All writes should be API-only. Aggregate documents must exclude user IDs and
 remain unavailable until privacy thresholds are met. Raw observations need an
@@ -160,12 +170,12 @@ an irreversible cutover.
    for zone assignment, validation, windows, baselines, classifications, and
    confidence. No collection enabled.
 3. **Additive backend:** add server-only Firestore collections, indexes,
-   authenticated APIs, rate limits, ownership checks, and demo fixtures that
+   authenticated APIs, rate limits, ownership checks, and example fixtures that
    are visibly synthetic.
-4. **Nearby Hello UI:** ship map-first web and mobile surfaces with demo and
+4. **Nearby Hello UI:** ship map-first web and mobile surfaces with example and
    unavailable states before real sensing.
 5. **Personal foreground collection:** add granular consent and start/stop
-   sessions. Keep sound processing local and upload only relative intensity
+   sessions. Keep sound processing local and upload only dBFS loudness
    measurements and quality metadata.
 6. **Community aggregation:** enable only after deletion, retention, abuse,
    and minimum-contributor controls pass automated privacy tests.
@@ -174,6 +184,21 @@ an irreversible cutover.
    DC assumptions in domain logic.
 
 Each phase must remain deployable with the spatial feature flag off.
+
+## Phase 1 place/location implementation
+
+1. Reuse Firebase, Hono, shared contracts, and existing authenticated clients;
+   do not introduce PostGIS for this fixed-radius pilot workload.
+2. Refresh location on app open only when permission is already granted.
+   Watch configurable significant changes while active, and remove every
+   subscription on unmount. Never enable background tracking.
+3. Use lazy OpenStreetMap ingestion for the requested pilot area and an
+   authenticated optional sync hook for scheduled warming.
+4. Normalize and cache only license-compatible static provider fields.
+   Calculate Haversine distance in shared code and filter/sort server-side.
+5. Show real place metadata with OSM attribution and freshness. Never populate
+   outlet, seating, crowd, queue, or noise observations without a legitimate
+   source.
 
 ## Principal risks
 

@@ -27,6 +27,7 @@ import { colors } from "@/lib/theme";
 import { PendantCard, usePendant } from "@/components/PendantSession";
 import { VoiceMemoPanel } from "@/components/VoiceMemoPanel";
 import { speak, stop } from "@/lib/speech";
+import { BILLING_UI_ENABLED } from "@/lib/features";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -232,9 +233,9 @@ export function TalkPanel() {
         <View style={styles.headerText}>
           <Text style={styles.title}>Talk</Text>
         </View>
-        {usage?.plan === "pro" ? (
+        {BILLING_UI_ENABLED && usage?.plan === "pro" ? (
           <Text style={styles.pro}>Pro</Text>
-        ) : usage && usage.remaining !== null ? (
+        ) : BILLING_UI_ENABLED && usage && usage.remaining !== null ? (
           <Text style={styles.remaining}>{usage.remaining} left today</Text>
         ) : null}
       </View>
@@ -363,7 +364,9 @@ export function TalkPanel() {
       <View style={styles.footer}>
         {menuOpen ? (
           <View style={styles.morePanel}>
-            <VoiceMemoPanel />
+            {BILLING_UI_ENABLED || usage?.plan === "pro" ? (
+              <VoiceMemoPanel />
+            ) : null}
             <PendantCard />
             {history.length > 0 ? (
               <Pressable onPress={() => void clearHistory()}>

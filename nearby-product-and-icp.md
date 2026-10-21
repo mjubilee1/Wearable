@@ -36,13 +36,14 @@ destructively removed or represented as part of the spatial MVP.
 | Layer | Responsibility | MVP |
 |---|---|---|
 | Experience | Nearby, Explore, Patterns, Profile | web and Expo |
-| Sensor providers | location, relative sound, motion, future Bluetooth | foreground, explicit consent |
+| Sensor providers | location, dBFS loudness, motion, future Bluetooth | foreground, explicit consent |
 | Spatial API | zones, sessions, observations, aggregates, patterns, deletion | Hono in `apps/api` |
+| Place providers | normalized place identity, category, distance, attribution | OpenStreetMap pilot |
 | Intelligence | validation, normalization, aggregation, baselines, classifications, confidence | deterministic rules |
 | Persistence | additive spatial collections and indexes | Firestore |
 | Shared contract | sensor, spatial, privacy, and API types | `packages/shared` |
 
-Measured facts, statistical estimates, historical patterns, demonstration
+Measured facts, statistical estimates, historical patterns, example
 data, and unavailable states must always be visually and structurally
 distinct.
 
@@ -65,7 +66,7 @@ infrastructure.
 - Sensor consent is granular by category and independent of account consent.
 - Collection is foreground only by default, visibly active, and easy to stop.
 - A user may explore without contributing sensor data.
-- Process ambient sound locally. Upload only relative intensity and quality
+- Process ambient sound locally. Upload only uncalibrated dBFS and quality
   metadata; never upload raw audio or transcribe conversations.
 - Activity means participating-device motion only, never occupancy or total
   pedestrian counts.
@@ -73,10 +74,14 @@ infrastructure.
   locations through public APIs.
 - Aggregate space and time, require minimum contributor thresholds, minimize
   retention, and support deletion of eligible user contributions.
-- Clearly label live, recent, historical, personal, community, demonstration,
+- Clearly label live, recent, historical, personal, community, example,
   and unavailable information. Never fabricate live measurements.
 - Keep Washington, DC pilot configuration out of domain logic.
 - Use deterministic rules, not an LLM, for environmental intelligence.
+- Static place identity and category may come from licensed geographic
+  providers. Keep them separate from dynamic observations; never infer or
+  claim seating, outlets, crowds, queues, or activity without a legitimate
+  source.
 - Keep sensor providers modular across browser, Expo, native mobile, and
   future wearables.
 - Preserve existing user data and hidden legacy functionality.
@@ -90,7 +95,7 @@ infrastructure.
 
 1. Privacy and truthful representation
 2. Useful experience with zero other users
-3. Reliable foreground location and supported sensor measurements
+3. Reliable foreground location, sourced nearby places, and supported sensor measurements
 4. Clear freshness, provenance, uncertainty, and missing-data states
 5. Modular spatial and sensor architecture
 6. Efficient aggregation and historical patterns
@@ -99,7 +104,8 @@ infrastructure.
 ## Milestones
 
 - **M1, location-first shell:** Nearby, Explore, Patterns, and Profile on web
-  and Expo, with real foreground location and honest unavailable states.
+  and Expo, with real foreground location, sourced nearby places, manual
+  location fallback, and honest unavailable states.
 - **M2, personal collection:** explicit location, relative-sound, and motion
   consent with start/stop controls and user-owned observation history.
 - **M3, spatial intelligence:** validated zone assignment, time-window
@@ -127,8 +133,8 @@ infrastructure.
   device activity compare with typical conditions.
 - **On arrival:** inspect recent measurements, freshness, confidence, and
   whether enough evidence exists for a useful classification.
-- **During a visit:** start a foreground personal collection session and see
-  relative sound and broad device movement without recording audio.
+- **During a visit:** take one short foreground spot reading and see digital
+  loudness and device movement without recording audio.
 - **Later:** compare personal observations by hour and weekday as historical
   support becomes sufficient.
 

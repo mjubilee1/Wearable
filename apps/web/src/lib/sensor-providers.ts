@@ -2,7 +2,6 @@ import type {
   AmbientSoundProvider,
   LocationProvider,
   MotionSensorProvider,
-  MotionState,
   SensorReading,
 } from "@nearby/shared";
 import { readDeviceLocation } from "./device-location";
@@ -50,14 +49,19 @@ export const browserSoundProvider: AmbientSoundProvider = {
       context.createMediaStreamSource(stream).connect(analyser);
       const samples = new Float32Array(analyser.fftSize);
       const levels: number[] = [];
-      for (let index = 0; index < 8; index += 1) {
+      for (let index = 0; index < 80; index += 1) {
         await new Promise((resolve) => setTimeout(resolve, 125));
         analyser.getFloatTimeDomainData(samples);
         const rms = Math.sqrt(
           samples.reduce((sum, value) => sum + value * value, 0) /
             samples.length,
         );
-        levels.push(Math.min(1, Math.max(0, rms * 12)));
+        levels.push(
+          Math.max(
+            -100,
+            Math.min(0, 20 * Math.log10(Math.max(rms, 0.00001))),
+          ),
+        );
       }
       return {
         value: levels.reduce((sum, value) => sum + value, 0) / levels.length,
@@ -83,7 +87,7 @@ async function requestMotionPermission(): Promise<boolean> {
 
 export const browserMotionProvider: MotionSensorProvider = {
   supported: typeof window !== "undefined" && "DeviceMotionEvent" in window,
-  async readMovementState(): Promise<SensorReading<MotionState> | null> {
+  async readMotionIntensity(): Promise<SensorReading<number> | null> {
     if (!(await requestMotionPermission())) return null;
     const magnitudes: number[] = [];
     return new Promise((resolve) => {
@@ -114,18 +118,12 @@ export const browserMotionProvider: MotionSensorProvider = {
             0,
           ) / magnitudes.length,
         );
-        const value: MotionState =
-          variation < 0.35
-            ? "stationary"
-            : variation < 1.8
-              ? "walking"
-              : "moving";
         resolve({
-          value,
+          value: Math.min(5, variation),
           measuredAt: Date.now(),
           qualityScore: Math.min(0.8, 0.45 + magnitudes.length / 200),
         });
-      }, 1_500);
+      }, 10_000);
     });
   },
 };

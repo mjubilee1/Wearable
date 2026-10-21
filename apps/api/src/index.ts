@@ -96,6 +96,14 @@ import {
   submitObservation,
   updateSensorConsent,
 } from "./spatial.js";
+import {
+  PlaceError,
+  nearbyPlaces,
+  parseNearbyPlaceQuery,
+  placeIngestionMetrics,
+  searchLocations,
+  syncConfiguredPilotPlaces,
+} from "./places.js";
 
 // Load apps/api/.env whether started from repo root or apps/api
 const apiDir = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -103,6 +111,7 @@ loadEnv({ path: resolve(apiDir, ".env") });
 
 const app = new Hono();
 const port = Number(process.env.PORT ?? 4000);
+const billingEnabled = process.env.BILLING_ENABLED === "true";
 
 function seedAsProfiles(): UserProfile[] {
   const now = Date.now();
@@ -201,6 +210,12 @@ app.get("/health", (c) =>
     firebase: isFirebaseConfigured(),
     llm: Boolean(process.env.OPENAI_API_KEY),
     stripe: isStripeConfigured(),
+    billingEnabled,
+    places: {
+      provider: "openstreetmap",
+      overpassConfigured: true,
+      metrics: placeIngestionMetrics,
+    },
     stripeWebhook: isStripeWebhookConfigured(),
     googleCalendar: isGoogleCalendarConfigured(),
     twilioVerify: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID),
@@ -210,10 +225,16 @@ app.get("/health", (c) =>
 );
 
 function spatialFailure(c: Context, error: unknown) {
-  const status = error instanceof SpatialError ? error.status : 500;
+  const status =
+    error instanceof SpatialError || error instanceof PlaceError
+      ? error.status
+      : 500;
   return c.json(
     {
-      code: error instanceof SpatialError ? error.code : "spatial_error",
+      code:
+        error instanceof SpatialError || error instanceof PlaceError
+          ? error.code
+          : "spatial_error",
       error: error instanceof Error ? error.message : "Spatial request failed",
     },
     status as 400,
@@ -358,6 +379,58 @@ app.get("/v1/spatial/patterns", async (c) => {
   }
 });
 
+app.get("/v1/spatial/places/nearby", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const query = parseNearbyPlaceQuery({
+      latitude: c.req.query("latitude"),
+      longitude: c.req.query("longitude"),
+      lat: c.req.query("lat"),
+      lng: c.req.query("lng"),
+      radiusMeters: c.req.query("radiusMeters"),
+      radius: c.req.query("radius"),
+      category: c.req.query("category"),
+      page: c.req.query("page"),
+      limit: c.req.query("limit"),
+    });
+    return c.json(await nearbyPlaces(auth.uid, query));
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/places/search", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    return c.json({
+      results: await searchLocations(auth.uid, c.req.query("q") ?? ""),
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.post("/v1/internal/spatial/places/sync", async (c) => {
+  const configuredSecret = process.env.SPATIAL_SYNC_SECRET;
+  if (
+    !configuredSecret ||
+    c.req.header("x-spatial-sync-secret") !== configuredSecret
+  ) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  try {
+    return c.json({
+      ok: true,
+      placeCount: await syncConfiguredPilotPlaces(),
+      syncedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
 app.delete("/v1/spatial/contributions", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
@@ -417,6 +490,7 @@ app.post("/v1/billing/webhook", async (c) => {
 
 /** Checkout is not verification-exempt. Unverified password accounts get 403. */
 app.post("/v1/billing/checkout", async (c) => {
+  if (!billingEnabled) return c.json({ error: "Billing is not available." }, 404);
   if (!isStripeConfigured()) {
     return c.json({ error: "Billing not configured" }, 503);
   }
@@ -459,6 +533,7 @@ app.post("/v1/billing/checkout", async (c) => {
 });
 
 app.get("/v1/referrals", async (c) => {
+  if (!billingEnabled) return c.json({ error: "Billing is not available." }, 404);
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
   const summary = await referralSummary(auth.uid);
@@ -469,6 +544,7 @@ app.get("/v1/referrals", async (c) => {
 });
 
 app.post("/v1/billing/portal", async (c) => {
+  if (!billingEnabled) return c.json({ error: "Billing is not available." }, 404);
   if (!isStripeConfigured()) {
     return c.json({ error: "Billing not configured" }, 503);
   }

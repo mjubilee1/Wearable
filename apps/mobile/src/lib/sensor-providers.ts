@@ -2,7 +2,6 @@ import { Accelerometer } from "expo-sensors";
 import type {
   LocationProvider,
   MotionSensorProvider,
-  MotionState,
 } from "@nearby/shared";
 import { readDeviceLocation } from "./device-location";
 
@@ -23,7 +22,7 @@ export const mobileLocationProvider: LocationProvider = {
 
 export const mobileMotionProvider: MotionSensorProvider = {
   supported: true,
-  async readMovementState() {
+  async readMotionIntensity() {
     const permission = await Accelerometer.requestPermissionsAsync();
     if (!permission.granted) return null;
     const available = await Accelerometer.isAvailableAsync();
@@ -49,18 +48,12 @@ export const mobileMotionProvider: MotionSensorProvider = {
             0,
           ) / magnitudes.length,
         );
-        const value: MotionState =
-          variation < 0.035
-            ? "stationary"
-            : variation < 0.18
-              ? "walking"
-              : "moving";
         resolve({
-          value,
+          value: Math.min(5, variation),
           measuredAt: Date.now(),
           qualityScore: Math.min(0.85, 0.55 + magnitudes.length / 100),
         });
-      }, 1_500);
+      }, 10_000);
     });
   },
 };

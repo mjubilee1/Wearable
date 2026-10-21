@@ -46,7 +46,7 @@ export default function LoginScreen() {
       >
         <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>Sign in to talk.</Text>
+        <Text style={styles.subtitle}>Sign in to explore nearby.</Text>
 
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>

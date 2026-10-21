@@ -5,6 +5,8 @@ import type {
   SensorConsent,
   SensorSession,
   SpatialSnapshot,
+  NearbyPlacesResponse,
+  PlaceSearchResult,
   StartSensorSessionRequest,
   SubmitObservationRequest,
 } from "@nearby/shared";
@@ -125,4 +127,39 @@ export async function deleteSpatialContributions(token: string): Promise<number>
     { method: "DELETE" },
   );
   return body.deleted;
+}
+
+export async function getNearbyPlaces(
+  token: string,
+  location: GeoPoint,
+  options: {
+    radiusMeters?: number;
+    category?: string | null;
+    page?: number;
+    limit?: number;
+  } = {},
+): Promise<NearbyPlacesResponse> {
+  const params = new URLSearchParams({
+    latitude: String(location.latitude),
+    longitude: String(location.longitude),
+    radiusMeters: String(options.radiusMeters ?? 1_000),
+    page: String(options.page ?? 1),
+    limit: String(options.limit ?? 20),
+  });
+  if (options.category) params.set("category", options.category);
+  return api<NearbyPlacesResponse>(
+    token,
+    `/v1/spatial/places/nearby?${params}`,
+  );
+}
+
+export async function searchSpatialLocations(
+  token: string,
+  query: string,
+): Promise<PlaceSearchResult[]> {
+  const body = await api<{ results: PlaceSearchResult[] }>(
+    token,
+    `/v1/spatial/places/search?q=${encodeURIComponent(query)}`,
+  );
+  return body.results;
 }

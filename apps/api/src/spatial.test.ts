@@ -28,15 +28,21 @@ function row(
   userId: string,
   value: number,
   observedAt: number,
+  type: "sound_relative" | "sound_dbfs" | "motion_intensity" = "sound_relative",
 ): EnvironmentalObservation {
   return {
     id,
     userId,
     sessionId: "session",
     zoneId: assignSpatialZone(dc).id,
-    type: "sound_relative",
+    type,
     value,
-    unit: "relative",
+    unit:
+      type === "sound_dbfs"
+        ? "dbfs"
+        : type === "motion_intensity"
+          ? "intensity"
+          : "relative",
     observedAt,
     source: "mobile",
     quality: { accuracyMeters: 12, qualityScore: 0.8, calibrated: false },
@@ -86,6 +92,45 @@ test("invalid and implausible observations are rejected", () => {
       type: "motion_state",
       value: "walking",
       observedAt: now - 25 * 60 * 60 * 1000,
+    }).valid,
+    false,
+  );
+  assert.equal(
+    validateObservationInput({
+      location: dc,
+      type: "sound_dbfs",
+      value: -42.5,
+      observedAt: now,
+    }).valid,
+    true,
+  );
+  assert.deepEqual(
+    validateObservationInput({
+      location: dc,
+      type: "sound_dbfs",
+      value: 3,
+      observedAt: now,
+    }),
+    {
+      valid: false,
+      error: "Digital loudness must be between -100 and 0 dBFS.",
+    },
+  );
+  assert.equal(
+    validateObservationInput({
+      location: dc,
+      type: "motion_intensity",
+      value: 0.18,
+      observedAt: now,
+    }).valid,
+    true,
+  );
+  assert.equal(
+    validateObservationInput({
+      location: dc,
+      type: "motion_intensity",
+      value: 6,
+      observedAt: now,
     }).valid,
     false,
   );
@@ -144,11 +189,28 @@ test("historical baselines require at least three samples", () => {
   assert.equal(patterns.length, 1);
   assert.equal(patterns[0].baseline, 0.5);
   assert.equal(patterns[0].sampleCount, 3);
+  assert.equal(patterns[0].dayOfWeek, new Date(hour).getUTCDay());
 });
 
 test("sound classification compares recent values with a baseline", () => {
   assert.equal(soundClassification(0.8, 0.5), "Unusually loud");
   assert.equal(soundClassification(0.2, 0.5), "Quieter than usual");
+  assert.equal(soundClassification(-30, -42), "Louder than usual");
+  assert.equal(soundClassification(-55, -42), "Quieter than usual");
+});
+
+test("dBFS history uses an exact weekday and hour after three spot readings", () => {
+  const tuesdayAtTwo = Date.UTC(2026, 9, 20, 14);
+  const patterns = historicalPatternsFromRows([
+    row("1", "a", -48, tuesdayAtTwo, "sound_dbfs"),
+    row("2", "a", -42, tuesdayAtTwo + 1_000, "sound_dbfs"),
+    row("3", "a", -36, tuesdayAtTwo + 2_000, "sound_dbfs"),
+  ]);
+  assert.equal(patterns.length, 1);
+  assert.equal(patterns[0].type, "sound_dbfs");
+  assert.equal(patterns[0].dayOfWeek, 2);
+  assert.equal(patterns[0].hour, 14);
+  assert.equal(patterns[0].baseline, -42);
 });
 
 test("session ownership, consent, stop, and deletion are enforced", async () => {

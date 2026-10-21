@@ -3,7 +3,7 @@ import { FREE_DAILY_REQUESTS } from "@nearby/shared";
 
 export const SITE_URL = "https://www.nearbyhello.com";
 export const SITE_NAME = "Nearby Hello";
-export const SITE_TITLE = "Nearby Hello: know what a place feels like before you go";
+export const SITE_TITLE = "Nearby Hello: know what a place is like before you walk in";
 export const SITE_DESCRIPTION =
   "See whether a nearby place feels calm or lively, what changed, and what is normal for that time.";
 export const SITE_TAGLINE = "See more than a map can tell you.";
@@ -89,41 +89,12 @@ export function siteJsonLd() {
         description: SITE_DESCRIPTION,
         featureList: [
           "Foreground location-based environmental context",
-          "Local relative sound-intensity processing",
-          "Participating-device movement states",
+          "Local digital loudness processing without saved audio",
+          "Participating-device motion intensity",
           "Historical spatial patterns",
           "Privacy-thresholded community aggregates",
         ],
-        offers: [
-          {
-            "@type": "Offer",
-            name: "Free",
-            price: "0",
-            priceCurrency: "USD",
-            url: `${SITE_URL}/pricing`,
-          },
-          {
-            "@type": "Offer",
-            name: "Pro monthly",
-            price: "29",
-            priceCurrency: "USD",
-            url: `${SITE_URL}/pricing`,
-          },
-        ],
         publisher: { "@id": `${SITE_URL}/#organization` },
-      },
-      {
-        "@type": "FAQPage",
-        "@id": `${SITE_URL}/#faq`,
-        url: `${SITE_URL}/#questions`,
-        mainEntity: PRICING_FAQ.map((item) => ({
-          "@type": "Question",
-          name: item.q,
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: item.a,
-          },
-        })),
       },
     ],
   };
@@ -148,16 +119,16 @@ permission-based smartphone measurements and historical spatial patterns.
 ## What it does
 
 - Shows approximate location and privacy-preserving spatial zones.
-- Measures relative ambient sound locally without storing raw audio.
-- Classifies broad movement of participating devices only.
+- Measures digital ambient loudness locally without storing raw audio.
+- Measures motion intensity of participating devices only.
 - Builds historical patterns after enough measurements exist.
-- Distinguishes measured, estimated, historical, demonstration, and
+- Distinguishes measured, estimated, historical, example, and
   unavailable information.
 
 ## Privacy and control
 
 - Sensor permissions are explicit and granular.
-- Collection is foreground-only by default and has visible stop controls.
+- Each spot reading is foreground-only and stops automatically.
 - Community aggregates require minimum contributor thresholds.
 - Nearby Hello does not expose individual movement histories.
 - Users can explore without contributing and delete eligible observations.

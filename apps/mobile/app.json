@@ -13,8 +13,8 @@
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Nearby Hello uses Bluetooth only for a wearable you explicitly connect.",
         "NSBluetoothPeripheralUsageDescription": "Nearby Hello uses Bluetooth only for a wearable you explicitly connect.",
-        "NSMicrophoneUsageDescription": "Nearby Hello can measure relative ambient sound while you run a foreground collection session. Raw audio is deleted locally.",
-        "NSLocationWhenInUseUsageDescription": "Nearby Hello uses your foreground location to associate measurements with an approximate spatial zone."
+        "NSMicrophoneUsageDescription": "Nearby Hello uses the microphone for a 10-second spot loudness reading. Raw audio is never saved.",
+        "NSLocationWhenInUseUsageDescription": "Nearby Hello uses your location during a spot reading to save sensor numbers to an approximate spatial zone."
       }
     },
     "android": {
@@ -59,7 +59,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Nearby Hello uses your foreground location to associate measurements with an approximate spatial zone."
+          "locationWhenInUsePermission": "Nearby Hello uses your location during a spot reading to save sensor numbers to an approximate spatial zone."
         }
       ]
     ],

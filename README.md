@@ -11,7 +11,7 @@ and migration plan: [`NEARBY_REFACTOR_PLAN.md`](NEARBY_REFACTOR_PLAN.md).
 ## Spatial MVP
 
 1. **Nearby** — current approximate zone, environmental measurements,
-   freshness, confidence, and personal collection controls.
+   freshness, confidence, and one-button spot readings.
 2. **Explore** — interactive privacy-preserving spatial grid and nearby zones.
 3. **Patterns** — personal or privacy-thresholded historical time buckets.
 4. **Profile** — account, contribution management, and preserved legacy
@@ -19,18 +19,37 @@ and migration plan: [`NEARBY_REFACTOR_PLAN.md`](NEARBY_REFACTOR_PLAN.md).
 
 Data modes:
 
-- **Demonstration:** visibly synthetic observations for an immediate
+- **Example:** visibly synthetic observations for an immediate
   zero-user experience.
 - **Personal:** only the signed-in user's foreground measurements.
 - **Community:** aggregate insights available only at three or more distinct
   contributors.
 
-Sound is relative intensity, not calibrated decibels. Raw audio is never
-uploaded and temporary mobile recordings are deleted locally. Activity is
-participating-device motion only, never occupancy or pedestrian counts.
+“Read this spot” asks for foreground location, microphone, and motion
+permissions only after the user taps it. It samples for about 10 seconds,
+stores numeric location/time, dBFS loudness, and motion intensity, then stops.
+Raw audio is never uploaded; temporary mobile recordings are deleted locally.
+Activity is participating-device motion only, never occupancy or pedestrian
+counts. After at least three readings in a matching weekday/hour bucket,
+Nearby Hello can compare the current reading with the user's usual conditions.
 
 Existing voice, messaging, connectors, authentication, and firmware remain in
 the repository for future integration but are not primary navigation.
+
+### Nearby place discovery
+
+Nearby and Explore include a real nearby-place list sourced from OpenStreetMap.
+The API queries Overpass, normalizes provider records, deduplicates and upserts
+place metadata, calculates distances, and caches repeated lookups. Nominatim
+powers the manual city/address/place fallback. Place cards show only sourced
+static metadata; they do not claim that seating, outlets, crowds, or other
+conditions are currently available.
+
+If foreground location was already granted, the app refreshes it on open and
+watches only significant changes while active. A first-time prompt still
+requires the user to tap **Read this spot**. Tracking stops when the discovery
+component unmounts, does not run in the background, and does not store a user
+location history.
 
 ## Voice firmware
 
@@ -66,10 +85,44 @@ NEXT_PUBLIC_PILOT_LATITUDE=38.9072
 NEXT_PUBLIC_PILOT_LONGITUDE=-77.0369
 EXPO_PUBLIC_PILOT_LATITUDE=38.9072
 EXPO_PUBLIC_PILOT_LONGITUDE=-77.0369
+NEXT_PUBLIC_LOCATION_DISTANCE_THRESHOLD_METERS=100
+EXPO_PUBLIC_LOCATION_DISTANCE_THRESHOLD_METERS=100
+NEXT_PUBLIC_LOCATION_MAX_ACCURACY_METERS=500
+EXPO_PUBLIC_LOCATION_MAX_ACCURACY_METERS=500
 ```
 
-These defaults configure the labeled demonstration viewport only; spatial
+These defaults configure the labeled example viewport only; spatial
 domain logic is not DC-specific.
+
+Billing UI and checkout/referral endpoints are dormant by default. Existing
+Stripe integration remains available for future use:
+
+```bash
+BILLING_ENABLED=false
+NEXT_PUBLIC_BILLING_ENABLED=false
+EXPO_PUBLIC_BILLING_ENABLED=false
+```
+
+OpenStreetMap provider settings:
+
+```bash
+OVERPASS_API_URL=https://overpass-api.de/api/interpreter
+# Optional comma-separated failover endpoints:
+OVERPASS_API_URLS=
+NOMINATIM_API_URL=https://nominatim.openstreetmap.org
+OSM_USER_AGENT=NearbyHello/0.1 (https://nearbyhello.com)
+PLACES_CACHE_TTL_MS=21600000
+# Optional secret for POST /v1/internal/spatial/places/sync
+SPATIAL_SYNC_SECRET=
+SPATIAL_PILOT_LATITUDE=38.9072
+SPATIAL_PILOT_LONGITUDE=-77.0369
+SPATIAL_PILOT_RADIUS_METERS=1000
+```
+
+The public OSM services are appropriate only for a low-volume pilot. Use a
+truthful `OSM_USER_AGENT`, retain attribution, follow ODbL/Nominatim/Overpass
+policies, and move to a hosted provider or self-hosted extracts before
+high-volume traffic.
 
 ## API highlights
 
@@ -79,8 +132,10 @@ domain logic is not DC-specific.
 | `POST/PATCH /v1/spatial/sessions/:id?` | Start or stop foreground collection |
 | `POST /v1/spatial/observations` | Submit a validated supported measurement |
 | `GET /v1/spatial/zones` | Resolve the current approximate zone |
-| `GET /v1/spatial/aggregates` | Personal, community, or demonstration aggregates |
+| `GET /v1/spatial/aggregates` | Personal, community, or example aggregates |
 | `GET /v1/spatial/patterns` | Historical time-bucket patterns |
+| `GET /v1/spatial/places/nearby` | Sourced places ordered by distance |
+| `GET /v1/spatial/places/search` | Manual location search |
 | `DELETE /v1/spatial/contributions` | Delete the signed-in user's observations |
 | `POST /v1/agent` | Preserved legacy voice turn |
 | `GET /v1/matches` | Preserved compatibility endpoint; not in primary UI |
@@ -94,6 +149,9 @@ Auth: `Authorization: Bearer <firebase-id-token>` or `Bearer dev` in mock mode.
 - Storage rules (profile photos): `apps/api/storage.rules`
 - Spatial collections are Admin-SDK-only. Raw observations expire after 30
   days and are never readable directly by clients.
+- `spatialPlaces`, `spatialPlaceLookups`, and future `spatialObservations` are
+  also Admin-SDK-only. Place lookup documents provide the initial
+  fixed-grid/TTL cache; no user-to-place visit history is stored.
 - Deploy additive rules/indexes with:
 
 ```bash
@@ -112,14 +170,18 @@ users/{uid}
 
 ## Platform limitations
 
-- The browser can obtain foreground location and relative microphone
+- The browser can obtain foreground location and digital microphone
   intensity, but motion support varies and no background sensing is claimed.
 - Expo uses foreground location, microphone metering, and accelerometer
   readings. It does not collect while the user has stopped the session.
-- Relative sound values are device-dependent and cannot be compared as
-  calibrated decibels without a calibration workflow.
+- dBFS values are uncalibrated, device-dependent digital loudness—not physical
+  sound-pressure dB—and cannot be compared reliably across unlike devices
+  without a calibration workflow.
 - The MVP map is a provider-independent interactive spatial grid. A street-map
   provider is intentionally not a production commitment yet.
+- Public Overpass/Nominatim availability and quotas are outside Nearby Hello's
+  control. Cached results are returned for up to seven days during transient
+  provider failures and are labeled stale.
 - Firestore supports the initial fixed-grid/time-window workload. Arbitrary
   polygon joins and large analytical workloads may later justify PostGIS.
 - Community insights fail closed below three distinct contributors.

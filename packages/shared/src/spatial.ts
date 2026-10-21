@@ -3,9 +3,16 @@ export const DEFAULT_ZONE_RESOLUTION_METERS = 200;
 export const ENVIRONMENTAL_RETENTION_DAYS = 30;
 export const MIN_COMMUNITY_CONTRIBUTORS = 3;
 export const DEFAULT_AGGREGATION_WINDOW_MINUTES = 15;
+export const DEFAULT_PLACE_RADIUS_METERS = 1_000;
+export const MAX_PLACE_RADIUS_METERS = 5_000;
+export const MAX_PLACE_RESULTS = 50;
 
 export type SensorCategory = "location" | "sound" | "motion" | "bluetooth";
-export type ObservationType = "sound_relative" | "motion_state";
+export type ObservationType =
+  | "sound_dbfs"
+  | "motion_intensity"
+  | "sound_relative"
+  | "motion_state";
 export type MotionState = "stationary" | "walking" | "moving";
 export type DataMode = "demo" | "personal" | "community";
 export type InsightProvenance =
@@ -20,6 +27,119 @@ export type GeoPoint = {
   latitude: number;
   longitude: number;
   accuracyMeters?: number;
+};
+
+export type SpatialLocation = {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+  timestamp: string;
+};
+
+export type LocationPermissionState =
+  | "unknown"
+  | "granted"
+  | "denied"
+  | "restricted"
+  | "unavailable";
+
+export function locationPermissionMessage(
+  state: LocationPermissionState,
+): string | null {
+  if (state === "denied") {
+    return "Location is off. Read this spot to grant it, or search manually.";
+  }
+  if (state === "restricted") {
+    return "Location is restricted in system settings. Manual search still works.";
+  }
+  if (state === "unavailable") {
+    return "Device location is unavailable. Manual search still works.";
+  }
+  return null;
+}
+
+export function isLocationAccuracyUsable(
+  accuracyMeters: number | null,
+  maximumAccuracyMeters = 500,
+): boolean {
+  return (
+    accuracyMeters === null ||
+    (Number.isFinite(accuracyMeters) &&
+      accuracyMeters >= 0 &&
+      accuracyMeters <= maximumAccuracyMeters)
+  );
+}
+
+export interface LocationIntelligenceService {
+  permissionState(): Promise<LocationPermissionState>;
+  requestPermission(): Promise<boolean>;
+  getCurrentLocation(options?: {
+    requestPermission?: boolean;
+  }): Promise<SpatialLocation>;
+  watchLocation(
+    callback: (location: SpatialLocation) => void,
+  ): Promise<() => void>;
+  stopTracking(): void;
+}
+
+export type SpatialPlaceSource = {
+  provider: "openstreetmap";
+  providerPlaceId: string;
+  attribution: string;
+  license: string;
+  sourceUpdatedAt: string | null;
+};
+
+export type SpatialPlace = {
+  id: string;
+  zoneId: string;
+  name: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  address?: string;
+  provider: "openstreetmap";
+  providerPlaceId: string;
+  externalIds: Record<string, string>;
+  attributes: Record<string, string | number | boolean>;
+  sources: SpatialPlaceSource[];
+  lastSyncedAt: string;
+};
+
+export type NearbySpatialPlace = SpatialPlace & {
+  distanceMeters: number;
+};
+
+export type NearbyPlacesResponse = {
+  places: NearbySpatialPlace[];
+  page: number;
+  pageSize: number;
+  total: number;
+  radiusMeters: number;
+  center: GeoPoint;
+  attribution: string;
+  fetchedAt: string;
+  cacheStatus: "fresh" | "stale";
+};
+
+export type PlaceSearchResult = {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  type: string;
+  attribution: string;
+};
+
+export type SpatialObservation = {
+  id: string;
+  placeId: string;
+  attribute: string;
+  value: unknown;
+  sourceType: string;
+  confidence: number;
+  observedAt: string;
+  expiresAt: string | null;
 };
 
 export type SpatialZone = {
@@ -67,7 +187,7 @@ export type EnvironmentalObservation = {
   zoneId: string;
   type: ObservationType;
   value: number | MotionState;
-  unit: "relative" | "state";
+  unit: "dbfs" | "intensity" | "relative" | "state";
   observedAt: number;
   source: "web" | "mobile" | "wearable" | "demo";
   quality: ObservationQuality;
@@ -92,6 +212,7 @@ export type HistoricalPattern = {
   zoneId: string;
   type: ObservationType;
   dayType: "weekday" | "weekend";
+  dayOfWeek: number;
   hour: number;
   baseline: number | MotionState;
   sampleCount: number;
@@ -140,7 +261,7 @@ export interface AmbientSoundProvider {
 
 export interface MotionSensorProvider {
   supported: boolean;
-  readMovementState(): Promise<SensorReading<MotionState> | null>;
+  readMotionIntensity(): Promise<SensorReading<number> | null>;
 }
 
 export interface BluetoothProximityProvider {
@@ -171,8 +292,32 @@ export function isGeoPoint(value: unknown): value is GeoPoint {
   );
 }
 
+export function distanceMeters(first: GeoPoint, second: GeoPoint): number {
+  if (!isGeoPoint(first) || !isGeoPoint(second)) {
+    throw new Error("Two valid geographic points are required.");
+  }
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const earthRadiusMeters = 6_371_000;
+  const latitudeDelta = radians(second.latitude - first.latitude);
+  const longitudeDelta = radians(second.longitude - first.longitude);
+  const firstLatitude = radians(first.latitude);
+  const secondLatitude = radians(second.latitude);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(firstLatitude) *
+      Math.cos(secondLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return Math.round(
+    earthRadiusMeters *
+      2 *
+      Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine)),
+  );
+}
+
 export function sensorCategoryFor(type: ObservationType): SensorCategory {
-  return type === "sound_relative" ? "sound" : "motion";
+  return type === "sound_relative" || type === "sound_dbfs"
+    ? "sound"
+    : "motion";
 }
 
 export function validateObservationInput(
@@ -197,6 +342,28 @@ export function validateObservationInput(
       input.value > 1
     ) {
       return { valid: false, error: "Relative sound intensity must be between 0 and 1." };
+    }
+    return { valid: true };
+  }
+  if (input.type === "sound_dbfs") {
+    if (
+      typeof input.value !== "number" ||
+      !Number.isFinite(input.value) ||
+      input.value < -100 ||
+      input.value > 0
+    ) {
+      return { valid: false, error: "Digital loudness must be between -100 and 0 dBFS." };
+    }
+    return { valid: true };
+  }
+  if (input.type === "motion_intensity") {
+    if (
+      typeof input.value !== "number" ||
+      !Number.isFinite(input.value) ||
+      input.value < 0 ||
+      input.value > 5
+    ) {
+      return { valid: false, error: "Motion intensity must be between 0 and 5." };
     }
     return { valid: true };
   }
@@ -275,6 +442,13 @@ export function canPublishCommunityAggregate(contributorCount: number): boolean 
 }
 
 export function soundClassification(value: number, baseline?: number): string {
+  if (value <= 0) {
+    if (baseline !== undefined && value >= baseline + 6) return "Louder than usual";
+    if (baseline !== undefined && value <= baseline - 6) return "Quieter than usual";
+    if (value < -55) return "Quiet";
+    if (value < -35) return "Moderate";
+    return "Loud";
+  }
   if (baseline !== undefined && value >= baseline + 0.2) return "Unusually loud";
   if (baseline !== undefined && value <= baseline - 0.2) return "Quieter than usual";
   if (value < 0.3) return "Quiet";
@@ -286,4 +460,10 @@ export function movementClassification(value: MotionState): string {
   if (value === "stationary") return "Participating device is stationary";
   if (value === "walking") return "Participating device is walking";
   return "Participating device is moving";
+}
+
+export function motionIntensityClassification(value: number): string {
+  if (value < 0.04) return "Still";
+  if (value < 0.2) return "Light movement";
+  return "Active movement";
 }

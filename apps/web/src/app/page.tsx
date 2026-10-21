@@ -296,7 +296,7 @@ export default async function HomePage({
               A clearer sense of place
             </p>
             <h1 className="font-display mt-4 max-w-[12ch] text-5xl font-medium leading-[0.95] text-ink sm:text-7xl">
-              Know what a place feels like before you go.
+              Know what a place is like before you walk in.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-snug text-ink">
               You are heading out, but you cannot tell if the park is peaceful

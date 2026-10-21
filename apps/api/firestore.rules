@@ -180,6 +180,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // OpenStreetMap place metadata and provider lookup caches are served only
+    // through the API so quotas, attribution, and filtering remain enforced.
+    match /spatialPlaces/{placeId} {
+      allow read, write: if false;
+    }
+
+    match /spatialPlaceLookups/{lookupId} {
+      allow read, write: if false;
+    }
+
+    match /spatialObservations/{observationId} {
+      allow read, write: if false;
+    }
+
     // OAuth tokens for agent tools — API (Admin SDK) only.
     match /agentConnectors/{uid} {
       allow read, write: if false;

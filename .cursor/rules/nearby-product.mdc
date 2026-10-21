@@ -9,7 +9,8 @@ Source of truth: `nearby-product-and-icp.md` (updated October 21, 2026).
 
 Nearby Hello helps people understand the physical environment around them
 through geospatial intelligence, permission-based smartphone sensors,
-environmental measurements, and historical spatial patterns.
+environmental measurements, sourced place context, and historical spatial
+patterns.
 
 ## Current target
 
@@ -32,14 +33,18 @@ The consumer-facing product name is always **Nearby Hello**. Do not use
   only by default. Users can stop collection and delete eligible
   contributions.
 - Process sound locally. Never store or upload raw room audio and never
-  transcribe bystanders. Uncalibrated values are relative sound intensity, not
-  decibels.
+  transcribe bystanders. Uncalibrated values are dBFS digital loudness, not
+  physical sound-pressure decibels.
 - Activity reflects participating-device motion only. Never label it as total
   pedestrian count, occupancy, or the behavior of other individuals.
+- Place identity, category, and distance may use attributed OpenStreetMap data.
+  Keep static metadata separate from dynamic observations. Never claim
+  seating, outlets, crowds, queues, or live activity without a legitimate
+  observation source.
 - Do not expose precise user locations, individual movement histories, or
   sparse community aggregates. Apply spatial/temporal aggregation and minimum
   contributor thresholds.
-- Keep Demo, Personal, and Community data modes visibly labeled. Community
+- Keep Example data, Personal, and Community modes visibly labeled. Community
   insights remain unavailable below the privacy threshold.
 - Preserve authentication, messaging, voice, agent, and wearable code for
   future integration, but keep Talk and social matching out of primary

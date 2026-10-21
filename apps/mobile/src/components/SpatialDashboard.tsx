@@ -5,7 +5,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
@@ -19,7 +18,6 @@ import { File } from "expo-file-system";
 import type {
   DataMode,
   GeoPoint,
-  SensorSession,
   SpatialSnapshot,
 } from "@nearby/shared";
 import { useAuth } from "@/lib/auth-context";
@@ -35,6 +33,7 @@ import {
   mobileLocationProvider,
   mobileMotionProvider,
 } from "@/lib/sensor-providers";
+import { NearbyPlacesSection } from "@/components/NearbyPlacesSection";
 
 type ViewMode = "nearby" | "explore" | "patterns";
 
@@ -62,9 +61,6 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
   const [usingDeviceLocation, setUsingDeviceLocation] = useState(false);
   const [mode, setMode] = useState<DataMode>("demo");
   const [snapshot, setSnapshot] = useState<SpatialSnapshot | null>(null);
-  const [session, setSession] = useState<SensorSession | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [motionEnabled, setMotionEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -95,68 +91,19 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
     void load("demo", PILOT_LOCATION);
   }, [load]);
 
-  async function useLocation() {
-    setBusy(true);
-    setError(null);
-    try {
-      const reading = await mobileLocationProvider.readCurrent();
-      if (!reading) throw new Error("Foreground location permission is required.");
-      setLocation(reading.value);
-      setUsingDeviceLocation(true);
-      await load("personal", reading.value);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Location failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function begin() {
-    if (!user) return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const reading = await mobileLocationProvider.readCurrent();
-      if (!reading) throw new Error("Foreground location permission is required.");
-      const token = await user.getIdToken();
-      const next = await startSensorSession(token, {
-        consent: {
-          location: true,
-          sound: soundEnabled,
-          motion: motionEnabled,
-        },
-        enabledSensors: [
-          "location",
-          ...(soundEnabled ? (["sound"] as const) : []),
-          ...(motionEnabled ? (["motion"] as const) : []),
-        ],
-      });
-      setLocation(reading.value);
-      setUsingDeviceLocation(true);
-      setMode("personal");
-      setSession(next);
-      setNotice("Foreground sensing is active.");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not start sensing.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function relativeSound() {
     const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) throw new Error("Microphone permission was not granted.");
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     await recorder.prepareToRecordAsync();
-    recorder.record({ forDuration: 2 });
+    recorder.record({ forDuration: 11 });
     const readings: number[] = [];
     try {
-      for (let index = 0; index < 8; index += 1) {
+      for (let index = 0; index < 80; index += 1) {
         await new Promise((resolve) => setTimeout(resolve, 125));
         const metering = recorder.getStatus().metering;
         if (typeof metering === "number") {
-          readings.push(Math.min(1, Math.max(0, (metering + 80) / 80)));
+          readings.push(Math.max(-100, Math.min(0, metering)));
         }
       }
     } finally {
@@ -173,65 +120,97 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
     return readings.reduce((sum, value) => sum + value, 0) / readings.length;
   }
 
-  async function measure() {
-    if (!user || !session) return;
+  async function readThisSpot() {
+    if (!user) return;
     setBusy(true);
     setError(null);
     setNotice(null);
+    let sessionId: string | null = null;
     try {
-      const reading = await mobileLocationProvider.readCurrent();
-      if (!reading) throw new Error("A current location fix is required.");
+      const [locationResult, soundResult, motionResult] =
+        await Promise.allSettled([
+          mobileLocationProvider.readCurrent(),
+          relativeSound(),
+          mobileMotionProvider.readMotionIntensity(),
+        ]);
+      const reading =
+        locationResult.status === "fulfilled" ? locationResult.value : null;
+      if (!reading) {
+        setNotice(
+          "Location was not allowed, so no reading was saved. You can still explore the labeled example.",
+        );
+        return;
+      }
+      const sound =
+        soundResult.status === "fulfilled" ? soundResult.value : null;
+      const motion =
+        motionResult.status === "fulfilled" ? motionResult.value : null;
+      if (sound === null && !motion) {
+        setNotice(
+          "Mic and motion were not available, so no sensor numbers were saved. The example view still works.",
+        );
+        return;
+      }
       const token = await user.getIdToken();
-      let count = 0;
-      if (soundEnabled) {
-        const value = await relativeSound();
-        await submitObservation(token, {
-          sessionId: session.id,
-          location: reading.value,
-          type: "sound_relative",
-          value,
-          observedAt: Date.now(),
-          source: "mobile",
-          quality: { qualityScore: 0.75, calibrated: false },
-        });
-        count += 1;
+      const next = await startSensorSession(token, {
+        consent: {
+          location: true,
+          sound: sound !== null,
+          motion: Boolean(motion),
+        },
+        enabledSensors: [
+          "location",
+          ...(sound !== null ? (["sound"] as const) : []),
+          ...(motion ? (["motion"] as const) : []),
+        ],
+      });
+      sessionId = next.id;
+      const submissions = [];
+      if (sound !== null) {
+        submissions.push(
+          submitObservation(token, {
+            sessionId,
+            location: reading.value,
+            type: "sound_dbfs",
+            value: sound,
+            observedAt: Date.now(),
+            source: "mobile",
+            quality: { qualityScore: 0.75, calibrated: false },
+          }),
+        );
       }
-      if (motionEnabled) {
-        const motion = await mobileMotionProvider.readMovementState();
-        if (!motion) throw new Error("Motion permission or readings are unavailable.");
-        await submitObservation(token, {
-          sessionId: session.id,
-          location: reading.value,
-          type: "motion_state",
-          value: motion.value,
-          observedAt: motion.measuredAt,
-          source: "mobile",
-          quality: { qualityScore: motion.qualityScore, calibrated: false },
-        });
-        count += 1;
+      if (motion) {
+        submissions.push(
+          submitObservation(token, {
+            sessionId,
+            location: reading.value,
+            type: "motion_intensity",
+            value: motion.value,
+            observedAt: motion.measuredAt,
+            source: "mobile",
+            quality: { qualityScore: motion.qualityScore, calibrated: false },
+          }),
+        );
       }
+      await Promise.all(submissions);
+      setLocation(reading.value);
+      setUsingDeviceLocation(true);
+      setMode("personal");
       setNotice(
-        `${count} personal measurement${count === 1 ? "" : "s"} saved. Raw audio was deleted locally.`,
+        `${submissions.length} numeric reading${submissions.length === 1 ? "" : "s"} saved to this spot. Raw audio was deleted locally.`,
       );
       await load("personal", reading.value);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Measurement failed.");
+      setError(caught instanceof Error ? caught.message : "Could not read this spot.");
     } finally {
-      setBusy(false);
-    }
-  }
-
-  async function stop() {
-    if (!user || !session) return;
-    setBusy(true);
-    try {
-      const token = await user.getIdToken();
-      await stopSensorSession(token, session.id);
-      setSession(null);
-      setNotice("Sensing stopped.");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not stop sensing.");
-    } finally {
+      if (sessionId) {
+        try {
+          const token = await user.getIdToken();
+          await stopSensorSession(token, sessionId);
+        } catch {
+          // The spot reading has already completed.
+        }
+      }
       setBusy(false);
     }
   }
@@ -291,23 +270,32 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
           </Text>
         </View>
         <Text style={[styles.badge, mode === "demo" ? styles.demoBadge : styles.personalBadge]}>
-          {mode === "demo" ? "DEMO" : mode.toUpperCase()}
+          {mode === "demo" ? "EXAMPLE DATA" : mode.toUpperCase()}
         </Text>
       </View>
 
       <View style={styles.actions}>
-        <Pressable style={styles.primaryButton} disabled={busy} onPress={() => void useLocation()}>
-          <Text style={styles.primaryButtonText}>
-            {usingDeviceLocation ? "Refresh location" : "Use my location"}
-          </Text>
-        </Pressable>
+        {view === "nearby" ? (
+          <Pressable style={styles.primaryButton} disabled={busy} onPress={() => void readThisSpot()}>
+            <Text style={styles.primaryButtonText}>
+              {busy ? "Reading… about 10 seconds" : "Read this spot"}
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable style={styles.secondaryButton} disabled={busy} onPress={() => void load("demo", usingDeviceLocation ? location : PILOT_LOCATION)}>
-          <Text style={styles.secondaryButtonText}>Labeled demo</Text>
+          <Text style={styles.secondaryButtonText}>View example data</Text>
         </Pressable>
         <Pressable style={[styles.secondaryButton, !usingDeviceLocation && styles.disabled]} disabled={busy || !usingDeviceLocation} onPress={() => void load("community", location)}>
-          <Text style={styles.secondaryButtonText}>Community</Text>
+          <Text style={styles.secondaryButtonText}>Community view</Text>
         </Pressable>
       </View>
+
+      {view === "nearby" ? (
+        <Text style={styles.permissionNote}>
+          Tap once to let Nearby Hello use location, microphone loudness, and
+          phone motion for about 10 seconds. Raw audio is never saved.
+        </Text>
+      ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
@@ -340,19 +328,23 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
       </View>
 
       {view !== "patterns" ? (
+        <NearbyPlacesSection initialLocation={location} />
+      ) : null}
+
+      {view !== "patterns" ? (
         <View style={styles.stack}>
           {(snapshot?.aggregates ?? []).map((aggregate) => (
             <View key={aggregate.type} style={styles.card}>
               <Text style={styles.cardEyebrow}>
-                {aggregate.type === "sound_relative"
-                  ? "RELATIVE SOUND"
+                {aggregate.type === "sound_dbfs"
+                  ? "AMBIENT LOUDNESS"
                   : "PARTICIPATING-DEVICE ACTIVITY"}
               </Text>
               <Text style={styles.metric}>{aggregate.classification}</Text>
               <Text style={styles.small}>
-                {aggregate.type === "sound_relative"
-                  ? `${Math.round(Number(aggregate.value) * 100)} / 100 · not calibrated decibels`
-                  : `${String(aggregate.value)} · not occupancy`}
+                {aggregate.type === "sound_dbfs"
+                  ? `${Number(aggregate.value).toFixed(1)} dBFS · uncalibrated digital loudness`
+                  : `${Number(aggregate.value).toFixed(2)} motion intensity · not occupancy`}
               </Text>
               <Text style={styles.meta}>
                 {Math.round(aggregate.confidence * 100)}% confidence · updated {freshness(aggregate.lastUpdatedAt)}
@@ -365,7 +357,7 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
               <Text style={styles.small}>
                 {mode === "community"
                   ? "Community data remains unavailable below three distinct contributors."
-                  : "Start a personal session or open the labeled demonstration."}
+                  : "Tap Read this spot or open the clearly labeled example view."}
               </Text>
             </View>
           ) : null}
@@ -373,14 +365,14 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
       ) : (
         <View style={styles.stack}>
           {(snapshot?.patterns ?? []).map((pattern) => (
-            <View key={`${pattern.type}-${pattern.dayType}-${pattern.hour}`} style={styles.card}>
+            <View key={`${pattern.type}-${pattern.dayOfWeek}-${pattern.hour}`} style={styles.card}>
               <Text style={styles.cardEyebrow}>
-                {pattern.dayType.toUpperCase()} · {String(pattern.hour).padStart(2, "0")}:00 UTC
+                {["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"][pattern.dayOfWeek]} · {String(pattern.hour).padStart(2, "0")}:00 UTC
               </Text>
               <Text style={styles.metric}>
-                {pattern.type === "sound_relative"
-                  ? `${Math.round(Number(pattern.baseline) * 100)} / 100 relative sound`
-                  : String(pattern.baseline)}
+                {pattern.type === "sound_dbfs"
+                  ? `${Number(pattern.baseline).toFixed(1)} dBFS usual`
+                  : `${Number(pattern.baseline).toFixed(2)} motion intensity`}
               </Text>
               <Text style={styles.meta}>{pattern.sampleCount} historical samples · {Math.round(pattern.confidence * 100)}% confidence</Text>
             </View>
@@ -396,45 +388,16 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
 
       {view === "nearby" ? (
         <View style={styles.card}>
-          <View style={styles.collectionHeader}>
-            <View style={styles.titleCopy}>
-              <Text style={styles.cardTitle}>Personal collection</Text>
-              <Text style={styles.small}>Foreground only, with separate sensor permissions.</Text>
-            </View>
-            <Text style={[styles.badge, session ? styles.personalBadge : styles.stoppedBadge]}>
-              {session ? "ACTIVE" : "STOPPED"}
-            </Text>
-          </View>
-          <View style={styles.toggle}>
-            <View style={styles.titleCopy}>
-              <Text style={styles.toggleTitle}>Relative sound</Text>
-              <Text style={styles.small}>Raw audio is discarded locally.</Text>
-            </View>
-            <Switch value={soundEnabled} disabled={Boolean(session)} onValueChange={setSoundEnabled} trackColor={{ true: colors.tealSoft }} thumbColor={soundEnabled ? colors.teal : colors.muted} />
-          </View>
-          <View style={styles.toggle}>
-            <View style={styles.titleCopy}>
-              <Text style={styles.toggleTitle}>Device movement</Text>
-              <Text style={styles.small}>Broad state only.</Text>
-            </View>
-            <Switch value={motionEnabled} disabled={Boolean(session)} onValueChange={setMotionEnabled} trackColor={{ true: colors.tealSoft }} thumbColor={motionEnabled ? colors.teal : colors.muted} />
-          </View>
-          {!session ? (
-            <Pressable style={[styles.darkButton, (!soundEnabled && !motionEnabled) && styles.disabled]} disabled={busy || (!soundEnabled && !motionEnabled)} onPress={() => void begin()}>
-              <Text style={styles.primaryButtonText}>Start foreground session</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.actions}>
-              <Pressable style={styles.primaryButton} disabled={busy} onPress={() => void measure()}>
-                <Text style={styles.primaryButtonText}>Measure now</Text>
-              </Pressable>
-              <Pressable style={styles.stopButton} disabled={busy} onPress={() => void stop()}>
-                <Text style={styles.stopButtonText}>Stop sensing</Text>
-              </Pressable>
-            </View>
-          )}
-          <Pressable style={styles.deleteButton} disabled={busy || Boolean(session)} onPress={confirmDeletion}>
-            <Text style={styles.deleteButtonText}>Delete my observations</Text>
+          <Text style={styles.cardTitle}>Your spot readings</Text>
+          <Text style={styles.small}>
+            Each tap takes one short foreground reading and stops automatically.
+            If a permission is denied, the rest of Nearby Hello still works.
+          </Text>
+          <Pressable style={styles.darkButton} disabled={busy} onPress={() => void readThisSpot()}>
+            <Text style={styles.primaryButtonText}>{busy ? "Reading…" : "Read this spot"}</Text>
+          </Pressable>
+          <Pressable style={styles.deleteButton} disabled={busy} onPress={confirmDeletion}>
+            <Text style={styles.deleteButtonText}>Delete my readings</Text>
           </Pressable>
         </View>
       ) : null}
@@ -453,7 +416,6 @@ const styles = StyleSheet.create({
   badge: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, fontSize: 10, fontWeight: "800" },
   demoBadge: { backgroundColor: "#fef3c7", color: "#92400e" },
   personalBadge: { backgroundColor: colors.tealSoft, color: colors.teal },
-  stoppedBadge: { backgroundColor: colors.surface, color: colors.muted },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   primaryButton: { backgroundColor: colors.teal, borderRadius: 12, paddingHorizontal: 15, paddingVertical: 11 },
   darkButton: { backgroundColor: colors.ink, borderRadius: 12, paddingHorizontal: 15, paddingVertical: 12, alignItems: "center", marginTop: 12 },
@@ -463,6 +425,7 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   error: { color: colors.coral, backgroundColor: colors.coralSoft, borderRadius: 14, padding: 12, fontSize: 13 },
   notice: { color: colors.teal, backgroundColor: colors.tealSoft, borderRadius: 14, padding: 12, fontSize: 13 },
+  permissionNote: { color: colors.teal, backgroundColor: colors.tealSoft, borderRadius: 14, padding: 12, fontSize: 13, lineHeight: 19 },
   mapCard: { overflow: "hidden", borderRadius: 26, backgroundColor: "#dcebe8", borderWidth: 1, borderColor: colors.border },
   mapHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "rgba(255,255,255,0.9)", padding: 14 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 6, padding: 14 },
@@ -479,11 +442,6 @@ const styles = StyleSheet.create({
   metric: { color: colors.ink, fontSize: 23, fontWeight: "800", marginTop: 8 },
   small: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   meta: { color: colors.muted, fontSize: 11, marginTop: 12 },
-  collectionHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  toggle: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surface, borderRadius: 16, padding: 13, marginTop: 10 },
-  toggleTitle: { color: colors.ink, fontSize: 13, fontWeight: "800" },
-  stopButton: { backgroundColor: colors.coralSoft, borderRadius: 12, paddingHorizontal: 15, paddingVertical: 11 },
-  stopButtonText: { color: colors.coral, fontSize: 13, fontWeight: "800" },
   deleteButton: { alignItems: "center", paddingVertical: 12, marginTop: 5 },
   deleteButtonText: { color: colors.muted, fontSize: 13, fontWeight: "700" },
 });
