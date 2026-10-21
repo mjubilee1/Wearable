@@ -6,23 +6,27 @@ import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 
 const TABS = [
-  { id: "activity", label: "Talk", href: "/activity" },
-  { id: "messages", label: "Messages", href: "/messages" },
+  { id: "nearby", label: "Nearby", href: "/nearby" },
+  { id: "explore", label: "Explore", href: "/explore" },
+  { id: "patterns", label: "Patterns", href: "/patterns" },
+  { id: "profile", label: "Profile", href: "/profile" },
 ] as const;
 
 const ACCOUNT_LINKS = [
-  { href: "/profile", label: "Profile" },
-  { href: "/connectors", label: "Connectors" },
+  { href: "/messages", label: "Messages" },
+  { href: "/activity", label: "Voice tools" },
+  { href: "/connectors", label: "Legacy connectors" },
   { href: "/settings", label: "Settings" },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"] | "connectors" | "profile";
+type TabId = (typeof TABS)[number]["id"] | "activity" | "messages" | "connectors";
 
 export function TabBar({ active }: { active: TabId }) {
   const { profile, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const accountActive = active === "profile" || active === "connectors";
+  const accountActive =
+    active === "activity" || active === "messages" || active === "connectors";
 
   useEffect(() => {
     if (!open) return;

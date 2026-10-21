@@ -56,7 +56,9 @@ export default function SignupScreen() {
       >
         <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Create your account</Text>
-        <Text style={styles.subtitle}>Then you can talk.</Text>
+        <Text style={styles.subtitle}>
+          Explore Nearby Hello without contributing sensor data.
+        </Text>
 
         <View style={styles.field}>
           <Text style={styles.label}>First name</Text>

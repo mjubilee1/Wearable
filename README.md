@@ -1,14 +1,36 @@
-# Nearby
+# Nearby Hello
 
-A voice-first wearable AI assistant. You speak, it uses tools, and it answers out loud. Current target is a spoken turn through the laptop, the phone, or AirPods (`POST /v1/agent`). Domain: [nearbyhello.com](https://www.nearbyhello.com).
+A privacy-first hyperlocal spatial intelligence platform. Nearby Hello uses
+permission-based foreground sensors, approximate spatial zones, environmental
+measurements, and historical patterns to help people understand the physical
+space around them.
 
-Product: [`nearby-product-and-icp.md`](nearby-product-and-icp.md) (Fri Oct 16, 2026). The Oct 9 color-clip brief is retired. The social hello layer is later.
+Product: [`nearby-product-and-icp.md`](nearby-product-and-icp.md). Architecture
+and migration plan: [`NEARBY_REFACTOR_PLAN.md`](NEARBY_REFACTOR_PLAN.md).
 
-## Layers
+## Spatial MVP
 
-1. **Input** — laptop mic on the website, typed turn on the phone (spoken reply). The XIAO mic stays on the board until "hello nearby" or the D1 button. AirPods do not pair to the board.
-2. **Agent** — `apps/api` `POST /v1/agent`. A spoken request runs the tool in that turn. A saved fact can be deleted.
-3. **Device** — The board on the desk is a Seeed XIAO nRF52840 Sense. Flash [`firmware/wakeword`](firmware/wakeword/) with `-e xiaoblesense`. The older color-ring sketches under `firmware/` stay in place and are not extended. Omi under `third_party/omi` is a read-only reference.
+1. **Nearby** — current approximate zone, environmental measurements,
+   freshness, confidence, and personal collection controls.
+2. **Explore** — interactive privacy-preserving spatial grid and nearby zones.
+3. **Patterns** — personal or privacy-thresholded historical time buckets.
+4. **Profile** — account, contribution management, and preserved legacy
+   messaging/voice tools.
+
+Data modes:
+
+- **Demonstration:** visibly synthetic observations for an immediate
+  zero-user experience.
+- **Personal:** only the signed-in user's foreground measurements.
+- **Community:** aggregate insights available only at three or more distinct
+  contributors.
+
+Sound is relative intensity, not calibrated decibels. Raw audio is never
+uploaded and temporary mobile recordings are deleted locally. Activity is
+participating-device motion only, never occupancy or pedestrian counts.
+
+Existing voice, messaging, connectors, authentication, and firmware remain in
+the repository for future integration but are not primary navigation.
 
 ## Voice firmware
 
@@ -24,10 +46,10 @@ pio device monitor -e xiaoblesense -b 115200
 
 | Package | Path | Role |
 |---------|------|------|
-| `@nearby/web` | `apps/web` | Next.js. Talk is `/activity` (laptop microphone). |
-| `@nearby/mobile` | `apps/mobile` | Expo. Talk tab types a turn and speaks the reply. |
-| `@nearby/api` | `apps/api` | Hono API |
-| `@nearby/shared` | `packages/shared` | Types, scoring, agent contract |
+| `@nearby/web` | `apps/web` | Next.js location-first experience |
+| `@nearby/mobile` | `apps/mobile` | Expo foreground sensor experience |
+| `@nearby/api` | `apps/api` | Hono spatial and preserved legacy API |
+| `@nearby/shared` | `packages/shared` | Spatial, sensor, privacy, and legacy contracts |
 
 ## Setup
 
@@ -37,17 +59,31 @@ pnpm dev          # web :3000 + api :4000
 pnpm dev:mobile   # Expo
 ```
 
-Copy env files from each app’s `.env.example`. Optional `OPENAI_API_KEY` on the API enables real replies (otherwise a short mock).
+Copy env files from each app’s `.env.example`. Optional pilot coordinates:
+
+```bash
+NEXT_PUBLIC_PILOT_LATITUDE=38.9072
+NEXT_PUBLIC_PILOT_LONGITUDE=-77.0369
+EXPO_PUBLIC_PILOT_LATITUDE=38.9072
+EXPO_PUBLIC_PILOT_LONGITUDE=-77.0369
+```
+
+These defaults configure the labeled demonstration viewport only; spatial
+domain logic is not DC-specific.
 
 ## API highlights
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /v1/agent` | One spoken turn. A selected tool runs in that request. |
-| `GET /v1/agent/memories` | Facts the user asked to keep |
-| `DELETE /v1/agent/memories/:id` | Drop a saved memory |
-| `GET /v1/matches` | Nearby profiles + scores |
-| `POST /v1/facilitate` | Why you vibe + 3 icebreakers |
+| `GET/PATCH /v1/spatial/consent` | Granular sensor consent |
+| `POST/PATCH /v1/spatial/sessions/:id?` | Start or stop foreground collection |
+| `POST /v1/spatial/observations` | Submit a validated supported measurement |
+| `GET /v1/spatial/zones` | Resolve the current approximate zone |
+| `GET /v1/spatial/aggregates` | Personal, community, or demonstration aggregates |
+| `GET /v1/spatial/patterns` | Historical time-bucket patterns |
+| `DELETE /v1/spatial/contributions` | Delete the signed-in user's observations |
+| `POST /v1/agent` | Preserved legacy voice turn |
+| `GET /v1/matches` | Preserved compatibility endpoint; not in primary UI |
 
 Auth: `Authorization: Bearer <firebase-id-token>` or `Bearer dev` in mock mode.
 
@@ -56,7 +92,14 @@ Auth: `Authorization: Bearer <firebase-id-token>` or `Bearer dev` in mock mode.
 - Auth: Email/Password
 - Firestore rules: `apps/api/firestore.rules`
 - Storage rules (profile photos): `apps/api/storage.rules`
-- Approved memories: `agentState/{uid}` when Admin credentials are set
+- Spatial collections are Admin-SDK-only. Raw observations expire after 30
+  days and are never readable directly by clients.
+- Deploy additive rules/indexes with:
+
+```bash
+firebase deploy --only firestore:rules --project ascend-platform-7b5f8
+firebase deploy --only firestore:indexes --project ascend-platform-7b5f8
+```
 
 ## Profile shape
 
@@ -66,3 +109,21 @@ users/{uid}
   photoUrl?, bio?, lookingFor?, vibes[], prompts[]
   deviceId?, avatarHue, initials, createdAt, updatedAt
 ```
+
+## Platform limitations
+
+- The browser can obtain foreground location and relative microphone
+  intensity, but motion support varies and no background sensing is claimed.
+- Expo uses foreground location, microphone metering, and accelerometer
+  readings. It does not collect while the user has stopped the session.
+- Relative sound values are device-dependent and cannot be compared as
+  calibrated decibels without a calibration workflow.
+- The MVP map is a provider-independent interactive spatial grid. A street-map
+  provider is intentionally not a production commitment yet.
+- Firestore supports the initial fixed-grid/time-window workload. Arbitrary
+  polygon joins and large analytical workloads may later justify PostGIS.
+- Community insights fail closed below three distinct contributors.
+- Historical patterns require at least three samples in a matching time
+  bucket.
+- Retention timestamps are stored, but production Firebase TTL configuration
+  or a scheduled purge must be enabled before community rollout.

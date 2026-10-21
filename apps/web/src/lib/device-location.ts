@@ -1,8 +1,8 @@
-import type { DeviceLocation } from "@nearby/shared";
+import type { GeoPoint } from "@nearby/shared";
 
 const ASKED_KEY = "nearby-location-asked";
 
-let inflight: Promise<DeviceLocation | null> | null = null;
+let inflight: Promise<GeoPoint | null> | null = null;
 
 function alreadyAsked(): boolean {
   try {
@@ -21,17 +21,18 @@ function markAsked(): void {
 }
 
 /** Starts the browser location prompt immediately. Call from the user gesture. */
-export function readDeviceLocation(): Promise<DeviceLocation | null> {
+export function readDeviceLocation(): Promise<GeoPoint | null> {
   if (typeof navigator === "undefined" || !navigator.geolocation) {
     return Promise.resolve(null);
   }
   if (inflight) return inflight;
-  inflight = new Promise<DeviceLocation | null>((resolve) => {
+  inflight = new Promise<GeoPoint | null>((resolve) => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         resolve({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy,
         });
       },
       () => resolve(null),
@@ -54,7 +55,7 @@ export function offerDeviceLocationOnce(): void {
  * A normal turn does not ask again after the one-time prompt.
  * A turn that needs where you are asks again only if that prompt was declined.
  */
-export function locationForTurn(needsLocation: boolean): Promise<DeviceLocation | null> {
+export function locationForTurn(needsLocation: boolean): Promise<GeoPoint | null> {
   if (!needsLocation) {
     offerDeviceLocationOnce();
     return Promise.resolve(null);

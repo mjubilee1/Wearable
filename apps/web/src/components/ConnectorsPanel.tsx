@@ -62,7 +62,7 @@ export function ConnectorsPanel() {
     }
     window.history.replaceState({}, "", "/connectors");
     if (calendar === "connected" && peekPendingAsk()) {
-      router.replace("/activity");
+      router.replace("/nearby");
     }
   }, [queryClient, router, user]);
 

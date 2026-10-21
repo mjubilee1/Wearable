@@ -1,14 +1,13 @@
 import { Tabs } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Text, type ColorValue } from "react-native";
-import { ConnectorSetupPrompt } from "@/components/ConnectorSetupPrompt";
 import { PendantProvider } from "@/components/PendantSession";
 import { colors } from "@/lib/theme";
 
 const TAB_ICONS = {
-  activity: { outline: "mic-outline", filled: "mic" },
-  messages: { outline: "chatbubble-outline", filled: "chatbubble" },
-  connectors: { outline: "git-network-outline", filled: "git-network" },
+  nearby: { outline: "location-outline", filled: "location" },
+  explore: { outline: "map-outline", filled: "map" },
+  patterns: { outline: "analytics-outline", filled: "analytics" },
   profile: { outline: "person-outline", filled: "person" },
 } as const;
 
@@ -55,7 +54,7 @@ export default function TabsLayout() {
   return (
     <PendantProvider>
     <Tabs
-      initialRouteName="activity"
+      initialRouteName="nearby"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.teal,
@@ -68,39 +67,42 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="connections" options={{ href: null }} />
+      <Tabs.Screen name="activity" options={{ href: null }} />
+      <Tabs.Screen name="messages" options={{ href: null }} />
+      <Tabs.Screen name="connectors" options={{ href: null }} />
       <Tabs.Screen
-        name="activity"
+        name="nearby"
         options={{
-          title: "Talk",
+          title: "Nearby",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="activity" color={color} focused={focused} />
+            <TabIcon name="nearby" color={color} focused={focused} />
           ),
           tabBarLabel: ({ focused }) => (
-            <TabLabel label="Talk" focused={focused} />
+            <TabLabel label="Nearby" focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
-        name="messages"
+        name="explore"
         options={{
-          title: "Messages",
+          title: "Explore",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="messages" color={color} focused={focused} />
+            <TabIcon name="explore" color={color} focused={focused} />
           ),
           tabBarLabel: ({ focused }) => (
-            <TabLabel label="Messages" focused={focused} />
+            <TabLabel label="Explore" focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
-        name="connectors"
+        name="patterns"
         options={{
-          title: "Connectors",
+          title: "Patterns",
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="connectors" color={color} focused={focused} />
+            <TabIcon name="patterns" color={color} focused={focused} />
           ),
           tabBarLabel: ({ focused }) => (
-            <TabLabel label="Connectors" focused={focused} />
+            <TabLabel label="Patterns" focused={focused} />
           ),
         }}
       />
@@ -117,7 +119,6 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
-    <ConnectorSetupPrompt />
     </PendantProvider>
   );
 }

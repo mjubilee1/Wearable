@@ -276,6 +276,143 @@ export default async function HomePage({
   searchParams: HomeSearchParams;
 }) {
   const params = await searchParams;
+  const accountHref = homeSignupHref(params);
+  return (
+    <div id="top" className="min-h-dvh text-ink">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd()) }}
+      />
+      <LandingView />
+      <MarketingNav
+        signupHref={accountHref}
+        pricingHref="/#privacy"
+        messagesHref="/#how-it-works"
+      />
+      <main>
+        <section className="mx-auto grid max-w-5xl items-center gap-10 px-5 pb-20 pt-16 sm:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)] sm:pt-24">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
+              Hyperlocal spatial intelligence
+            </p>
+            <h1 className="font-display mt-4 max-w-[11ch] text-5xl font-medium leading-[0.95] text-ink sm:text-7xl">
+              Understand the space around you.
+            </h1>
+            <p className="mt-6 max-w-xl text-lg leading-snug text-ink">
+              Nearby Hello turns permission-based environmental measurements
+              into clear, local context—what is happening now, what changed,
+              and what is typical here.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href={accountHref}
+                className="inline-flex bg-ink px-5 py-3 text-sm font-semibold text-white"
+              >
+                Explore Nearby Hello
+              </Link>
+              <a
+                href="#how-it-works"
+                className="inline-flex border border-ink/20 px-5 py-3 text-sm font-semibold text-ink"
+              >
+                How it works
+              </a>
+            </div>
+          </div>
+          <div className="rounded-[2rem] border border-ink/10 bg-[#dcebe8] p-4 shadow-xl">
+            <div className="grid aspect-square grid-cols-3 gap-2">
+              {Array.from({ length: 9 }, (_, index) => (
+                <div
+                  key={index}
+                  className={[
+                    "relative rounded-2xl border border-white/80",
+                    index === 4 ? "bg-teal/25 ring-2 ring-teal" : "bg-white/45",
+                  ].join(" ")}
+                >
+                  {index === 4 ? (
+                    <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-teal text-xs font-bold text-white shadow-lg">
+                      You
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-between rounded-2xl bg-white/85 px-4 py-3">
+              <div>
+                <p className="text-sm font-bold text-ink">Soundscape</p>
+                <p className="text-xs text-muted">Clearly labeled demonstration</p>
+              </div>
+              <span className="rounded-full bg-teal-soft px-3 py-1 text-xs font-bold text-teal">
+                Moderate
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section id="how-it-works" className="border-y border-ink/15 bg-card px-5 py-20">
+          <div className="mx-auto max-w-5xl">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
+              What Nearby Hello measures
+            </p>
+            <div className="mt-7 grid gap-6 sm:grid-cols-3">
+              {[
+                ["Soundscape", "Relative ambient intensity processed locally. Raw audio is never stored or uploaded."],
+                ["Activity", "Broad movement from participating devices—not occupancy or pedestrian counts."],
+                ["Patterns", "Historical differences by time once enough measurements support a baseline."],
+              ].map(([title, body]) => (
+                <article key={title} className="border-t border-ink/15 pt-5">
+                  <h2 className="font-display text-3xl font-medium text-ink">{title}</h2>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">{body}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="privacy" className="scroll-mt-16 px-5 py-20">
+          <div className="mx-auto grid max-w-5xl gap-8 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
+                Privacy by architecture
+              </p>
+              <h2 className="font-display mt-4 text-4xl font-medium leading-tight text-ink">
+                Sensors only when you choose.
+              </h2>
+            </div>
+            <ul className="space-y-4 text-sm leading-relaxed text-ink">
+              <li>Foreground-only collection by default, with visible start and stop controls.</li>
+              <li>Separate permission for location, relative sound, and device motion.</li>
+              <li>Community insights stay unavailable below privacy thresholds.</li>
+              <li>Explore without contributing, and delete eligible observations anytime.</li>
+            </ul>
+          </div>
+        </section>
+      </main>
+      <footer className="border-t border-ink/15 px-5 py-12">
+        <div className="mx-auto flex max-w-5xl flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <BrandMark className="font-display text-3xl italic text-ink" />
+            <p className="mt-2 max-w-xs text-sm text-muted">
+              Make the physical world understandable, one location at a time.
+            </p>
+          </div>
+          <div className="w-full max-w-md">
+            <p className="mb-3 text-sm text-muted">Get Nearby Hello updates</p>
+            <WaitlistForm />
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// Preserved for future voice integration; not mounted in the spatial MVP.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function LegacyVoiceLanding({
+  searchParams,
+}: {
+  searchParams: HomeSearchParams;
+}) {
+  const params = await searchParams;
   const audience = AUDIENCES[audienceFrom(params.for)];
   const facebook = isFacebookLanding(params);
   const accountHref = homeSignupHref(params);

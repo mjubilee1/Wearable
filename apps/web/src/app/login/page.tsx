@@ -22,7 +22,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await signIn(email.trim(), password);
-      router.replace("/activity");
+      router.replace("/nearby");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
     } finally {

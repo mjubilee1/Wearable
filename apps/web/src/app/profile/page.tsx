@@ -1,10 +1,8 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { isEmailLikeName } from "@nearby/shared";
-import { PlansCard } from "@/components/PlansCard";
-import { ReferralCard } from "@/components/ReferralCard";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
@@ -62,21 +60,29 @@ export default function ProfilePage() {
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-20 sm:px-8">
       <header className="mb-8">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal">
-          Nearby
+          Nearby Hello
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink">
           Profile
         </h1>
         <p className="mt-2 max-w-xl text-sm text-muted sm:text-base">
-          Your account. Connect calendar and other tools under Connectors.
+          Account, sensor permissions, contributions, and preserved legacy tools.
         </p>
       </header>
 
       <main className="max-w-xl flex-1">
-        <Suspense fallback={null}>
-          <PlansCard />
-        </Suspense>
-        <ReferralCard />
+        <Link
+          href="/nearby"
+          className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
+        >
+          <div>
+            <p className="text-sm font-bold text-ink">Contribution settings</p>
+            <p className="mt-1 text-sm text-muted">
+              Start or stop foreground sensing and delete observations
+            </p>
+          </div>
+          <span className="text-sm font-semibold text-teal">Manage</span>
+        </Link>
 
         <Link
           href="/messages"
@@ -84,7 +90,7 @@ export default function ProfilePage() {
         >
           <div>
             <p className="text-sm font-bold text-ink">Messages</p>
-            <p className="mt-1 text-sm text-muted">Chat privately with your connections</p>
+            <p className="mt-1 text-sm text-muted">Preserved private messaging</p>
           </div>
           <span className="text-sm font-semibold text-teal">Open</span>
         </Link>
@@ -96,7 +102,7 @@ export default function ProfilePage() {
           <div>
             <p className="text-sm font-bold text-ink">Account settings</p>
             <p className="mt-1 text-sm text-muted">
-              Phone number, privacy, and saved memories
+              Account controls and preserved voice settings
             </p>
           </div>
           <span className="text-sm font-semibold text-teal">Open</span>
@@ -107,9 +113,9 @@ export default function ProfilePage() {
           className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
         >
           <div>
-            <p className="text-sm font-bold text-ink">Connectors</p>
+            <p className="text-sm font-bold text-ink">Legacy connectors</p>
             <p className="mt-1 text-sm text-muted">
-              Favorites and Google Calendar
+              Preserved calendar and agent integrations
             </p>
           </div>
           <span className="text-sm font-semibold text-teal">Open</span>

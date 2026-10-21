@@ -11,7 +11,7 @@ export default function OnboardingScreen() {
       <BrandMark style={styles.eyebrow} />
       <Text style={styles.title}>Set up Nearby</Text>
       <Text style={styles.subtitle}>Choose the private number linked to your account.</Text>
-      <PhoneSetup onComplete={() => router.replace("/(tabs)/activity")} />
+      <PhoneSetup onComplete={() => router.replace("/(tabs)/nearby")} />
     </ScrollView>
   );
 }

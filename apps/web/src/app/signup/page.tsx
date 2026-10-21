@@ -8,13 +8,10 @@ import { useAuth } from "@/lib/auth-context";
 import { captureAttribution } from "@/lib/attribution";
 import { trackGaEvent } from "@/lib/ga";
 import { trackFunnel } from "@/lib/funnel";
-import { hasFoundingOffer, storedReferralCode } from "@/lib/offers";
-
-const ONBOARDING_FLAG = "nearby_onboarding";
+import { storedReferralCode } from "@/lib/offers";
 
 export default function SignupPage() {
   const { signUp } = useAuth();
-  const [foundingOffer, setFoundingOffer] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +19,6 @@ export default function SignupPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    setFoundingOffer(hasFoundingOffer(new URLSearchParams(window.location.search)));
     trackFunnel("signup_start", { plan: "free" }, {
       scope: "session",
       key: "signup_start",
@@ -48,11 +44,6 @@ export default function SignupPage() {
       } catch {
         timeZone = null;
       }
-      try {
-        sessionStorage.setItem(ONBOARDING_FLAG, "1");
-      } catch {
-        // Onboarding still runs from this page's redirect.
-      }
       await signUp({
         email: email.trim(),
         password,
@@ -71,11 +62,6 @@ export default function SignupPage() {
         campaign_name: touch.utm_campaign,
       });
     } catch (err) {
-      try {
-        sessionStorage.removeItem(ONBOARDING_FLAG);
-      } catch {
-        // Ignore storage failures.
-      }
       setError(err instanceof Error ? err.message : "Could not create account");
     } finally {
       setSubmitting(false);
@@ -88,12 +74,9 @@ export default function SignupPage() {
       <h1 className="font-display mt-6 text-4xl font-medium leading-none text-ink">
         Create your account
       </h1>
-      <p className="mt-2 text-sm text-muted">Then you can talk.</p>
-      {foundingOffer ? (
-        <p className="mt-3 border border-teal/30 bg-teal-soft px-3 py-2 text-sm text-teal">
-          Founding offer saved: Pro is $19/month after your 7-day trial.
-        </p>
-      ) : null}
+      <p className="mt-2 text-sm text-muted">
+        Explore Nearby Hello without contributing sensor data.
+      </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         <label className="block space-y-1.5">

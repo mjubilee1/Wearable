@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 
 export function BrandMark({
   style,
-  label = "Nearby",
+  label = "Nearby Hello",
 }: {
   style?: StyleProp<TextStyle>;
   label?: string;
@@ -17,7 +17,7 @@ export function BrandMark({
       accessibilityRole="link"
       hitSlop={8}
       onPress={() => {
-        if (user) router.replace("/(tabs)/activity");
+        if (user) router.replace("/(tabs)/nearby");
       }}
     >
       <Text style={style}>{label}</Text>

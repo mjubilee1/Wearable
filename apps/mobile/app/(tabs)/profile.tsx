@@ -72,8 +72,19 @@ export default function ProfileScreen() {
         <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Profile</Text>
         <Text style={styles.subtitle}>
-          Your account. Connect calendar and other tools under Connectors.
+          Account, sensor permissions, contributions, and preserved legacy tools.
         </Text>
+
+        <Pressable
+          onPress={() => router.push("/(tabs)/nearby")}
+          style={styles.settingsCard}
+        >
+          <View>
+            <Text style={styles.settingsTitle}>Contribution settings</Text>
+            <Text style={styles.settingsCopy}>Start or stop sensing and delete observations</Text>
+          </View>
+          <Text style={styles.settingsOpen}>Manage</Text>
+        </Pressable>
 
         <Pressable
           onPress={() => router.push("/messages")}
@@ -81,7 +92,7 @@ export default function ProfileScreen() {
         >
           <View>
             <Text style={styles.settingsTitle}>Messages</Text>
-            <Text style={styles.settingsCopy}>Chat privately with your connections</Text>
+            <Text style={styles.settingsCopy}>Preserved private messaging</Text>
           </View>
           <Text style={styles.settingsOpen}>Open</Text>
         </Pressable>
@@ -91,8 +102,8 @@ export default function ProfileScreen() {
           style={styles.settingsCard}
         >
           <View>
-            <Text style={styles.settingsTitle}>Connectors</Text>
-            <Text style={styles.settingsCopy}>Favorites and Google Calendar</Text>
+            <Text style={styles.settingsTitle}>Legacy connectors</Text>
+            <Text style={styles.settingsCopy}>Preserved calendar and agent integrations</Text>
           </View>
           <Text style={styles.settingsOpen}>Open</Text>
         </Pressable>
@@ -104,7 +115,7 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.settingsTitle}>Account settings</Text>
             <Text style={styles.settingsCopy}>
-              Phone number, privacy, and saved memories
+              Account controls and preserved voice settings
             </Text>
           </View>
           <Text style={styles.settingsOpen}>Open</Text>

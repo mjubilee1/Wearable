@@ -27,7 +27,7 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       await signIn(email.trim(), password);
-      router.replace("/(tabs)/activity");
+      router.replace("/(tabs)/nearby");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
     } finally {

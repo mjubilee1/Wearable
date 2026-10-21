@@ -1,28 +1,19 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { clientNeedsEmailVerification, INVITE_STORAGE_KEY, inviteCodeFromPath } from "@nearby/shared";
 import { acceptInvite } from "@/lib/phone-messaging";
-import { ConnectorSetupPrompt } from "@/components/ConnectorSetupPrompt";
-import { TrialBanner } from "@/components/TrialBanner";
 import { VerifyEmailScreen } from "@/components/VerifyEmailScreen";
 import { useAuth } from "@/lib/auth-context";
 
 const AUTH_PATHS = new Set(["/login", "/signup", "/forgot-password"]);
-const ONBOARDING_FLAG = "nearby_onboarding";
-
 function afterAuthPath(): string {
-  try {
-    if (sessionStorage.getItem(ONBOARDING_FLAG) === "1") return "/onboarding";
-  } catch {
-    // Fall through to Talk.
-  }
-  return "/activity";
+  return "/nearby";
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, profile, loading, emailVerified } = useAuth();
+  const { user, loading, emailVerified } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const isMarketing = pathname === "/" || pathname === "/pricing";
@@ -83,20 +74,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       router.replace(afterAuthPath());
       return;
     }
-    if (
-      user &&
-      !needsEmail &&
-      profile?.phoneOnboardingRequired &&
-      pathname !== "/onboarding" &&
-      !isInvite
-    ) {
-      router.replace("/onboarding");
-      return;
+    if (user && !needsEmail && pathname === "/") {
+      router.replace("/nearby");
     }
-    if (user && !needsEmail && pathname === "/" && !profile?.phoneOnboardingRequired) {
-      router.replace("/activity");
-    }
-  }, [user, profile, loading, isPublic, isAuthScreen, isInvite, needsEmail, pathname, router]);
+  }, [user, loading, isPublic, isAuthScreen, needsEmail, pathname, router]);
 
   if (loading && !isPublic) {
     return (
@@ -122,15 +103,5 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (
-    <>
-      <Suspense fallback={null}>
-        <TrialBanner />
-      </Suspense>
-      {children}
-      {user && !isPublic && pathname !== "/onboarding" ? (
-        <ConnectorSetupPrompt />
-      ) : null}
-    </>
-  );
+  return children;
 }
