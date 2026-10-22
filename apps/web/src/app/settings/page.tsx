@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MemorySettings } from "@/components/MemorySettings";
+import { SensingNetworkSettings } from "@/components/SensingNetworkSettings";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
 
@@ -19,6 +20,7 @@ export default function SettingsPage() {
       </header>
       <main className="max-w-xl flex-1">
         <MemorySettings />
+        <SensingNetworkSettings />
       </main>
       <PrivacyFooter />
       <TabBar active="profile" />

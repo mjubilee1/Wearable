@@ -202,6 +202,36 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Distributed observation nodes. Clients never read node identities,
+    // minimized observations, consent events, or operator metrics directly.
+    match /observationNodes/{nodeId} {
+      allow read, write: if false;
+    }
+
+    match /observationConsentEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /nodeObservations/{observationId} {
+      allow read, write: if false;
+    }
+
+    match /areaActivityWindows/{windowId} {
+      allow read, write: if false;
+    }
+
+    match /areaActivityInsights/{insightId} {
+      allow read, write: if false;
+    }
+
+    match /areaActivityCurrent/{areaId} {
+      allow read, write: if false;
+    }
+
+    match /networkDeadLetters/{letterId} {
+      allow read, write: if false;
+    }
+
     // OAuth tokens for agent tools — API (Admin SDK) only.
     match /agentConnectors/{uid} {
       allow read, write: if false;

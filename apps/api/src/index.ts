@@ -115,6 +115,12 @@ import {
   submitObservationFeedback,
   subscribePlaceInsights,
 } from "./observation-pipeline.js";
+import {
+  NetworkError,
+  networkMetrics,
+  registerObservationNetworkRoutes,
+  startAutonomousCollection,
+} from "./observation-network.js";
 import { streamSSE } from "hono/streaming";
 
 // Load apps/api/.env whether started from repo root or apps/api
@@ -233,6 +239,12 @@ app.get("/health", (c) =>
       visionMode: process.env.OPENAI_API_KEY ? "openai" : "fixture",
       metrics: observationMetrics,
     },
+    observationNetwork: {
+      ruleset: "activity-v1",
+      autonomousSync: process.env.SPATIAL_AUTONOMOUS_SYNC === "true",
+      accepted: networkMetrics.observationsAccepted,
+      rejected: networkMetrics.observationsRejected,
+    },
     stripeWebhook: isStripeWebhookConfigured(),
     googleCalendar: isGoogleCalendarConfigured(),
     twilioVerify: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID),
@@ -245,7 +257,8 @@ function spatialFailure(c: Context, error: unknown) {
   const status =
     error instanceof SpatialError ||
     error instanceof PlaceError ||
-    error instanceof ObservationError
+    error instanceof ObservationError ||
+    error instanceof NetworkError
       ? error.status
       : 500;
   return c.json(
@@ -253,7 +266,8 @@ function spatialFailure(c: Context, error: unknown) {
       code:
         error instanceof SpatialError ||
         error instanceof PlaceError ||
-        error instanceof ObservationError
+        error instanceof ObservationError ||
+        error instanceof NetworkError
           ? error.code
           : "spatial_error",
       error: error instanceof Error ? error.message : "Spatial request failed",
@@ -1411,5 +1425,8 @@ app.post("/v1/facilitate/preview", async (c) => {
   return c.json(mockFacilitate(self, other));
 });
 
+registerObservationNetworkRoutes(app);
+
 console.log(`Nearby API listening on http://localhost:${port}`);
 serve({ fetch: app.fetch, port, createServer });
+startAutonomousCollection();

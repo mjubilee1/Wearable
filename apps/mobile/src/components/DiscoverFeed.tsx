@@ -23,12 +23,15 @@ import {
   trustFromVerification,
   type DataMode,
   type NearbySpatialPlace,
+  type PublicAreaActivity,
   type SpatialInsight,
   type SpatialSnapshot,
 } from "@nearby/shared";
 import { TrustBadge } from "@/components/TrustBadge";
 import { useAuth } from "@/lib/auth-context";
+import { useForegroundSensing } from "@/lib/sensing/session";
 import {
+  getNearbyAreas,
   getNearbyPlaces,
   getPlaceInsights,
   getSpatialSnapshot,
@@ -60,6 +63,13 @@ function freshness(timestamp: number): string {
   return `${Math.round(minutes / 60)}h ago`;
 }
 
+function expiresIn(timestamp: string): string {
+  const minutes = Math.round((Date.parse(timestamp) - Date.now()) / 60_000);
+  if (minutes <= 0) return "expired";
+  if (minutes < 60) return `expires in ${minutes}m`;
+  return `expires in ${Math.round(minutes / 60)}h`;
+}
+
 function milesLabel(meters: number): string {
   const miles = meters / 1609.34;
   if (miles < 0.1) return "Nearby";
@@ -77,6 +87,9 @@ export function DiscoverFeed() {
   const [placesUnavailable, setPlacesUnavailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [areaActivity, setAreaActivity] = useState<PublicAreaActivity | null>(null);
+  const [areaChecked, setAreaChecked] = useState(false);
+  useForegroundSensing();
 
   const load = useCallback(async () => {
     if (!user || !spatial.ready) return;
@@ -85,15 +98,18 @@ export function DiscoverFeed() {
     try {
       const token = await user.getIdToken();
       const nextMode: DataMode = spatial.usingDevice ? "personal" : "demo";
-      const [nextSnapshot, placesResult] = await Promise.all([
+      const [nextSnapshot, placesResult, areas] = await Promise.all([
         getSpatialSnapshot(token, spatial.location, nextMode),
         getNearbyPlaces(token, spatial.location, {
           radiusMeters: DEFAULT_PLACE_RADIUS_METERS,
           limit: 12,
         }).catch(() => null),
+        getNearbyAreas(token, spatial.location).catch(() => null),
       ]);
       setMode(nextMode);
       setSnapshot(nextSnapshot);
+      setAreaActivity(areas?.areas.find((area) => area.activity)?.activity ?? null);
+      setAreaChecked(true);
       if (!placesResult) {
         setPlacesUnavailable(true);
         setCards([]);
@@ -293,6 +309,36 @@ export function DiscoverFeed() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Area activity</Text>
+        <Text style={styles.activity}>
+          {areaActivity?.label ?? "Insufficient observation coverage."}
+        </Text>
+        <View style={styles.row}>
+          <TrustBadge
+            label={
+              areaActivity && areaActivity.value !== "insufficient"
+                ? "estimated"
+                : "unavailable"
+            }
+            showHint
+          />
+          {areaActivity ? (
+            <Text style={styles.meta}>
+              Updated {freshness(Date.parse(areaActivity.generatedAt))} ·{" "}
+              {expiresIn(areaActivity.expiresAt)}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={styles.meta}>
+          Source: consenting devices. Participating-device activity is not an
+          occupancy count.
+          {areaChecked && !areaActivity
+            ? " No current evidence-backed trend for this area."
+            : ""}
+        </Text>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Nearby discoveries</Text>
 
         {placesUnavailable ? (
@@ -399,6 +445,12 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "600",
     textTransform: "capitalize",
+  },
+  activity: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: "600",
+    lineHeight: 30,
   },
   row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12 },
   card: {

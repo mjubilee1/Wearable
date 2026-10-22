@@ -502,6 +502,59 @@ export async function getSpatialPlaceById(
     : null;
 }
 
+function zoneIdsNear(center: GeoPoint): string[] {
+  const ids = new Set<string>();
+  const latStep = 200 / 111_320;
+  const lonStep =
+    200 /
+    (111_320 * Math.max(0.2, Math.cos((center.latitude * Math.PI) / 180)));
+  for (const y of [-1, 0, 1]) {
+    for (const x of [-1, 0, 1]) {
+      ids.add(
+        assignSpatialZone({
+          latitude: Math.max(-90, Math.min(90, center.latitude + y * latStep)),
+          longitude: Math.max(
+            -180,
+            Math.min(180, center.longitude + x * lonStep),
+          ),
+        }).id,
+      );
+    }
+  }
+  return [...ids];
+}
+
+/** Places already cached from OpenStreetMap. Does not call Overpass. */
+export async function cachedPlacesNear(
+  center: GeoPoint,
+  radiusMeters: number,
+): Promise<SpatialPlace[]> {
+  const radius = Math.max(25, Math.min(radiusMeters, 2_000));
+  let places: SpatialPlace[];
+  if (!isFirebaseConfigured()) {
+    places = [...memoryPlaces.values()];
+  } else {
+    const db = getFirebaseAdmin().firestore();
+    const snapshots = await Promise.all(
+      zoneIdsNear(center).map((zoneId) =>
+        db
+          .collection("spatialPlaces")
+          .where("zoneId", "==", zoneId)
+          .limit(80)
+          .get(),
+      ),
+    );
+    places = [];
+    for (const snapshot of snapshots) {
+      for (const doc of snapshot.docs) {
+        const place = normalizeStoredPlace(doc.data());
+        if (place) places.push(place);
+      }
+    }
+  }
+  return places.filter((place) => distanceMeters(center, place) <= radius);
+}
+
 function pagePlaces(
   places: SpatialPlace[],
   center: GeoPoint,

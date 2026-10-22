@@ -2,6 +2,10 @@ import type {
   DataMode,
   EnvironmentalObservation,
   GeoPoint,
+  NearbyArea,
+  NodeType,
+  ObservationNodePublic,
+  PublicAreaActivity,
   SensorConsent,
   SensorSession,
   SpatialSnapshot,
@@ -229,6 +233,130 @@ export async function askSpatialQuery(
     method: "POST",
     body: JSON.stringify({ question, location, radiusMeters }),
   });
+}
+
+export async function getNearbyAreas(
+  token: string,
+  location: GeoPoint,
+): Promise<{ areas: NearbyArea[]; generatedAt: string }> {
+  const params = new URLSearchParams({
+    latitude: String(location.latitude),
+    longitude: String(location.longitude),
+  });
+  if (location.accuracyMeters !== undefined) {
+    params.set("accuracyMeters", String(location.accuracyMeters));
+  }
+  return api(token, `/v1/spatial/areas/nearby?${params.toString()}`);
+}
+
+export async function getAreaActivity(
+  token: string,
+  areaId: string,
+): Promise<{ activity: PublicAreaActivity | null; label?: string }> {
+  return api(token, `/v1/spatial/areas/${encodeURIComponent(areaId)}/activity`);
+}
+
+export async function listObservationNodes(
+  token: string,
+): Promise<{ nodes: ObservationNodePublic[] }> {
+  return api(token, "/v1/spatial/nodes/me");
+}
+
+export async function registerObservationNode(
+  token: string,
+  body: {
+    nodeType: NodeType;
+    installationId: string;
+    claimedCapabilities: string[];
+    consent: { version: string; location: boolean; motion: boolean };
+  },
+): Promise<{ node: ObservationNodePublic }> {
+  return api(token, "/v1/spatial/nodes/register", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function pauseObservationNode(
+  token: string,
+  nodeId: string,
+): Promise<{ node: ObservationNodePublic }> {
+  return api(token, "/v1/spatial/nodes/pause", {
+    method: "POST",
+    body: JSON.stringify({ nodeId }),
+  });
+}
+
+export async function revokeObservationNode(
+  token: string,
+  nodeId: string,
+): Promise<{ node: ObservationNodePublic }> {
+  return api(token, "/v1/spatial/nodes/revoke", {
+    method: "POST",
+    body: JSON.stringify({ nodeId }),
+  });
+}
+
+export async function submitNodeObservations(
+  token: string,
+  body: {
+    nodeId: string;
+    observations: unknown[];
+  },
+): Promise<{ nodeStatus: string; results: Array<{ status: string; code?: string }> }> {
+  return api(token, "/v1/spatial/nodes/observations", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export type NetworkReport = {
+  generatedAt: string;
+  nodes: {
+    registered: number;
+    activeConsenting: number;
+    paused: number;
+    revoked: number;
+  };
+  observations: {
+    received: number;
+    accepted: number;
+    rejected: number;
+    duplicates: number;
+  };
+  matching: { matched: number; ambiguous: number; matchRate: number };
+  insights: { current: number; expired: number };
+  processing: {
+    latencyMsAverage: number;
+    deadLetters: number;
+    timeouts: number;
+  };
+  coverage: Array<{
+    areaId: string;
+    precision: string;
+    participatingContributors: number;
+    center: { latitude: number; longitude: number };
+    coverage: string;
+    value: string;
+    fresh: boolean;
+    expiresAt: string;
+  }>;
+  providers: {
+    overpassRequests: number;
+    overpassFailures: number;
+    sources: Array<{
+      source: string;
+      status: string;
+      detail: string;
+      placeCount?: number;
+    }>;
+  };
+  estimatedProcessingCostUsd: number;
+  costNote: string;
+};
+
+export async function getNetworkReport(token: string): Promise<NetworkReport> {
+  return api(token, "/v1/internal/spatial/network");
 }
 
 export async function sendInsightFeedback(
