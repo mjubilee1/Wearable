@@ -2,7 +2,6 @@ import Link from "next/link";
 import { MemorySettings } from "@/components/MemorySettings";
 import { PrivacyFooter } from "@/components/PrivacyFooter";
 import { TabBar } from "@/components/TabBar";
-import { PhoneSetup } from "@/components/PhoneSetup";
 
 export default function SettingsPage() {
   return (
@@ -19,9 +18,6 @@ export default function SettingsPage() {
         </div>
       </header>
       <main className="max-w-xl flex-1">
-        <div className="mb-6">
-          <PhoneSetup />
-        </div>
         <MemorySettings />
       </main>
       <PrivacyFooter />

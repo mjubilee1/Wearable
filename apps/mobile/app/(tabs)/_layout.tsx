@@ -5,9 +5,9 @@ import { PendantProvider } from "@/components/PendantSession";
 import { colors } from "@/lib/theme";
 
 const TAB_ICONS = {
-  nearby: { outline: "location-outline", filled: "location" },
+  nearby: { outline: "compass-outline", filled: "compass" },
   explore: { outline: "map-outline", filled: "map" },
-  patterns: { outline: "analytics-outline", filled: "analytics" },
+  patterns: { outline: "stats-chart-outline", filled: "stats-chart" },
   profile: { outline: "person-outline", filled: "person" },
 } as const;
 
@@ -53,72 +53,72 @@ function TabLabel({
 export default function TabsLayout() {
   return (
     <PendantProvider>
-    <Tabs
-      initialRouteName="nearby"
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.teal,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: {
-          backgroundColor: "rgba(255,255,255,0.95)",
-          borderTopColor: colors.border,
-        },
-      }}
-    >
-      <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="connections" options={{ href: null }} />
-      <Tabs.Screen name="activity" options={{ href: null }} />
-      <Tabs.Screen name="messages" options={{ href: null }} />
-      <Tabs.Screen name="connectors" options={{ href: null }} />
-      <Tabs.Screen
-        name="nearby"
-        options={{
-          title: "Nearby",
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="nearby" color={color} focused={focused} />
-          ),
-          tabBarLabel: ({ focused }) => (
-            <TabLabel label="Nearby" focused={focused} />
-          ),
+      <Tabs
+        initialRouteName="nearby"
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: colors.teal,
+          tabBarInactiveTintColor: colors.muted,
+          tabBarStyle: {
+            backgroundColor: "rgba(255,255,255,0.95)",
+            borderTopColor: colors.border,
+          },
         }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: "Explore",
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="explore" color={color} focused={focused} />
-          ),
-          tabBarLabel: ({ focused }) => (
-            <TabLabel label="Explore" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="patterns"
-        options={{
-          title: "Patterns",
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="patterns" color={color} focused={focused} />
-          ),
-          tabBarLabel: ({ focused }) => (
-            <TabLabel label="Patterns" focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="profile" color={color} focused={focused} />
-          ),
-          tabBarLabel: ({ focused }) => (
-            <TabLabel label="Profile" focused={focused} />
-          ),
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen name="index" options={{ href: null }} />
+        <Tabs.Screen name="connections" options={{ href: null }} />
+        <Tabs.Screen name="activity" options={{ href: null }} />
+        <Tabs.Screen name="messages" options={{ href: null }} />
+        <Tabs.Screen name="connectors" options={{ href: null }} />
+        <Tabs.Screen
+          name="nearby"
+          options={{
+            title: "Discover",
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon name="nearby" color={color} focused={focused} />
+            ),
+            tabBarLabel: ({ focused }) => (
+              <TabLabel label="Discover" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="explore"
+          options={{
+            title: "Explore",
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon name="explore" color={color} focused={focused} />
+            ),
+            tabBarLabel: ({ focused }) => (
+              <TabLabel label="Explore" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="patterns"
+          options={{
+            title: "Patterns",
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon name="patterns" color={color} focused={focused} />
+            ),
+            tabBarLabel: ({ focused }) => (
+              <TabLabel label="Patterns" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon name="profile" color={color} focused={focused} />
+            ),
+            tabBarLabel: ({ focused }) => (
+              <TabLabel label="Profile" focused={focused} />
+            ),
+          }}
+        />
+      </Tabs>
     </PendantProvider>
   );
 }

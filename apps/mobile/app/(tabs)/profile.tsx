@@ -87,28 +87,6 @@ export default function ProfileScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => router.push("/messages")}
-          style={styles.settingsCard}
-        >
-          <View>
-            <Text style={styles.settingsTitle}>Messages</Text>
-            <Text style={styles.settingsCopy}>Preserved private messaging</Text>
-          </View>
-          <Text style={styles.settingsOpen}>Open</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push("/connectors")}
-          style={styles.settingsCard}
-        >
-          <View>
-            <Text style={styles.settingsTitle}>Legacy connectors</Text>
-            <Text style={styles.settingsCopy}>Preserved calendar and agent integrations</Text>
-          </View>
-          <Text style={styles.settingsOpen}>Open</Text>
-        </Pressable>
-
-        <Pressable
           onPress={() => router.push("/settings")}
           style={styles.settingsCard}
         >

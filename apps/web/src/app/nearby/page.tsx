@@ -1,5 +1,5 @@
-import { NearbyHelloDashboard } from "@/components/NearbyHelloDashboard";
+import { DiscoverFeed } from "@/components/DiscoverFeed";
 
 export default function NearbyPage() {
-  return <NearbyHelloDashboard view="nearby" />;
+  return <DiscoverFeed />;
 }

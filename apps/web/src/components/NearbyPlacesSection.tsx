@@ -14,7 +14,6 @@ import {
   getNearbyPlaces,
   searchSpatialLocations,
 } from "@/lib/spatial-api";
-import { ScanSurroundingsSection } from "@/components/ScanSurroundingsSection";
 
 const CATEGORIES = [
   ["", "All"],
@@ -194,29 +193,22 @@ export function NearbyPlacesSection({
 
   return (
     <>
-    <section className="rounded-3xl border border-black/5 bg-card p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-lg font-bold text-ink">Places nearby</p>
-          <p className="mt-1 max-w-xl text-sm text-muted">
-            Real place names and categories from OpenStreetMap around{" "}
-            {centerLabel}. No ratings or live-condition claims.
-          </p>
-        </div>
+    <section className="border-t border-ink/10 pt-8">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-semibold text-ink">Places</h2>
         <button
           type="button"
           disabled={busy}
           onClick={() => void refreshPlaces()}
-          className="rounded-xl border border-black/10 px-3 py-2 text-xs font-bold text-ink disabled:opacity-50"
+          className="text-sm text-muted hover:text-ink disabled:opacity-50"
         >
-          {busy ? "Refreshing…" : "Refresh"}
+          {busy ? "…" : "Refresh"}
         </button>
       </div>
+      <p className="mt-1 text-sm text-muted">{centerLabel}</p>
 
       {permissionText ? (
-        <p className="mt-3 rounded-xl bg-surface px-3 py-2 text-xs text-muted">
-          {permissionText}
-        </p>
+        <p className="mt-2 text-sm text-muted">{permissionText}</p>
       ) : null}
 
       <div className="mt-4 flex gap-2">
@@ -226,27 +218,27 @@ export function NearbyPlacesSection({
           onKeyDown={(event) => {
             if (event.key === "Enter") void manualSearch();
           }}
-          placeholder="Search a city, address, or place"
-          aria-label="Manual location search"
-          className="min-w-0 flex-1 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-teal"
+          placeholder="Search"
+          aria-label="Search places"
+          className="min-w-0 flex-1 border border-ink/15 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink"
         />
         <button
           type="button"
           disabled={searching || search.trim().length < 2}
           onClick={() => void manualSearch()}
-          className="rounded-xl bg-ink px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+          className="border border-ink/15 px-3 py-2 text-sm text-ink disabled:opacity-50"
         >
-          Search
+          Go
         </button>
       </div>
       {searchResults.length ? (
-        <div className="mt-2 overflow-hidden rounded-xl border border-black/10">
+        <div className="mt-2 border border-ink/10">
           {searchResults.map((result) => (
             <button
               key={result.id}
               type="button"
               onClick={() => chooseSearchResult(result)}
-              className="block w-full border-b border-black/5 px-3 py-2.5 text-left text-sm text-ink last:border-0 hover:bg-surface"
+              className="block w-full border-b border-ink/10 px-3 py-2 text-left text-sm text-ink last:border-0 hover:bg-surface"
             >
               {result.label}
             </button>
@@ -254,10 +246,10 @@ export function NearbyPlacesSection({
         </div>
       ) : null}
       {searchAttempted && !searching && !searchResults.length ? (
-        <p className="mt-2 text-xs text-muted">No locations found.</p>
+        <p className="mt-2 text-sm text-muted">Nothing found.</p>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap gap-2" aria-label="Place categories">
+      <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1" aria-label="Place categories">
         {CATEGORIES.map(([value, label]) => (
           <button
             key={value || "all"}
@@ -266,8 +258,8 @@ export function NearbyPlacesSection({
             onClick={() => selectCategory(value)}
             className={
               category === value
-                ? "rounded-full bg-teal px-3 py-1.5 text-xs font-bold text-white"
-                : "rounded-full bg-surface px-3 py-1.5 text-xs font-bold text-muted"
+                ? "text-sm font-medium text-ink"
+                : "text-sm text-muted hover:text-ink"
             }
           >
             {label}
@@ -275,55 +267,29 @@ export function NearbyPlacesSection({
         ))}
       </div>
 
-      {error ? (
-        <p className="mt-4 rounded-xl bg-coral-soft px-3 py-2 text-sm text-coral">
-          {error}
-        </p>
-      ) : null}
+      {error ? <p className="mt-3 text-sm text-muted">{error}</p> : null}
       {!busy && response && !response.places.length ? (
-        <p className="mt-4 rounded-xl border border-dashed border-black/15 p-4 text-sm text-muted">
-          No sourced places were found in this area for that category.
-        </p>
+        <p className="mt-3 text-sm text-muted">No places here yet.</p>
       ) : null}
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {(response?.places ?? []).map((place) => (
-          <article
-            key={place.id}
-            className="rounded-2xl border border-black/10 p-4"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-bold text-ink">{place.name}</p>
-                <p className="mt-1 text-xs capitalize text-muted">
-                  {place.category.replaceAll("_", " ")}
-                </p>
-              </div>
-              <p className="shrink-0 text-xs font-semibold text-teal">
-                {distanceLabel(place.distanceMeters)}
+      <ul className="mt-4 divide-y divide-ink/10 border-t border-ink/10">
+        {(response?.places ?? []).slice(0, 8).map((place) => (
+          <li key={place.id} className="flex items-baseline justify-between gap-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink">{place.name}</p>
+              <p className="mt-0.5 text-xs capitalize text-muted">
+                {place.category.replaceAll("_", " ")}
               </p>
             </div>
-            {place.address ? (
-              <p className="mt-3 text-xs leading-relaxed text-muted">
-                {place.address}
-              </p>
-            ) : null}
-          </article>
+            <p className="shrink-0 text-xs text-muted">
+              {distanceLabel(place.distanceMeters)}
+            </p>
+          </li>
         ))}
-      </div>
-      {response ? (
-        <p className="mt-4 text-[11px] text-muted">
-          {response.attribution} · refreshed{" "}
-          {new Date(response.fetchedAt).toLocaleString()}
-          {response.cacheStatus === "stale"
-            ? " · cached data shown while the provider is unavailable"
-            : ""}
-        </p>
+      </ul>
+      {response?.cacheStatus === "stale" ? (
+        <p className="mt-3 text-xs text-muted">Using saved places (map service is down).</p>
       ) : null}
     </section>
-    <ScanSurroundingsSection
-      location={center}
-      places={response?.places ?? []}
-    />
     </>
   );
 }

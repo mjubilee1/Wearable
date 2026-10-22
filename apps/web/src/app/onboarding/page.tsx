@@ -10,7 +10,6 @@ import {
   writeConnectorSetup,
 } from "@/lib/connectors";
 import { updateUserProfile } from "@/lib/users";
-import { PhoneSetup } from "@/components/PhoneSetup";
 
 const FIRST_TASK = "What's my first meeting tomorrow?";
 const ONBOARDING_FLAG = "nearby_onboarding";
@@ -21,7 +20,6 @@ export default function OnboardingPage() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [phoneComplete, setPhoneComplete] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -94,13 +92,9 @@ export default function OnboardingPage() {
         Set up Nearby
       </h1>
       <p className="mt-2 text-sm text-muted">
-        Choose a private account number, then connect Google if you want.
+        Add your name, then connect Google if you want.
       </p>
-      <div className="mt-8">
-        <PhoneSetup compact onComplete={() => setPhoneComplete(true)} />
-      </div>
-      {phoneComplete ? (
-      <form onSubmit={onConnect} className="mt-8 space-y-4 border-t border-black/10 pt-6">
+      <form onSubmit={onConnect} className="mt-8 space-y-4">
         <p className="text-sm font-bold text-ink">Optional: connect Google</p>
         <label className="block space-y-1.5">
           <span className="text-xs font-semibold text-ink">First name</span>
@@ -133,7 +127,6 @@ export default function OnboardingPage() {
           Skip for now
         </button>
       </form>
-      ) : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { NearbyHelloDashboard } from "@/components/NearbyHelloDashboard";
+import { ExploreMap } from "@/components/ExploreMap";
 
 export default function ExplorePage() {
-  return <NearbyHelloDashboard view="explore" />;
+  return <ExploreMap />;
 }

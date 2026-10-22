@@ -6,27 +6,26 @@ import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 
 const TABS = [
-  { id: "nearby", label: "Nearby", href: "/nearby" },
-  { id: "explore", label: "Explore", href: "/explore" },
-  { id: "patterns", label: "Patterns", href: "/patterns" },
+  { id: "nearby", label: "Discover", href: "/nearby" },
   { id: "profile", label: "Profile", href: "/profile" },
 ] as const;
 
 const ACCOUNT_LINKS = [
-  { href: "/messages", label: "Messages" },
-  { href: "/activity", label: "Voice tools" },
-  { href: "/connectors", label: "Legacy connectors" },
   { href: "/settings", label: "Settings" },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"] | "activity" | "messages" | "connectors";
+type TabId =
+  | (typeof TABS)[number]["id"]
+  | "activity"
+  | "messages"
+  | "connectors"
+  | "patterns"
+  | "explore";
 
 export function TabBar({ active }: { active: TabId }) {
-  const { profile, signOut } = useAuth();
+  const { signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const accountActive =
-    active === "activity" || active === "messages" || active === "connectors";
 
   useEffect(() => {
     if (!open) return;
@@ -44,86 +43,73 @@ export function TabBar({ active }: { active: TabId }) {
     };
   }, [open]);
 
-  const initials = profile?.initials || "?";
-  const hue = profile?.avatarHue ?? 174;
-
   return (
     <nav
-      className="fixed inset-x-0 top-0 z-40 border-b border-ink/15 bg-paper"
+      className="fixed inset-x-0 top-0 z-40 border-b border-ink/10 bg-white"
       aria-label="Primary"
     >
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 py-3 sm:gap-6 sm:px-8">
-        <BrandMark className="font-display shrink-0 text-xl italic leading-none text-ink" />
-        <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
-          <ul className="flex min-w-0 items-center gap-0.5 sm:gap-1">
-            {TABS.map((tab) => {
-              const isActive = tab.id === active;
-              return (
-                <li key={tab.id}>
-                  <Link
-                    href={tab.href}
-                    className={[
-                      "rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors sm:px-3 sm:text-sm",
-                      isActive
-                        ? "bg-teal-soft text-teal"
-                        : "text-muted hover:bg-surface hover:text-ink",
-                    ].join(" ")}
-                    aria-current={isActive ? "page" : undefined}
-                  >
-                    {tab.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="relative ml-1" ref={menuRef}>
-            <button
-              type="button"
-              aria-label="Account"
-              aria-expanded={open}
-              aria-haspopup="menu"
-              onClick={() => setOpen((value) => !value)}
-              className={[
-                "flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white",
-                accountActive ? "ring-2 ring-teal ring-offset-2 ring-offset-paper" : "",
-              ].join(" ")}
-              style={{ backgroundColor: `hsl(${hue} 55% 42%)` }}
-            >
-              {initials}
-            </button>
-            {open ? (
-              <div
-                role="menu"
-                className="absolute right-0 mt-2 w-52 overflow-hidden rounded-2xl border border-black/10 bg-card py-1 shadow-lg"
-              >
-                {profile?.name ? (
-                  <p className="truncate px-3 py-2 text-xs font-semibold text-muted">{profile.name}</p>
-                ) : null}
-                {ACCOUNT_LINKS.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    role="menuitem"
-                    onClick={() => setOpen(false)}
-                    className="block px-3 py-2 text-sm font-semibold text-ink hover:bg-surface"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setOpen(false);
-                    void signOut();
-                  }}
-                  className="block w-full px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-surface"
+      <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-5 py-3">
+        <BrandMark className="shrink-0 text-base font-semibold tracking-tight text-ink" />
+        <ul className="flex min-w-0 items-center gap-3 text-sm sm:gap-4">
+          {TABS.map((tab) => {
+            const isActive = tab.id === active;
+            return (
+              <li key={tab.id}>
+                <Link
+                  href={tab.href}
+                  className={
+                    isActive
+                      ? "font-medium text-ink"
+                      : "text-muted hover:text-ink"
+                  }
+                  aria-current={isActive ? "page" : undefined}
                 >
-                  Sign out
-                </button>
-              </div>
-            ) : null}
-          </div>
+                  {tab.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            aria-label="Account"
+            aria-expanded={open}
+            aria-haspopup="menu"
+            onClick={() => setOpen((value) => !value)}
+            className="text-sm text-muted hover:text-ink"
+          >
+            Account
+          </button>
+          {open ? (
+            <div
+              role="menu"
+              className="absolute right-0 mt-2 w-44 border border-ink/10 bg-white py-1"
+            >
+              {ACCOUNT_LINKS.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  className="block px-3 py-2 text-sm text-ink hover:bg-surface"
+                >
+                  {item.label}
+                </Link>
+              ))}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  void signOut();
+                }}
+                className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </nav>

@@ -113,7 +113,7 @@ export async function createUserProfile(input: {
     vibes: [],
     deviceId: null,
     pendantId: null,
-    phoneOnboardingRequired: true,
+    phoneOnboardingRequired: false,
     createdAt: now,
     updatedAt: now,
   };

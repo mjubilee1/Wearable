@@ -1,5 +1,5 @@
-import { SpatialDashboard } from "@/components/SpatialDashboard";
+import { DiscoverFeed } from "@/components/DiscoverFeed";
 
 export default function NearbyScreen() {
-  return <SpatialDashboard view="nearby" />;
+  return <DiscoverFeed />;
 }

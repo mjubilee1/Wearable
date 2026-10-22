@@ -9,6 +9,6 @@ export const colors = {
   surface: "#f3f4f6",
   card: "#ffffff",
   amberGlow: "#f59e0b",
-  page: "#f8fafc",
+  page: "#ffffff",
   border: "rgba(0,0,0,0.08)",
 } as const;

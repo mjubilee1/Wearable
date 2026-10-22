@@ -192,7 +192,7 @@ export async function createUserProfile(input: {
     utmMedium: input.utmMedium ?? null,
     utmCampaign: input.utmCampaign ?? null,
     timeZone: input.timeZone ?? null,
-    phoneOnboardingRequired: true,
+    phoneOnboardingRequired: false,
     createdAt: now,
     updatedAt: now,
   };

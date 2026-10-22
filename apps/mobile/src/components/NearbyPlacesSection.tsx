@@ -21,7 +21,6 @@ import {
   getNearbyPlaces,
   searchSpatialLocations,
 } from "@/lib/spatial-api";
-import { ScanSurroundingsSection } from "@/components/ScanSurroundingsSection";
 
 const CATEGORIES = [
   ["", "All"],
@@ -318,10 +317,6 @@ export function NearbyPlacesSection({
         </Text>
       ) : null}
     </View>
-    <ScanSurroundingsSection
-      location={center}
-      places={response?.places ?? []}
-    />
     </>
   );
 }

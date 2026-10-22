@@ -9,6 +9,8 @@ import type {
   ObservationSubmission,
   PlaceInsightsResponse,
   PlaceSearchResult,
+  SpatialInsight,
+  SpatialPlace,
   SpatialQueryResult,
   StartSensorSessionRequest,
   SubmitImageObservationRequest,
@@ -198,6 +200,22 @@ export async function getPlaceInsights(
   return api<PlaceInsightsResponse>(
     token,
     `/v1/spatial/places/${encodeURIComponent(placeId)}/insights`,
+  );
+}
+
+export type PlaceDetailResponse = {
+  place: SpatialPlace;
+  insights: SpatialInsight[];
+  generatedAt: string;
+};
+
+export async function getPlaceDetail(
+  token: string,
+  placeId: string,
+): Promise<PlaceDetailResponse> {
+  return api<PlaceDetailResponse>(
+    token,
+    `/v1/spatial/places/${encodeURIComponent(placeId)}`,
   );
 }
 

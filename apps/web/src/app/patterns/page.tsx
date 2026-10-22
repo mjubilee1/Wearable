@@ -1,5 +1,5 @@
-import { NearbyHelloDashboard } from "@/components/NearbyHelloDashboard";
+import { PatternsView } from "@/components/PatternsView";
 
 export default function PatternsPage() {
-  return <NearbyHelloDashboard view="patterns" />;
+  return <PatternsView />;
 }

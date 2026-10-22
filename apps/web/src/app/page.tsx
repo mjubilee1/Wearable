@@ -7,6 +7,7 @@ import { HomepageLiveDemo } from "@/components/HomepageLiveDemo";
 import { NecklaceMessages } from "@/components/NecklaceMessages";
 import { BrandMark } from "@/components/BrandMark";
 import { MarketingNav } from "@/components/MarketingNav";
+import { PlaceHeroScene } from "@/components/PlaceHeroScene";
 import { PricingSection } from "@/components/PricingSection";
 import { ScrollToDemo } from "@/components/ScrollToDemo";
 import { WaitlistForm } from "@/components/WaitlistForm";
@@ -278,32 +279,34 @@ export default async function HomePage({
   const params = await searchParams;
   const accountHref = homeSignupHref(params);
   return (
-    <div id="top" className="min-h-dvh text-ink">
+    <div id="top" className="landing-shell min-h-dvh text-ink">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd()) }}
       />
       <LandingView />
       <MarketingNav
+        tone="overlay"
         signupHref={accountHref}
         pricingHref="/#privacy"
         messagesHref="/#how-it-works"
       />
       <main>
-        <section className="mx-auto grid max-w-5xl items-center gap-10 px-5 pb-20 pt-16 sm:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)] sm:pt-24">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
-              A clearer sense of place
+        <section className="landing-hero">
+          <PlaceHeroScene />
+          <div className="landing-hero-wash" />
+          <div className="landing-hero-copy mx-auto flex min-h-dvh max-w-5xl flex-col justify-end px-5 pb-16 pt-24 sm:pb-24 sm:pt-28">
+            <p className="font-display text-4xl italic leading-none text-ink sm:text-6xl">
+              Nearby Hello
             </p>
-            <h1 className="font-display mt-4 max-w-[12ch] text-5xl font-medium leading-[0.95] text-ink sm:text-7xl">
+            <h1 className="mt-6 max-w-[14ch] font-sans text-3xl font-semibold leading-[1.05] tracking-tight text-ink sm:text-5xl">
               Know what a place is like before you walk in.
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-snug text-ink">
-              You are heading out, but you cannot tell if the park is peaceful
-              or the block feels lively. Nearby Hello gives you a simple look
-              at what is happening there now—and what is normal for that time.
+            <p className="mt-5 max-w-md text-base leading-relaxed text-ink/80 sm:text-lg">
+              A quiet park or a lively block—see what tends to happen there now,
+              and what is normal for that time of day.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap items-baseline gap-x-6 gap-y-3">
               <Link
                 href={accountHref}
                 className="inline-flex bg-ink px-5 py-3 text-sm font-semibold text-white"
@@ -312,101 +315,80 @@ export default async function HomePage({
               </Link>
               <a
                 href="#how-it-works"
-                className="inline-flex border border-ink/20 px-5 py-3 text-sm font-semibold text-ink"
+                className="text-sm font-medium text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink"
               >
-                Follow the story
+                How a day goes
               </a>
             </div>
           </div>
-          <div className="rounded-[2rem] border border-ink/10 bg-[#dcebe8] p-4 shadow-xl">
-            <div className="grid aspect-square grid-cols-3 gap-2">
-              {Array.from({ length: 9 }, (_, index) => (
-                <div
-                  key={index}
-                  className={[
-                    "relative rounded-2xl border border-white/80",
-                    index === 4 ? "bg-teal/25 ring-2 ring-teal" : "bg-white/45",
-                  ].join(" ")}
-                >
-                  {index === 4 ? (
-                    <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-teal text-xs font-bold text-white shadow-lg">
-                      You
-                    </span>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center justify-between rounded-2xl bg-white/85 px-4 py-3">
-              <div>
-                <p className="text-sm font-bold text-ink">Right now</p>
-                <p className="text-xs text-muted">Example view</p>
-              </div>
-              <span className="rounded-full bg-teal-soft px-3 py-1 text-xs font-bold text-teal">
-                A little lively
-              </span>
-            </div>
-          </div>
         </section>
 
-        <section id="how-it-works" className="border-y border-ink/15 bg-card px-5 py-20">
-          <div className="mx-auto max-w-5xl">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
+        <section id="how-it-works" className="scroll-mt-16 px-5 py-24">
+          <div className="mx-auto max-w-3xl">
+            <h2 className="font-display text-4xl font-medium leading-tight text-ink sm:text-5xl">
               A day with Nearby Hello
-            </p>
-            <div className="mt-7 grid gap-6 sm:grid-cols-3">
+            </h2>
+            <ol className="mt-12 space-y-12">
               {[
                 [
                   "Before you leave",
-                  "Check whether the place nearby seems calm or lively, without guessing.",
+                  "Check whether the place nearby seems calm or lively, without guessing from a map pin.",
                 ],
                 [
                   "When you arrive",
-                  "See what changed recently and how fresh the information is.",
+                  "See what changed recently, and how fresh that reading is.",
                 ],
                 [
                   "After a few visits",
-                  "Learn the rhythm of a place—quiet mornings, lively afternoons, and everything between.",
+                  "Quiet mornings, lively afternoons—the rhythm of a place starts to show.",
                 ],
-              ].map(([title, body]) => (
-                <article key={title} className="border-t border-ink/15 pt-5">
-                  <h2 className="font-display text-3xl font-medium text-ink">{title}</h2>
-                  <p className="mt-3 text-sm leading-relaxed text-muted">{body}</p>
-                </article>
+              ].map(([title, body], index) => (
+                <li key={title} className="landing-story-line">
+                  <p className="font-display text-sm italic text-ink/45">
+                    {String(index + 1).padStart(2, "0")}
+                  </p>
+                  <h3 className="mt-2 font-sans text-2xl font-semibold tracking-tight text-ink">
+                    {title}
+                  </h3>
+                  <p className="mt-3 max-w-xl text-base leading-relaxed text-ink/75">
+                    {body}
+                  </p>
+                </li>
               ))}
-            </div>
+            </ol>
           </div>
         </section>
 
-        <section id="privacy" className="scroll-mt-16 px-5 py-20">
-          <div className="mx-auto grid max-w-5xl gap-8 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal">
-                Your choice, every time
+        <section id="privacy" className="scroll-mt-16 border-t border-ink/10 px-5 py-24">
+          <div className="mx-auto max-w-3xl">
+            <h2 className="font-display text-4xl font-medium leading-tight text-ink sm:text-5xl">
+              It only helps when you ask it to.
+            </h2>
+            <div className="mt-8 space-y-5 text-base leading-relaxed text-ink/80">
+              <p>
+                Nothing starts until you say yes. A clear stop ends sharing
+                whenever you want. You can look around without contributing
+                anything at all.
               </p>
-              <h2 className="font-display mt-4 text-4xl font-medium leading-tight text-ink">
-                It only helps when you ask it to.
-              </h2>
+              <p>
+                Nearby Hello notices quiet and lively moments. It does not save
+                conversations, and your exact trips are never shown to other
+                people.
+              </p>
             </div>
-            <ul className="space-y-4 text-sm leading-relaxed text-ink">
-              <li>Nothing starts until you say yes.</li>
-              <li>A clear stop button ends sharing whenever you want.</li>
-              <li>Nearby Hello notices quiet and lively moments—it does not save conversations.</li>
-              <li>Your exact trips are never shown to other people.</li>
-              <li>Look around without sharing anything at all.</li>
-            </ul>
           </div>
         </section>
       </main>
-      <footer className="border-t border-ink/15 px-5 py-12">
-        <div className="mx-auto flex max-w-5xl flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+      <footer className="border-t border-ink/10 px-5 py-14">
+        <div className="mx-auto flex max-w-5xl flex-col gap-10 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <BrandMark className="font-display text-3xl italic text-ink" />
-            <p className="mt-2 max-w-xs text-sm text-muted">
+            <p className="mt-3 max-w-xs text-sm text-ink/60">
               See more than a map can tell you.
             </p>
           </div>
           <div className="w-full max-w-md">
-            <p className="mb-3 text-sm text-muted">Get Nearby Hello updates</p>
+            <p className="mb-3 text-sm text-ink/60">Get Nearby Hello updates</p>
             <WaitlistForm />
           </div>
         </div>

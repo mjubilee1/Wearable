@@ -22,9 +22,9 @@ export default function ProfilePage() {
 
   if (!profile) {
     return (
-      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-20 sm:px-8">
+      <div className="app-shell mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5 pb-16 pt-20">
         <main className="flex flex-1 items-center justify-center">
-          <p className="text-sm text-muted">Loading profile…</p>
+          <p className="text-sm text-muted">Loading…</p>
         </main>
         <TabBar active="profile" />
       </div>
@@ -57,105 +57,48 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-20 sm:px-8">
+    <div className="app-shell mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5 pb-16 pt-20">
       <header className="mb-8">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal">
-          Nearby Hello
-        </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-ink">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">
           Profile
         </h1>
-        <p className="mt-2 max-w-xl text-sm text-muted sm:text-base">
-          Account, sensor permissions, contributions, and preserved legacy tools.
-        </p>
       </header>
 
       <main className="max-w-xl flex-1">
-        <Link
-          href="/nearby"
-          className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
-        >
-          <div>
-            <p className="text-sm font-bold text-ink">Contribution settings</p>
-            <p className="mt-1 text-sm text-muted">
-              Start or stop foreground sensing and delete observations
-            </p>
-          </div>
-          <span className="text-sm font-semibold text-teal">Manage</span>
-        </Link>
+        <div className="mb-8 space-y-3 text-sm">
+          <Link href="/nearby" className="block text-ink hover:underline">
+            Nearby
+          </Link>
+          <Link href="/settings" className="block text-ink hover:underline">
+            Settings
+          </Link>
+        </div>
 
-        <Link
-          href="/messages"
-          className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
-        >
-          <div>
-            <p className="text-sm font-bold text-ink">Messages</p>
-            <p className="mt-1 text-sm text-muted">Preserved private messaging</p>
-          </div>
-          <span className="text-sm font-semibold text-teal">Open</span>
-        </Link>
-
-        <Link
-          href="/settings"
-          className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
-        >
-          <div>
-            <p className="text-sm font-bold text-ink">Account settings</p>
-            <p className="mt-1 text-sm text-muted">
-              Account controls and preserved voice settings
-            </p>
-          </div>
-          <span className="text-sm font-semibold text-teal">Open</span>
-        </Link>
-
-        <Link
-          href="/connectors"
-          className="mb-6 flex items-center justify-between rounded-3xl border border-black/5 bg-card px-5 py-4 shadow-sm"
-        >
-          <div>
-            <p className="text-sm font-bold text-ink">Legacy connectors</p>
-            <p className="mt-1 text-sm text-muted">
-              Preserved calendar and agent integrations
-            </p>
-          </div>
-          <span className="text-sm font-semibold text-teal">Open</span>
-        </Link>
-
-        <form onSubmit={onSave} className="space-y-5">
+        <form onSubmit={onSave} className="space-y-4">
           <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-ink">First name</span>
+            <span className="text-sm text-muted">First name</span>
             <input
               required
               value={name}
               autoComplete="given-name"
               placeholder="Your first name"
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm outline-none ring-teal/30 focus:ring-2"
+              className="w-full border border-ink/15 bg-white px-3 py-2.5 text-sm outline-none focus:border-ink"
             />
           </label>
 
           <div className="space-y-1.5">
-            <p className="text-xs font-semibold text-ink">Email</p>
-            <p className="rounded-2xl border border-black/10 bg-surface px-4 py-3 text-sm text-muted">
-              {profile.email}
-            </p>
+            <p className="text-sm text-muted">Email</p>
+            <p className="text-sm text-ink">{profile.email}</p>
           </div>
 
-          {error && (
-            <p className="rounded-2xl bg-coral-soft px-3 py-2 text-sm text-coral">
-              {error}
-            </p>
-          )}
-          {message && (
-            <p className="rounded-2xl bg-teal-soft px-3 py-2 text-sm text-teal">
-              {message}
-            </p>
-          )}
+          {error ? <p className="text-sm text-muted">{error}</p> : null}
+          {message ? <p className="text-sm text-muted">{message}</p> : null}
 
           <button
             type="submit"
             disabled={saving}
-            className="w-full rounded-2xl bg-teal px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+            className="bg-ink px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save"}
           </button>
@@ -164,7 +107,7 @@ export default function ProfilePage() {
         <button
           type="button"
           onClick={() => signOut()}
-          className="mt-4 w-full rounded-2xl border border-black/10 bg-card px-4 py-3 text-sm font-semibold text-ink transition hover:bg-surface"
+          className="mt-6 text-sm text-muted hover:text-ink"
         >
           Sign out
         </button>

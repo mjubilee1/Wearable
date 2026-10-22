@@ -98,6 +98,7 @@ import {
 } from "./spatial.js";
 import {
   PlaceError,
+  getSpatialPlaceById,
   nearbyPlaces,
   parseNearbyPlaceQuery,
   placeIngestionMetrics,
@@ -475,6 +476,19 @@ app.get("/v1/spatial/observations/:id", async (c) => {
     return c.json({
       submission: await getObservationSubmission(auth.uid, c.req.param("id")),
     });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.get("/v1/spatial/places/:id", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const place = await getSpatialPlaceById(c.req.param("id"));
+    if (!place) return c.json({ error: "Place not found." }, 404);
+    const insights = await getPlaceInsights(place.id);
+    return c.json({ place, insights: insights.insights, generatedAt: insights.generatedAt });
   } catch (error) {
     return spatialFailure(c, error);
   }

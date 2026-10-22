@@ -1,5 +1,5 @@
-import { SpatialDashboard } from "@/components/SpatialDashboard";
+import { PatternsView } from "@/components/PatternsView";
 
 export default function PatternsScreen() {
-  return <SpatialDashboard view="patterns" />;
+  return <PatternsView />;
 }

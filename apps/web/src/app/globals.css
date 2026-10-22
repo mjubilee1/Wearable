@@ -12,7 +12,12 @@
   --color-surface: #f3f4f6;
   --color-card: #ffffff;
   --color-amber-glow: #f59e0b;
-  --color-paper: #f3efe6;
+  --color-paper: #ffffff;
+}
+
+.app-shell {
+  background: #ffffff;
+  color: var(--color-ink);
 }
 
 * {
@@ -29,6 +34,108 @@ body {
   font-family: var(--font-sans);
   color: var(--color-ink);
   background: var(--color-paper);
+}
+
+/* Marketing landing: cooler field than the app paper, less “SaaS cream.” */
+.landing-shell {
+  --landing-mist: #d9e3e0;
+  --landing-field: #eef3f0;
+  background: var(--landing-field);
+}
+
+.landing-hero {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  overflow: hidden;
+  color: var(--color-ink);
+}
+
+.landing-hero-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(
+      105deg,
+      rgba(238, 243, 240, 0.92) 0%,
+      rgba(238, 243, 240, 0.72) 38%,
+      rgba(238, 243, 240, 0.18) 68%,
+      rgba(238, 243, 240, 0.05) 100%
+    );
+  pointer-events: none;
+}
+
+.landing-hero-copy {
+  position: relative;
+  z-index: 2;
+  animation: landing-rise 0.9s ease-out both;
+}
+
+.landing-place-far {
+  animation: landing-drift 28s ease-in-out infinite alternate;
+}
+
+.landing-place-trees {
+  transform-origin: 720px 560px;
+  animation: landing-breathe 14s ease-in-out infinite alternate;
+}
+
+.landing-place-near {
+  animation: landing-drift 22s ease-in-out infinite alternate-reverse;
+}
+
+.landing-story-line {
+  animation: landing-rise 0.8s ease-out both;
+}
+
+.landing-story-line:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.landing-story-line:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.landing-story-line:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-drift {
+  from {
+    transform: translateX(-10px);
+  }
+  to {
+    transform: translateX(14px);
+  }
+}
+
+@keyframes landing-breathe {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.015);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-hero-copy,
+  .landing-story-line,
+  .landing-place-far,
+  .landing-place-trees,
+  .landing-place-near {
+    animation: none;
+  }
 }
 
 @keyframes pulse-glow {

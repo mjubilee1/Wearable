@@ -17,6 +17,7 @@ import {
 import { File } from "expo-file-system";
 import type {
   DataMode,
+  EnvironmentalAggregate,
   GeoPoint,
   SpatialSnapshot,
 } from "@nearby/shared";
@@ -47,11 +48,23 @@ const SOUND_RECORDING_OPTIONS = {
   isMeteringEnabled: true,
 };
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
 function freshness(timestamp: number): string {
   const minutes = Math.max(0, Math.round((Date.now() - timestamp) / 60_000));
   if (minutes < 1) return "just now";
   if (minutes < 60) return `${minutes}m ago`;
   return `${Math.round(minutes / 60)}h ago`;
+}
+
+function primaryReading(
+  aggregates: EnvironmentalAggregate[],
+): EnvironmentalAggregate | null {
+  return (
+    aggregates.find((item) => item.type === "sound_dbfs") ??
+    aggregates[0] ??
+    null
+  );
 }
 
 export function SpatialDashboard({ view }: { view: ViewMode }) {
@@ -62,24 +75,19 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
   const [mode, setMode] = useState<DataMode>("demo");
   const [snapshot, setSnapshot] = useState<SpatialSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(
     async (nextMode: DataMode, nextLocation: GeoPoint) => {
       if (!user) return;
       setBusy(true);
-      setError(null);
+      setMessage(null);
       try {
         const token = await user.getIdToken();
-        setSnapshot(
-          await getSpatialSnapshot(token, nextLocation, nextMode),
-        );
+        setSnapshot(await getSpatialSnapshot(token, nextLocation, nextMode));
         setMode(nextMode);
       } catch (caught) {
-        setError(
-          caught instanceof Error ? caught.message : "Could not load spatial data.",
-        );
+        setMessage(caught instanceof Error ? caught.message : "Could not load.");
       } finally {
         setBusy(false);
       }
@@ -93,7 +101,9 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
 
   async function relativeSound() {
     const permission = await requestRecordingPermissionsAsync();
-    if (!permission.granted) throw new Error("Microphone permission was not granted.");
+    if (!permission.granted) {
+      throw new Error("Allow the microphone to take a reading.");
+    }
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     await recorder.prepareToRecordAsync();
     recorder.record({ forDuration: 11 });
@@ -112,19 +122,20 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
         try {
           new File(recorder.uri).delete();
         } catch {
-          // Temporary audio may already be removed by the native recorder.
+          // Temporary audio may already be removed.
         }
       }
     }
-    if (!readings.length) throw new Error("Sound metering is unavailable on this device.");
+    if (!readings.length) {
+      throw new Error("Sound metering is unavailable on this device.");
+    }
     return readings.reduce((sum, value) => sum + value, 0) / readings.length;
   }
 
-  async function readThisSpot() {
+  async function checkSpot() {
     if (!user) return;
     setBusy(true);
-    setError(null);
-    setNotice(null);
+    setMessage(null);
     let sessionId: string | null = null;
     try {
       const [locationResult, soundResult, motionResult] =
@@ -136,9 +147,7 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
       const reading =
         locationResult.status === "fulfilled" ? locationResult.value : null;
       if (!reading) {
-        setNotice(
-          "Location was not allowed, so no reading was saved. You can still explore the labeled example.",
-        );
+        setMessage("Allow location to check this spot.");
         return;
       }
       const sound =
@@ -146,9 +155,7 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
       const motion =
         motionResult.status === "fulfilled" ? motionResult.value : null;
       if (sound === null && !motion) {
-        setNotice(
-          "Mic and motion were not available, so no sensor numbers were saved. The example view still works.",
-        );
+        setMessage("Allow mic or motion to take a reading.");
         return;
       }
       const token = await user.getIdToken();
@@ -196,19 +203,16 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
       setLocation(reading.value);
       setUsingDeviceLocation(true);
       setMode("personal");
-      setNotice(
-        `${submissions.length} numeric reading${submissions.length === 1 ? "" : "s"} saved to this spot. Raw audio was deleted locally.`,
-      );
       await load("personal", reading.value);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not read this spot.");
+      setMessage(caught instanceof Error ? caught.message : "Check failed.");
     } finally {
       if (sessionId) {
         try {
           const token = await user.getIdToken();
           await stopSensorSession(token, sessionId);
         } catch {
-          // The spot reading has already completed.
+          // Spot reading already finished.
         }
       }
       setBusy(false);
@@ -216,42 +220,35 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
   }
 
   function confirmDeletion() {
-    Alert.alert(
-      "Delete your observations?",
-      "This removes your eligible environmental observations.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            if (!user) return;
-            setBusy(true);
-            void user
-              .getIdToken()
-              .then(deleteSpatialContributions)
-              .then((deleted) => {
-                setNotice(`${deleted} observations deleted.`);
-                return load("personal", location);
-              })
-              .catch((caught: unknown) =>
-                setError(
-                  caught instanceof Error ? caught.message : "Deletion failed.",
-                ),
-              )
-              .finally(() => setBusy(false));
-          },
+    Alert.alert("Delete your readings?", undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          if (!user) return;
+          setBusy(true);
+          void user
+            .getIdToken()
+            .then(deleteSpatialContributions)
+            .then(() => {
+              setMessage("Readings deleted.");
+              return load("personal", location);
+            })
+            .catch((caught: unknown) =>
+              setMessage(
+                caught instanceof Error ? caught.message : "Delete failed.",
+              ),
+            )
+            .finally(() => setBusy(false));
         },
-      ],
-    );
+      },
+    ]);
   }
 
+  const reading = primaryReading(snapshot?.aggregates ?? []);
   const title =
-    view === "nearby"
-      ? "What is happening around you"
-      : view === "explore"
-        ? "Explore nearby zones"
-        : "Historical patterns";
+    view === "nearby" ? "Nearby" : view === "explore" ? "Explore" : "Patterns";
 
   return (
     <ScrollView
@@ -259,189 +256,125 @@ export function SpatialDashboard({ view }: { view: ViewMode }) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.titleRow}>
-        <View style={styles.titleCopy}>
-          <Text style={styles.eyebrow}>NEARBY HELLO</Text>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>
-            {view === "patterns"
-              ? "Conditions by time once enough observations support a baseline."
-              : "Measured environmental signals with freshness and uncertainty."}
-          </Text>
-        </View>
-        <Text style={[styles.badge, mode === "demo" ? styles.demoBadge : styles.personalBadge]}>
-          {mode === "demo" ? "EXAMPLE DATA" : mode.toUpperCase()}
-        </Text>
-      </View>
-
-      <View style={styles.actions}>
-        {view === "nearby" ? (
-          <Pressable style={styles.primaryButton} disabled={busy} onPress={() => void readThisSpot()}>
-            <Text style={styles.primaryButtonText}>
-              {busy ? "Reading… about 10 seconds" : "Read this spot"}
-            </Text>
-          </Pressable>
-        ) : null}
-        <Pressable style={styles.secondaryButton} disabled={busy} onPress={() => void load("demo", usingDeviceLocation ? location : PILOT_LOCATION)}>
-          <Text style={styles.secondaryButtonText}>View example data</Text>
-        </Pressable>
-        <Pressable style={[styles.secondaryButton, !usingDeviceLocation && styles.disabled]} disabled={busy || !usingDeviceLocation} onPress={() => void load("community", location)}>
-          <Text style={styles.secondaryButtonText}>Community view</Text>
-        </Pressable>
-      </View>
+      <Text style={styles.title}>{title}</Text>
 
       {view === "nearby" ? (
-        <Text style={styles.permissionNote}>
-          Tap once to let Nearby Hello use location, microphone loudness, and
-          phone motion for about 10 seconds. Raw audio is never saved.
-        </Text>
+        <View style={styles.block}>
+          <Text style={styles.label}>This place</Text>
+          <Text style={styles.hero}>
+            {reading?.classification ?? (busy ? "…" : "Unknown")}
+          </Text>
+          <Text style={styles.meta}>
+            {reading
+              ? `Updated ${freshness(reading.lastUpdatedAt)}${mode === "demo" ? " · example" : ""}`
+              : mode === "demo"
+                ? "Example view until you check a spot."
+                : "No reading yet."}
+          </Text>
+
+          <Pressable
+            style={styles.button}
+            disabled={busy}
+            onPress={() => void checkSpot()}
+          >
+            <Text style={styles.buttonText}>
+              {busy ? "Checking…" : "Check this spot"}
+            </Text>
+          </Pressable>
+
+          <View style={styles.links}>
+            <Pressable
+              disabled={busy}
+              onPress={() =>
+                void load(
+                  "demo",
+                  usingDeviceLocation ? location : PILOT_LOCATION,
+                )
+              }
+            >
+              <Text style={styles.link}>Example</Text>
+            </Pressable>
+            {usingDeviceLocation ? (
+              <>
+                <Pressable
+                  disabled={busy}
+                  onPress={() => void load("personal", location)}
+                >
+                  <Text style={styles.link}>Mine</Text>
+                </Pressable>
+                <Pressable
+                  disabled={busy}
+                  onPress={() => void load("community", location)}
+                >
+                  <Text style={styles.link}>Shared</Text>
+                </Pressable>
+                <Pressable disabled={busy} onPress={confirmDeletion}>
+                  <Text style={styles.link}>Delete mine</Text>
+                </Pressable>
+              </>
+            ) : null}
+            {busy ? <ActivityIndicator color={colors.ink} /> : null}
+          </View>
+        </View>
       ) : null}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-
-      <View style={styles.mapCard}>
-        <View style={styles.mapHeader}>
-          <View>
-            <Text style={styles.cardTitle}>Interactive spatial map</Text>
-            <Text style={styles.small}>
-              Approx. {location.latitude.toFixed(3)}, {location.longitude.toFixed(3)}
-            </Text>
-          </View>
-          {busy ? <ActivityIndicator color={colors.teal} /> : null}
-        </View>
-        <View style={styles.grid}>
-          {Array.from({ length: 9 }, (_, index) => (
-            <Pressable
-              key={index}
-              style={[styles.zone, index === 4 && styles.currentZone]}
-            >
-              {index === 4 ? <Text style={styles.you}>You</Text> : <Text style={styles.zoneText}>Zone</Text>}
-            </Pressable>
-          ))}
-        </View>
-        <Text style={styles.mapFooter}>
-          {snapshot
-            ? `${snapshot.zone.resolutionMeters} m grid · ${snapshot.zone.id}`
-            : "Zone details unavailable"}
-        </Text>
-      </View>
-
-      {view !== "patterns" ? (
+      {view === "explore" || view === "nearby" ? (
         <NearbyPlacesSection initialLocation={location} />
       ) : null}
 
-      {view !== "patterns" ? (
-        <View style={styles.stack}>
-          {(snapshot?.aggregates ?? []).map((aggregate) => (
-            <View key={aggregate.type} style={styles.card}>
-              <Text style={styles.cardEyebrow}>
-                {aggregate.type === "sound_dbfs"
-                  ? "AMBIENT LOUDNESS"
-                  : "PARTICIPATING-DEVICE ACTIVITY"}
-              </Text>
-              <Text style={styles.metric}>{aggregate.classification}</Text>
-              <Text style={styles.small}>
-                {aggregate.type === "sound_dbfs"
-                  ? `${Number(aggregate.value).toFixed(1)} dBFS · uncalibrated digital loudness`
-                  : `${Number(aggregate.value).toFixed(2)} motion intensity · not occupancy`}
-              </Text>
-              <Text style={styles.meta}>
-                {Math.round(aggregate.confidence * 100)}% confidence · updated {freshness(aggregate.lastUpdatedAt)}
-              </Text>
-            </View>
-          ))}
-          {!snapshot?.aggregates.length && !busy ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.cardTitle}>No supported insight yet</Text>
-              <Text style={styles.small}>
-                {mode === "community"
-                  ? "Community data remains unavailable below three distinct contributors."
-                  : "Tap Read this spot or open the clearly labeled example view."}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.stack}>
-          {(snapshot?.patterns ?? []).map((pattern) => (
-            <View key={`${pattern.type}-${pattern.dayOfWeek}-${pattern.hour}`} style={styles.card}>
-              <Text style={styles.cardEyebrow}>
-                {["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"][pattern.dayOfWeek]} · {String(pattern.hour).padStart(2, "0")}:00 UTC
-              </Text>
-              <Text style={styles.metric}>
-                {pattern.type === "sound_dbfs"
-                  ? `${Number(pattern.baseline).toFixed(1)} dBFS usual`
-                  : `${Number(pattern.baseline).toFixed(2)} motion intensity`}
-              </Text>
-              <Text style={styles.meta}>{pattern.sampleCount} historical samples · {Math.round(pattern.confidence * 100)}% confidence</Text>
-            </View>
-          ))}
-          {!snapshot?.patterns.length ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.cardTitle}>Not enough history</Text>
-              <Text style={styles.small}>At least three observations in the same time bucket are required.</Text>
-            </View>
-          ) : null}
-        </View>
-      )}
-
-      {view === "nearby" ? (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Your spot readings</Text>
-          <Text style={styles.small}>
-            Each tap takes one short foreground reading and stops automatically.
-            If a permission is denied, the rest of Nearby Hello still works.
-          </Text>
-          <Pressable style={styles.darkButton} disabled={busy} onPress={() => void readThisSpot()}>
-            <Text style={styles.primaryButtonText}>{busy ? "Reading…" : "Read this spot"}</Text>
-          </Pressable>
-          <Pressable style={styles.deleteButton} disabled={busy} onPress={confirmDeletion}>
-            <Text style={styles.deleteButtonText}>Delete my readings</Text>
-          </Pressable>
+      {view === "patterns" ? (
+        <View style={styles.block}>
+          {(snapshot?.patterns ?? []).length ? (
+            (snapshot?.patterns ?? []).map((pattern) => (
+              <View
+                key={`${pattern.type}-${pattern.dayOfWeek}-${pattern.hour}`}
+                style={styles.patternRow}
+              >
+                <Text style={styles.meta}>
+                  {WEEKDAYS[pattern.dayOfWeek]}{" "}
+                  {String(pattern.hour).padStart(2, "0")}:00
+                </Text>
+                <Text style={styles.patternValue}>
+                  {Number(pattern.baseline).toFixed(0)}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.meta}>
+              Check a spot a few times to see patterns.
+            </Text>
+          )}
         </View>
       ) : null}
+
+      {message ? <Text style={styles.meta}>{message}</Text> : null}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.page },
-  content: { paddingHorizontal: 18, paddingTop: 60, paddingBottom: 34, gap: 18 },
-  titleRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  titleCopy: { flex: 1 },
-  eyebrow: { color: colors.teal, fontSize: 11, fontWeight: "800", letterSpacing: 1.8 },
-  title: { color: colors.ink, fontSize: 29, fontWeight: "800", marginTop: 5 },
-  subtitle: { color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 7 },
-  badge: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, fontSize: 10, fontWeight: "800" },
-  demoBadge: { backgroundColor: "#fef3c7", color: "#92400e" },
-  personalBadge: { backgroundColor: colors.tealSoft, color: colors.teal },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  primaryButton: { backgroundColor: colors.teal, borderRadius: 12, paddingHorizontal: 15, paddingVertical: 11 },
-  darkButton: { backgroundColor: colors.ink, borderRadius: 12, paddingHorizontal: 15, paddingVertical: 12, alignItems: "center", marginTop: 12 },
-  primaryButtonText: { color: "white", fontSize: 13, fontWeight: "800" },
-  secondaryButton: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 11 },
-  secondaryButtonText: { color: colors.ink, fontSize: 13, fontWeight: "700" },
-  disabled: { opacity: 0.45 },
-  error: { color: colors.coral, backgroundColor: colors.coralSoft, borderRadius: 14, padding: 12, fontSize: 13 },
-  notice: { color: colors.teal, backgroundColor: colors.tealSoft, borderRadius: 14, padding: 12, fontSize: 13 },
-  permissionNote: { color: colors.teal, backgroundColor: colors.tealSoft, borderRadius: 14, padding: 12, fontSize: 13, lineHeight: 19 },
-  mapCard: { overflow: "hidden", borderRadius: 26, backgroundColor: "#dcebe8", borderWidth: 1, borderColor: colors.border },
-  mapHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "rgba(255,255,255,0.9)", padding: 14 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 6, padding: 14 },
-  zone: { width: "31.8%", aspectRatio: 1.25, alignItems: "center", justifyContent: "center", borderRadius: 15, borderWidth: 1, borderColor: "rgba(255,255,255,0.85)", backgroundColor: "rgba(255,255,255,0.35)" },
-  currentZone: { backgroundColor: "rgba(13,148,136,0.2)", borderColor: colors.teal, borderWidth: 2 },
-  you: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.teal, color: "white", textAlign: "center", textAlignVertical: "center", fontSize: 12, fontWeight: "800", overflow: "hidden" },
-  zoneText: { color: "rgba(17,24,39,0.55)", fontSize: 10, fontWeight: "700" },
-  mapFooter: { backgroundColor: "rgba(255,255,255,0.9)", color: colors.muted, fontSize: 11, padding: 12 },
-  stack: { gap: 12 },
-  card: { backgroundColor: colors.card, borderRadius: 24, padding: 18, borderWidth: 1, borderColor: colors.border },
-  emptyCard: { backgroundColor: colors.card, borderRadius: 24, padding: 18, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(0,0,0,0.18)" },
-  cardTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
-  cardEyebrow: { color: colors.teal, fontSize: 10, fontWeight: "800", letterSpacing: 1.2 },
-  metric: { color: colors.ink, fontSize: 23, fontWeight: "800", marginTop: 8 },
-  small: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
-  meta: { color: colors.muted, fontSize: 11, marginTop: 12 },
-  deleteButton: { alignItems: "center", paddingVertical: 12, marginTop: 5 },
-  deleteButtonText: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+  screen: { flex: 1, backgroundColor: "#ffffff" },
+  content: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 40, gap: 28 },
+  title: { color: colors.ink, fontSize: 24, fontWeight: "600" },
+  block: { gap: 10 },
+  label: { color: colors.muted, fontSize: 14 },
+  hero: {
+    color: colors.ink,
+    fontSize: 36,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  meta: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  button: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.ink,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    marginTop: 8,
+  },
+  buttonText: { color: "white", fontSize: 14, fontWeight: "600" },
+  links: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 14, marginTop: 6 },
+  link: { color: colors.muted, fontSize: 14 },
+  patternRow: { marginBottom: 14 },
+  patternValue: { color: colors.ink, fontSize: 20, fontWeight: "600", marginTop: 2 },
 });

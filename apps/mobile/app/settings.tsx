@@ -2,7 +2,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { BrandMark } from "@/components/BrandMark";
 import { MemorySettings } from "@/components/MemorySettings";
-import { PhoneSetup } from "@/components/PhoneSetup";
 import { VoiceReplySettings } from "@/components/VoiceReplySettings";
 import { colors } from "@/lib/theme";
 
@@ -24,7 +23,6 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
       <VoiceReplySettings />
-      <PhoneSetup />
       <MemorySettings />
     </ScrollView>
   );
