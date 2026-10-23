@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -17,11 +17,11 @@ import {
 import { File } from "expo-file-system";
 import {
   DEFAULT_PLACE_RADIUS_METERS,
+  PREVIEW_PLACE_LIMIT,
   intentForPlaceCategory,
   intentTitle,
   trustFromProvenance,
   trustFromVerification,
-  type DataMode,
   type NearbySpatialPlace,
   type PublicAreaActivity,
   type SpatialInsight,
@@ -63,13 +63,6 @@ function freshness(timestamp: number): string {
   return `${Math.round(minutes / 60)}h ago`;
 }
 
-function expiresIn(timestamp: string): string {
-  const minutes = Math.round((Date.parse(timestamp) - Date.now()) / 60_000);
-  if (minutes <= 0) return "expired";
-  if (minutes < 60) return `expires in ${minutes}m`;
-  return `expires in ${Math.round(minutes / 60)}h`;
-}
-
 function milesLabel(meters: number): string {
   const miles = meters / 1609.34;
   if (miles < 0.1) return "Nearby";
@@ -81,42 +74,57 @@ export function DiscoverFeed() {
   const router = useRouter();
   const spatial = useSpatialLocation();
   const recorder = useAudioRecorder(SOUND_RECORDING_OPTIONS);
-  const [mode, setMode] = useState<DataMode>("demo");
   const [snapshot, setSnapshot] = useState<SpatialSnapshot | null>(null);
   const [cards, setCards] = useState<DiscoveryCard[]>([]);
   const [placesUnavailable, setPlacesUnavailable] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [areaActivity, setAreaActivity] = useState<PublicAreaActivity | null>(null);
-  const [areaChecked, setAreaChecked] = useState(false);
+  const [areaActivity, setAreaActivity] = useState<PublicAreaActivity | null>(
+    null,
+  );
   useForegroundSensing();
+  const cardsRef = useRef(cards);
+  const loadId = useRef(0);
+  cardsRef.current = cards;
 
   const load = useCallback(async () => {
     if (!user || !spatial.ready) return;
-    setBusy(true);
+    const id = ++loadId.current;
+    setLoading(true);
     setMessage(null);
     try {
       const token = await user.getIdToken();
-      const nextMode: DataMode = spatial.usingDevice ? "personal" : "demo";
+      const mode = spatial.usingDevice ? "personal" : "demo";
       const [nextSnapshot, placesResult, areas] = await Promise.all([
-        getSpatialSnapshot(token, spatial.location, nextMode),
+        getSpatialSnapshot(token, spatial.location, mode),
         getNearbyPlaces(token, spatial.location, {
           radiusMeters: DEFAULT_PLACE_RADIUS_METERS,
-          limit: 12,
+          limit: PREVIEW_PLACE_LIMIT,
         }).catch(() => null),
         getNearbyAreas(token, spatial.location).catch(() => null),
       ]);
-      setMode(nextMode);
+      if (id !== loadId.current) return;
       setSnapshot(nextSnapshot);
-      setAreaActivity(areas?.areas.find((area) => area.activity)?.activity ?? null);
-      setAreaChecked(true);
+      setAreaActivity(
+        areas?.areas.find(
+          (area) => area.activity && area.activity.value !== "insufficient",
+        )?.activity ?? null,
+      );
       if (!placesResult) {
-        setPlacesUnavailable(true);
-        setCards([]);
+        if (cardsRef.current.length === 0) setPlacesUnavailable(true);
+        else setMessage("Showing the last places we found.");
         return;
       }
       setPlacesUnavailable(false);
-      const top = placesResult.places.slice(0, 8);
+      const top = placesResult.places.slice(0, PREVIEW_PLACE_LIMIT);
+      if (top.length === 0) {
+        setCards([]);
+        return;
+      }
+      setCards(top.map((place) => ({ place, insights: [] })));
+      setLoading(false);
       const withInsights = await Promise.all(
         top.map(async (place) => {
           try {
@@ -127,13 +135,14 @@ export function DiscoverFeed() {
           }
         }),
       );
+      if (id !== loadId.current) return;
       setCards(withInsights);
     } catch (caught) {
       setMessage(
         caught instanceof Error ? caught.message : "Could not load discoveries.",
       );
     } finally {
-      setBusy(false);
+      if (id === loadId.current) setLoading(false);
     }
   }, [spatial.location, spatial.ready, spatial.usingDevice, user]);
 
@@ -170,9 +179,25 @@ export function DiscoverFeed() {
     return readings.reduce((sum, value) => sum + value, 0) / readings.length;
   }
 
+  async function useMyLocation() {
+    setLocating(true);
+    setMessage(null);
+    try {
+      await spatial.requestDeviceLocation();
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error
+          ? caught.message
+          : "Could not read your location.",
+      );
+    } finally {
+      setLocating(false);
+    }
+  }
+
   async function checkSpot() {
     if (!user) return;
-    setBusy(true);
+    setChecking(true);
     setMessage(null);
     let sessionId: string | null = null;
     try {
@@ -242,9 +267,7 @@ export function DiscoverFeed() {
       spatial.setLocation(locationReading.value);
       spatial.setUsingDevice(true);
       spatial.setLabel("Around you");
-      setMessage(
-        "Reading saved. Discoveries will update when enough signals exist.",
-      );
+      setMessage("Reading saved.");
       await load();
     } catch (caught) {
       setMessage(
@@ -259,7 +282,7 @@ export function DiscoverFeed() {
           // Contribution already stored.
         }
       }
-      setBusy(false);
+      setChecking(false);
     }
   }
 
@@ -267,7 +290,15 @@ export function DiscoverFeed() {
     () => milesLabel(DEFAULT_PLACE_RADIUS_METERS),
     [],
   );
-  const atmosphere = snapshot?.aggregates.find((row) => row.type === "sound_dbfs");
+  const atmosphere = snapshot?.aggregates.find(
+    (row) => row.type === "sound_dbfs",
+  );
+  const exampleMode = !spatial.usingDevice;
+  const liveLine = atmosphere
+    ? atmosphere.classification
+    : areaActivity
+      ? areaActivity.label
+      : null;
 
   return (
     <ScrollView
@@ -277,101 +308,96 @@ export function DiscoverFeed() {
     >
       <View style={styles.header}>
         <Text style={styles.eyebrow}>
-          Discover around you · {radiusLabel}
+          Discover · {radiusLabel}
+          {loading ? " · Loading…" : ""}
         </Text>
-        <Text style={styles.title}>Your local intelligence</Text>
+        <Text style={styles.title}>What's nearby</Text>
         <Text style={styles.lead}>
-          Find places to work, socialize, relax, or explore from real
-          observations—not a business directory.
-        </Text>
-        <Text style={styles.meta}>
-          {spatial.label}
-          {mode === "demo" ? " · Example data" : ""}
-          {busy ? " · Loading…" : ""}
+          Find places around you. Live calm or busy readings show up only when
+          enough people opt in.
         </Text>
       </View>
 
+      {exampleMode ? (
+        <View style={styles.locationRow}>
+          <Text style={styles.meta}>Showing a Washington, DC sample area.</Text>
+          <Pressable
+            style={[styles.primaryBtn, (locating || loading) && styles.disabled]}
+            disabled={locating || loading}
+            onPress={() => void useMyLocation()}
+          >
+            <Text style={styles.primaryBtnText}>
+              {locating ? "Getting location…" : "Use my location"}
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Text style={styles.meta}>Around you</Text>
+      )}
+
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Area atmosphere</Text>
-        {atmosphere ? (
+        <Text style={styles.sectionLabel}>Right now</Text>
+        {liveLine ? (
           <>
-            <Text style={styles.hero}>{atmosphere.classification}</Text>
-            <View style={styles.row}>
-              <TrustBadge label={trustFromProvenance(atmosphere.provenance)} />
+            <Text style={styles.live}>{liveLine}</Text>
+            {atmosphere ? (
+              <View style={styles.row}>
+                <TrustBadge label={trustFromProvenance(atmosphere.provenance)} />
+                <Text style={styles.meta}>
+                  Updated {freshness(atmosphere.lastUpdatedAt)}
+                </Text>
+              </View>
+            ) : (
               <Text style={styles.meta}>
-                Updated {freshness(atmosphere.lastUpdatedAt)}
+                Estimated from consenting devices—not a crowd count.
               </Text>
-            </View>
+            )}
           </>
         ) : (
-          <TrustBadge label="unavailable" showHint />
+          <Text style={styles.meta}>
+            No live readings for this area yet. You can still browse places
+            below.
+          </Text>
         )}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Area activity</Text>
-        <Text style={styles.activity}>
-          {areaActivity?.label ?? "Insufficient observation coverage."}
-        </Text>
-        <View style={styles.row}>
-          <TrustBadge
-            label={
-              areaActivity && areaActivity.value !== "insufficient"
-                ? "estimated"
-                : "unavailable"
-            }
-            showHint
-          />
-          {areaActivity ? (
-            <Text style={styles.meta}>
-              Updated {freshness(Date.parse(areaActivity.generatedAt))} ·{" "}
-              {expiresIn(areaActivity.expiresAt)}
-            </Text>
-          ) : null}
-        </View>
-        <Text style={styles.meta}>
-          Source: consenting devices. Participating-device activity is not an
-          occupancy count.
-          {areaChecked && !areaActivity
-            ? " No current evidence-backed trend for this area."
-            : ""}
-        </Text>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Nearby discoveries</Text>
-
+        <Text style={styles.sectionTitle}>Places</Text>
+        {loading ? <Text style={styles.meta}>Loading places…</Text> : null}
         {placesUnavailable ? (
-          <Text style={styles.meta}>
-            Place discovery is temporarily unavailable. Atmosphere readings can
-            still work.
-          </Text>
+          <View style={styles.gap}>
+            <Text style={styles.meta}>Couldn't load places. Try again.</Text>
+            <Pressable
+              style={[styles.secondaryBtn, loading && styles.disabled]}
+              disabled={loading}
+              onPress={() => void load()}
+            >
+              <Text style={styles.secondaryBtnText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : null}
-
-        {!busy && !placesUnavailable && !cards.length ? (
+        {!loading && !placesUnavailable && !cards.length ? (
           <Text style={styles.meta}>
-            No nearby places loaded yet. Check this spot once location is on.
+            No named places this close yet.
+            {exampleMode ? " Try Use my location." : " Search a neighborhood in Explore."}
           </Text>
         ) : null}
 
         {cards.map(({ place, insights }) => {
           const intent = intentForPlaceCategory(place.category);
           const top = insights[0] ?? null;
-          const trust = top
-            ? trustFromVerification(top.verificationStatus)
-            : ("unavailable" as const);
           return (
             <Pressable
               key={place.id}
-              style={styles.card}
+              style={styles.place}
               onPress={() =>
                 router.push(`/places/${encodeURIComponent(place.id)}`)
               }
             >
-              <View style={styles.cardTop}>
-                <View style={styles.cardCopy}>
+              <View style={styles.placeTop}>
+                <View style={styles.placeCopy}>
                   <Text style={styles.intent}>{intentTitle(intent)}</Text>
-                  <Text style={styles.cardTitle}>{place.name}</Text>
+                  <Text style={styles.placeName}>{place.name}</Text>
                 </View>
                 <Text style={styles.meta}>
                   {place.distanceMeters < 1000
@@ -379,35 +405,35 @@ export function DiscoverFeed() {
                     : `${(place.distanceMeters / 1000).toFixed(1)} km`}
                 </Text>
               </View>
-              <Text style={styles.body}>
-                {top
-                  ? top.text
-                  : "No verified observations yet for this place."}
+              <Text style={styles.placeBody}>
+                {top ? top.text : "No live notes yet for this place."}
               </Text>
-              <View style={styles.badgePad}>
-                <TrustBadge label={trust} />
-              </View>
+              {top ? (
+                <TrustBadge
+                  label={trustFromVerification(top.verificationStatus)}
+                />
+              ) : null}
             </Pressable>
           );
         })}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Contribute</Text>
+        <Text style={styles.sectionLabel}>Optional check-in</Text>
         <Text style={styles.meta}>
-          Optional. A short foreground reading helps fill gaps. Nearby Hello
-          never stores room audio.
+          Share a short reading while you are here. Audio is never stored.
+          Ongoing sensing is in Settings.
         </Text>
         <Pressable
-          style={[styles.button, busy && styles.buttonDisabled]}
-          disabled={busy}
+          style={[styles.secondaryBtn, (checking || locating) && styles.disabled]}
+          disabled={checking || locating}
           onPress={() => void checkSpot()}
         >
-          <Text style={styles.buttonText}>
-            {busy ? "Working…" : "Check this spot"}
+          <Text style={styles.secondaryBtnText}>
+            {checking ? "Checking…" : "Check this spot"}
           </Text>
         </Pressable>
-        {busy ? <ActivityIndicator color={colors.ink} /> : null}
+        {checking ? <ActivityIndicator color={colors.ink} /> : null}
         {message ? <Text style={styles.meta}>{message}</Text> : null}
       </View>
     </ScrollView>
@@ -432,40 +458,35 @@ const styles = StyleSheet.create({
   },
   lead: { color: colors.muted, fontSize: 16, lineHeight: 24 },
   meta: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  locationRow: { gap: 12 },
   section: {
     gap: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(17,24,39,0.1)",
+    borderTopColor: colors.border,
     paddingTop: 20,
   },
   sectionLabel: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: "600" },
-  hero: {
+  live: {
     color: colors.ink,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "600",
     textTransform: "capitalize",
   },
-  activity: {
-    color: colors.ink,
-    fontSize: 22,
-    fontWeight: "600",
-    lineHeight: 30,
-  },
   row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12 },
-  card: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(17,24,39,0.1)",
-    paddingHorizontal: 16,
+  gap: { gap: 12 },
+  place: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
     paddingVertical: 16,
     gap: 8,
   },
-  cardTop: {
+  placeTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 12,
   },
-  cardCopy: { flex: 1, gap: 4 },
+  placeCopy: { flex: 1, gap: 4 },
   intent: {
     color: colors.muted,
     fontSize: 11,
@@ -473,15 +494,22 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
-  cardTitle: { color: colors.ink, fontSize: 18, fontWeight: "600" },
-  body: { color: colors.ink, fontSize: 14, lineHeight: 20 },
-  badgePad: { marginTop: 4 },
-  button: {
+  placeName: { color: colors.ink, fontSize: 18, fontWeight: "600" },
+  placeBody: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  primaryBtn: {
     alignSelf: "flex-start",
     backgroundColor: colors.ink,
     paddingHorizontal: 16,
     paddingVertical: 11,
   },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: "white", fontSize: 14, fontWeight: "600" },
+  primaryBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  secondaryBtn: {
+    alignSelf: "flex-start",
+    borderColor: "rgba(17,24,39,0.15)",
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  secondaryBtnText: { color: colors.ink, fontSize: 14, fontWeight: "700" },
+  disabled: { opacity: 0.5 },
 });

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { friendlyAuthError } from "@nearby/shared";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 
@@ -20,9 +21,7 @@ export default function ForgotPasswordPage() {
       await resetPassword(email.trim());
       setSent(true);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not send reset email",
-      );
+      setError(friendlyAuthError(err, "Could not send reset email"));
     } finally {
       setSubmitting(false);
     }

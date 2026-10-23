@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { isEmailLikeName } from "@nearby/shared";
-import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { updateUserProfile } from "@/lib/users";
 import { colors } from "@/lib/theme";
@@ -69,35 +68,10 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <BrandMark style={styles.eyebrow} />
         <Text style={styles.title}>Profile</Text>
         <Text style={styles.subtitle}>
-          Account, sensor permissions, contributions, and preserved legacy tools.
+          Your name and email for this account.
         </Text>
-
-        <Pressable
-          onPress={() => router.push("/(tabs)/nearby")}
-          style={styles.settingsCard}
-        >
-          <View>
-            <Text style={styles.settingsTitle}>Contribution settings</Text>
-            <Text style={styles.settingsCopy}>Start or stop sensing and delete observations</Text>
-          </View>
-          <Text style={styles.settingsOpen}>Manage</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push("/settings")}
-          style={styles.settingsCard}
-        >
-          <View>
-            <Text style={styles.settingsTitle}>Account settings</Text>
-            <Text style={styles.settingsCopy}>
-              Account controls and preserved voice settings
-            </Text>
-          </View>
-          <Text style={styles.settingsOpen}>Open</Text>
-        </Pressable>
 
         <View style={styles.field}>
           <Text style={styles.label}>First name</Text>
@@ -114,7 +88,7 @@ export default function ProfileScreen() {
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
           <View style={styles.email}>
-            <Text style={styles.muted}>{profile.email}</Text>
+            <Text style={styles.emailText}>{profile.email}</Text>
           </View>
         </View>
 
@@ -139,6 +113,21 @@ export default function ProfileScreen() {
           </Text>
         </Pressable>
 
+        <View style={styles.divider} />
+
+        <Pressable
+          onPress={() => router.push("/settings")}
+          style={styles.settingsRow}
+        >
+          <View style={styles.settingsCopy}>
+            <Text style={styles.settingsTitle}>Settings</Text>
+            <Text style={styles.settingsHint}>
+              Sensing, memory, and preferences
+            </Text>
+          </View>
+          <Text style={styles.settingsChevron}>→</Text>
+        </Pressable>
+
         <Pressable onPress={() => signOut()} style={styles.signOut}>
           <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
@@ -155,94 +144,83 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.page,
   },
-  content: { paddingHorizontal: 16, paddingTop: 56, paddingBottom: 40 },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.8,
-    textTransform: "uppercase",
-    color: colors.teal,
-  },
+  content: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40 },
   title: {
-    marginTop: 4,
     fontSize: 28,
     fontWeight: "700",
     color: colors.ink,
   },
   subtitle: {
-    marginTop: 8,
+    marginTop: 6,
     marginBottom: 8,
     fontSize: 14,
     lineHeight: 20,
     color: colors.muted,
   },
   muted: { fontSize: 14, color: colors.muted },
-  settingsCard: {
-    marginTop: 16,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  settingsTitle: { fontSize: 14, fontWeight: "700", color: colors.ink },
-  settingsCopy: { marginTop: 4, fontSize: 13, color: colors.muted },
-  settingsOpen: { fontSize: 13, fontWeight: "700", color: colors.teal },
   field: { marginTop: 16, gap: 6 },
-  label: { fontSize: 12, fontWeight: "600", color: colors.ink },
+  label: { fontSize: 13, color: colors.muted },
   input: {
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 14,
     color: colors.ink,
   },
   email: {
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
+  emailText: { fontSize: 14, color: colors.ink },
   errorBox: {
     marginTop: 16,
-    borderRadius: 16,
     backgroundColor: colors.coralSoft,
     padding: 12,
   },
   errorText: { fontSize: 14, color: colors.coral },
   successBox: {
     marginTop: 16,
-    borderRadius: 16,
     backgroundColor: colors.tealSoft,
     padding: 12,
   },
   successText: { fontSize: 14, color: colors.teal },
   primaryBtn: {
     marginTop: 20,
-    borderRadius: 16,
-    backgroundColor: colors.teal,
-    paddingVertical: 14,
-    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.ink,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   primaryBtnText: { fontSize: 14, fontWeight: "600", color: "#fff" },
+  divider: {
+    marginTop: 28,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  settingsRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 4,
+  },
+  settingsCopy: { flex: 1, gap: 2 },
+  settingsTitle: { fontSize: 14, fontWeight: "600", color: colors.ink },
+  settingsHint: { fontSize: 13, color: colors.muted },
+  settingsChevron: { fontSize: 16, color: colors.muted },
   signOut: {
-    marginTop: 12,
-    borderRadius: 16,
+    marginTop: 24,
+    alignSelf: "flex-start",
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.card,
-    paddingVertical: 14,
-    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   signOutText: { fontSize: 14, fontWeight: "600", color: colors.ink },
   disabled: { opacity: 0.6 },

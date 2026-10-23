@@ -4,6 +4,7 @@ import {
   distanceMeters,
   isLocationAccuracyUsable,
   locationPermissionMessage,
+  placesFromStoredPreview,
 } from "@nearby/shared";
 import {
   PlaceError,
@@ -230,26 +231,86 @@ test("fresh cache prevents repeated provider requests", async () => {
   assert.equal(fetches, 1);
 });
 
-test("stale cache is returned when the provider becomes unavailable", async () => {
+test("expired cache is served immediately while a refresh runs in the background", async () => {
   process.env.PLACES_CACHE_TTL_MS = "-1";
-  let available = true;
+  let fetches = 0;
+  let release = () => {};
+  const hung = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   globalThis.fetch = async () => {
-    if (available) {
-      return overpassResponse([
-        element(1, "Fallback Café", 38.9073, -77.0369),
-      ]);
-    }
-    return overpassResponse([], 429);
+    fetches += 1;
+    if (fetches > 1) await hung;
+    return overpassResponse([
+      element(1, "Fallback Café", 38.9073, -77.0369),
+    ]);
   };
   const query = parseNearbyPlaceQuery({
     latitude: String(center.latitude),
     longitude: String(center.longitude),
   });
   await nearbyPlaces("user", query);
-  available = false;
-  const stale = await nearbyPlaces("user", query);
-  assert.equal(stale.cacheStatus, "stale");
-  assert.equal(stale.places[0].name, "Fallback Café");
+  try {
+    const started = Date.now();
+    const again = await nearbyPlaces("user", query);
+    assert.equal(again.places[0].name, "Fallback Café");
+    assert.ok(Date.now() - started < 500);
+  } finally {
+    release();
+    await hung.catch(() => undefined);
+  }
+});
+
+test("an empty close search widens once before giving up", async () => {
+  let fetches = 0;
+  globalThis.fetch = async () => {
+    fetches += 1;
+    if (fetches === 1) return overpassResponse([]);
+    return overpassResponse([
+      element(9, "Wider Café", 38.92, -77.0369),
+    ]);
+  };
+  const result = await nearbyPlaces(
+    "user",
+    parseNearbyPlaceQuery({
+      latitude: String(center.latitude),
+      longitude: String(center.longitude),
+      radius: "1000",
+    }),
+  );
+  assert.equal(fetches, 2);
+  assert.equal(result.places[0]?.name, "Wider Café");
+  assert.ok(result.radiusMeters > 1_000);
+});
+
+test("stored place preview is reused only near the same spot", () => {
+  const stored = {
+    latitude: center.latitude,
+    longitude: center.longitude,
+    savedAt: Date.now(),
+    places: [
+      {
+        id: "osm_node_1",
+        name: "Near Café",
+        distanceMeters: 40,
+      },
+    ],
+  };
+  assert.equal(
+    placesFromStoredPreview(stored, center)?.[0]?.name,
+    "Near Café",
+  );
+  assert.equal(
+    placesFromStoredPreview(stored, { latitude: 40, longitude: -75 }),
+    null,
+  );
+  assert.equal(
+    placesFromStoredPreview(
+      { ...stored, savedAt: Date.now() - 48 * 60 * 60 * 1_000 },
+      center,
+    ),
+    null,
+  );
 });
 
 test("provider failures surface when no cache is available", async () => {

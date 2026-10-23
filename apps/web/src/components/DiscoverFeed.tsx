@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   DEFAULT_PLACE_RADIUS_METERS,
+  PREVIEW_PLACE_LIMIT,
   intentForPlaceCategory,
   intentTitle,
   trustFromProvenance,
@@ -46,58 +47,84 @@ function freshness(timestamp: number): string {
   return `${Math.round(minutes / 60)}h ago`;
 }
 
-function expiresIn(timestamp: string): string {
-  const minutes = Math.round((Date.parse(timestamp) - Date.now()) / 60_000);
-  if (minutes <= 0) return "expired";
-  if (minutes < 60) return `expires in ${minutes}m`;
-  return `expires in ${Math.round(minutes / 60)}h`;
-}
-
 function milesLabel(meters: number): string {
   const miles = meters / 1609.34;
   if (miles < 0.1) return "Nearby";
   return `Within ${miles < 1 ? miles.toFixed(1) : Math.round(miles)} mi`;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => resolve(null), ms);
+    promise
+      .then((value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        window.clearTimeout(timer);
+        resolve(null);
+      });
+  });
+}
+
 export function DiscoverFeed() {
   const { user } = useAuth();
   const spatial = useSpatialLocation();
-  const [mode, setMode] = useState<DataMode>("demo");
   const [snapshot, setSnapshot] = useState<SpatialSnapshot | null>(null);
   const [cards, setCards] = useState<DiscoveryCard[]>([]);
   const [placesUnavailable, setPlacesUnavailable] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [areaActivity, setAreaActivity] = useState<PublicAreaActivity | null>(null);
-  const [areaChecked, setAreaChecked] = useState(false);
+  const [areaActivity, setAreaActivity] = useState<PublicAreaActivity | null>(
+    null,
+  );
   useForegroundSensing();
+  const cardsRef = useRef(cards);
+  const loadId = useRef(0);
+  cardsRef.current = cards;
 
   const load = useCallback(async () => {
     if (!user || !spatial.ready) return;
-    setBusy(true);
+    const id = ++loadId.current;
+    setLoading(true);
     setMessage(null);
     try {
       const token = await user.getIdToken();
       const nextMode: DataMode = spatial.usingDevice ? "personal" : "demo";
       const [nextSnapshot, placesResult, areas] = await Promise.all([
         getSpatialSnapshot(token, spatial.location, nextMode),
-        getNearbyPlaces(token, spatial.location, {
-          radiusMeters: DEFAULT_PLACE_RADIUS_METERS,
-          limit: 12,
-        }).catch(() => null),
-        getNearbyAreas(token, spatial.location).catch(() => null),
+        withTimeout(
+          getNearbyPlaces(token, spatial.location, {
+            radiusMeters: DEFAULT_PLACE_RADIUS_METERS,
+            limit: PREVIEW_PLACE_LIMIT,
+          }),
+          4_000,
+        ),
+        withTimeout(getNearbyAreas(token, spatial.location), 8_000),
       ]);
-      setMode(nextMode);
+      if (id !== loadId.current) return;
       setSnapshot(nextSnapshot);
-      setAreaActivity(areas?.areas.find((area) => area.activity)?.activity ?? null);
-      setAreaChecked(true);
+      const activity =
+        areas?.areas.find(
+          (area) => area.activity && area.activity.value !== "insufficient",
+        )?.activity ?? null;
+      setAreaActivity(activity);
       if (!placesResult) {
-        setPlacesUnavailable(true);
-        setCards([]);
+        if (cardsRef.current.length === 0) setPlacesUnavailable(true);
+        else setMessage("Showing the last places we found.");
         return;
       }
       setPlacesUnavailable(false);
-      const top = placesResult.places.slice(0, 8);
+      const top = placesResult.places.slice(0, PREVIEW_PLACE_LIMIT);
+      if (top.length === 0) {
+        setCards([]);
+        return;
+      }
+      setCards(top.map((place) => ({ place, insights: [] })));
+      setLoading(false);
       const withInsights = await Promise.all(
         top.map(async (place) => {
           try {
@@ -108,11 +135,14 @@ export function DiscoverFeed() {
           }
         }),
       );
+      if (id !== loadId.current) return;
       setCards(withInsights);
     } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : "Could not load discoveries.");
+      setMessage(
+        caught instanceof Error ? caught.message : "Could not load discoveries.",
+      );
     } finally {
-      setBusy(false);
+      if (id === loadId.current) setLoading(false);
     }
   }, [spatial.location, spatial.ready, spatial.usingDevice, user]);
 
@@ -120,9 +150,25 @@ export function DiscoverFeed() {
     void load();
   }, [load]);
 
+  async function useMyLocation() {
+    setLocating(true);
+    setMessage(null);
+    try {
+      await spatial.requestDeviceLocation();
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error
+          ? caught.message
+          : "Could not read your location.",
+      );
+    } finally {
+      setLocating(false);
+    }
+  }
+
   async function checkSpot() {
     if (!user) return;
-    setBusy(true);
+    setChecking(true);
     setMessage(null);
     let sessionId: string | null = null;
     try {
@@ -196,10 +242,12 @@ export function DiscoverFeed() {
       spatial.setLocation(locationReading.value);
       spatial.setUsingDevice(true);
       spatial.setLabel("Around you");
-      setMessage("Reading saved. Discoveries will update when enough signals exist.");
+      setMessage("Reading saved.");
       await load();
     } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : "Could not check this spot.");
+      setMessage(
+        caught instanceof Error ? caught.message : "Could not check this spot.",
+      );
     } finally {
       if (sessionId) {
         try {
@@ -209,7 +257,7 @@ export function DiscoverFeed() {
           // Contribution already stored.
         }
       }
-      setBusy(false);
+      setChecking(false);
     }
   }
 
@@ -217,109 +265,124 @@ export function DiscoverFeed() {
     () => milesLabel(DEFAULT_PLACE_RADIUS_METERS),
     [],
   );
-
-  const atmosphere = snapshot?.aggregates.find((row) => row.type === "sound_dbfs");
+  const atmosphere = snapshot?.aggregates.find(
+    (row) => row.type === "sound_dbfs",
+  );
+  const exampleMode = !spatial.usingDevice;
+  const liveLine = atmosphere
+    ? atmosphere.classification
+    : areaActivity
+      ? areaActivity.label
+      : null;
 
   return (
-    <div className="app-shell mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-5 pb-24 pt-20">
-      <header className="mb-8 space-y-2">
-        <p className="text-sm text-muted">
-          Discover around you · {radiusLabel}
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight text-ink">
-          Your local intelligence
-        </h1>
-        <p className="max-w-xl text-base leading-relaxed text-muted">
-          Find places to work, socialize, relax, or explore from real
-          observations—not a business directory.
-        </p>
-        <p className="text-sm text-muted">
-          {spatial.label}
-          {mode === "demo" ? " · Example data" : ""}
-          {busy ? " · Loading…" : ""}
-        </p>
+    <div className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col bg-white px-5 pb-24 pt-20">
+      <header className="space-y-4">
+        <div className="space-y-2">
+          <p className="text-sm text-muted">
+            Discover · {radiusLabel}
+            {loading ? " · Loading…" : ""}
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight text-ink">
+            What&apos;s nearby
+          </h1>
+          <p className="max-w-lg text-base leading-relaxed text-muted">
+            Find places around you. Live calm or busy readings show up only when
+            enough people opt in.
+          </p>
+        </div>
+
+        {exampleMode ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted">
+              Showing a Washington, DC sample area.
+            </p>
+            <button
+              type="button"
+              disabled={locating || loading}
+              onClick={() => void useMyLocation()}
+              className="bg-ink px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {locating ? "Getting location…" : "Use my location"}
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted">Around you</p>
+        )}
       </header>
 
-      <main className="flex-1 space-y-10">
-        <section className="space-y-3 border-t border-ink/10 pt-6">
-          <h2 className="text-sm font-medium text-muted">Area atmosphere</h2>
-          {atmosphere ? (
-            <div>
-              <p className="text-2xl font-semibold capitalize text-ink">
-                {atmosphere.classification}
+      <main className="mt-10 flex-1 space-y-10">
+        {(liveLine || !loading) && (
+          <section className="space-y-2 border-t border-ink/10 pt-6">
+            <h2 className="text-sm font-medium text-muted">Right now</h2>
+            {liveLine ? (
+              <>
+                <p className="text-2xl font-semibold capitalize text-ink">
+                  {liveLine}
+                </p>
+                {atmosphere ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <TrustBadge
+                      label={trustFromProvenance(atmosphere.provenance)}
+                    />
+                    <span className="text-sm text-muted">
+                      Updated {freshness(atmosphere.lastUpdatedAt)}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">
+                    Estimated from consenting devices—not a crowd count.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm leading-relaxed text-muted">
+                No live readings for this area yet. You can still browse places
+                below.
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <TrustBadge label={trustFromProvenance(atmosphere.provenance)} />
-                <span className="text-sm text-muted">
-                  Updated {freshness(atmosphere.lastUpdatedAt)}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <TrustBadge label="unavailable" showHint />
-            </div>
-          )}
-        </section>
-
-        <section className="space-y-3 border-t border-ink/10 pt-6">
-          <h2 className="text-sm font-medium text-muted">Area activity</h2>
-          <p className="text-2xl font-semibold text-ink">
-            {areaActivity?.label ?? "Insufficient observation coverage."}
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <TrustBadge
-              label={
-                areaActivity && areaActivity.value !== "insufficient"
-                  ? "estimated"
-                  : "unavailable"
-              }
-              showHint
-            />
-            {areaActivity ? (
-              <span className="text-sm text-muted">
-                Updated {freshness(Date.parse(areaActivity.generatedAt))} ·{" "}
-                {expiresIn(areaActivity.expiresAt)}
-              </span>
-            ) : null}
-          </div>
-          <p className="text-sm text-muted">
-            Source: consenting devices. Participating-device activity is not an
-            occupancy count.
-            {areaChecked && !areaActivity
-              ? " No current evidence-backed trend for this area."
-              : ""}
-          </p>
-        </section>
+            )}
+          </section>
+        )}
 
         <section className="space-y-4 border-t border-ink/10 pt-6">
-          <h2 className="text-lg font-semibold text-ink">Nearby discoveries</h2>
+          <h2 className="text-lg font-semibold text-ink">Places</h2>
+
+          {loading ? (
+            <p className="text-sm text-muted">Loading places…</p>
+          ) : null}
 
           {placesUnavailable ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                Couldn&apos;t load places. Try again.
+              </p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void load()}
+                className="border border-ink/15 px-4 py-2 text-sm font-semibold text-ink disabled:opacity-50"
+              >
+                Retry
+              </button>
+            </div>
+          ) : null}
+
+          {!loading && !placesUnavailable && !cards.length ? (
             <p className="text-sm text-muted">
-              Place discovery is temporarily unavailable. Atmosphere readings can
-              still work.
+              No named places this close yet.
+              {exampleMode ? " Try Use my location." : " Search a neighborhood in Explore."}
             </p>
           ) : null}
 
-          {!busy && !placesUnavailable && !cards.length ? (
-            <p className="text-sm text-muted">
-              No nearby places loaded yet. Check this spot once location is on.
-            </p>
-          ) : null}
-
-          <ul className="space-y-4">
+          <ul className="divide-y divide-ink/10 border-t border-ink/10">
             {cards.map(({ place, insights }) => {
               const intent = intentForPlaceCategory(place.category);
               const top = insights[0] ?? null;
-              const trust = top
-                ? trustFromVerification(top.verificationStatus)
-                : ("unavailable" as const);
               return (
                 <li key={place.id}>
                   <Link
                     href={`/places/${encodeURIComponent(place.id)}`}
-                    className="block border border-ink/10 px-4 py-4 hover:border-ink/30"
+                    className="block py-4 hover:bg-surface/60"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -336,14 +399,18 @@ export function DiscoverFeed() {
                           : `${(place.distanceMeters / 1000).toFixed(1)} km`}
                       </p>
                     </div>
-                    <p className="mt-2 text-sm text-ink">
+                    <p className="mt-2 text-sm text-muted">
                       {top
                         ? top.text
-                        : "No verified observations yet for this place."}
+                        : "No live notes yet for this place."}
                     </p>
-                    <div className="mt-3">
-                      <TrustBadge label={trust} />
-                    </div>
+                    {top ? (
+                      <div className="mt-2">
+                        <TrustBadge
+                          label={trustFromVerification(top.verificationStatus)}
+                        />
+                      </div>
+                    ) : null}
                   </Link>
                 </li>
               );
@@ -352,18 +419,20 @@ export function DiscoverFeed() {
         </section>
 
         <section className="space-y-3 border-t border-ink/10 pt-6">
-          <h2 className="text-sm font-medium text-muted">Contribute</h2>
+          <h2 className="text-sm font-medium text-muted">Optional check-in</h2>
           <p className="text-sm leading-relaxed text-muted">
-            Optional. A short foreground reading helps fill gaps. Nearby Hello
-            never stores room audio.
+            Share a short reading while you&apos;re here. Audio is never stored.{" "}
+            <Link href="/settings" className="font-medium text-teal">
+              Settings
+            </Link>
           </p>
           <button
             type="button"
-            disabled={busy}
+            disabled={checking || locating}
             onClick={() => void checkSpot()}
-            className="bg-ink px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            className="border border-ink/15 px-4 py-2.5 text-sm font-semibold text-ink disabled:opacity-50"
           >
-            {busy ? "Working…" : "Check this spot"}
+            {checking ? "Checking…" : "Check this spot"}
           </button>
           {message ? <p className="text-sm text-muted">{message}</p> : null}
         </section>

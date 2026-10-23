@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Link } from "expo-router";
+import { friendlyAuthError } from "@nearby/shared";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
@@ -28,9 +29,7 @@ export default function ForgotPasswordScreen() {
       await resetPassword(email.trim());
       setSent(true);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not send reset email",
-      );
+      setError(friendlyAuthError(err, "Could not send reset email"));
     } finally {
       setSubmitting(false);
     }

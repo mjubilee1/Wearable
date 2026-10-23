@@ -17,13 +17,17 @@ import { getFirebaseAdmin, isFirebaseConfigured } from "./firebase.js";
 const OSM_ATTRIBUTION = "© OpenStreetMap contributors";
 const OSM_LICENSE = "Open Database License (ODbL)";
 const DEFAULT_OVERPASS_URLS = [
-  "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
 ];
 const DEFAULT_NOMINATIM_URL = "https://nominatim.openstreetmap.org";
-const CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
-const STALE_CACHE_MS = 7 * 24 * 60 * 60 * 1_000;
+const DEFAULT_PHOTON_URL = "https://photon.komoot.io/reverse";
+const CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
+const STALE_CACHE_MS = 30 * 24 * 60 * 60 * 1_000;
+const EMPTY_CACHE_TTL_MS = 60_000;
+const PREVIEW_TIMEOUT_MS = 2_500;
+const PREVIEW_FETCH_LIMIT = 20;
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 30;
 
@@ -50,6 +54,9 @@ const memoryPlaces = new Map<string, SpatialPlace>();
 const memoryCache = new Map<string, PlaceCache>();
 const searchCache = new Map<string, { expiresAt: number; results: PlaceSearchResult[] }>();
 const rateCounters = new Map<string, { count: number; resetAt: number }>();
+const previewFlights = new Map<string, Promise<SpatialPlace[]>>();
+const refreshing = new Set<string>();
+let cacheGeneration = 0;
 export const placeIngestionMetrics = {
   providerRequests: 0,
   providerFailures: 0,
@@ -292,26 +299,50 @@ export function deduplicatePlaces(places: SpatialPlace[]): SpatialPlace[] {
   return [...byProviderId.values()];
 }
 
-function overpassQuery(center: GeoPoint, radiusMeters: number): string {
+function overpassEndpoints(): string[] {
+  return (
+    process.env.OVERPASS_API_URLS ??
+    process.env.OVERPASS_API_URL ??
+    DEFAULT_OVERPASS_URLS.join(",")
+  )
+    .split(",")
+    .map((url) => url.trim())
+    .filter(Boolean);
+}
+
+/** Named nodes only, capped, so the first screen does not wait on a full area extract. */
+function previewQuery(center: GeoPoint, radiusMeters: number): string {
   const around = `${Math.round(radiusMeters)},${center.latitude},${center.longitude}`;
-  return `[out:json][timeout:20];
-    nwr(around:${around})["name"][~"^(amenity|shop|tourism|leisure|public_transport|office)$"~"."];
-    out center meta qt;`;
+  return `[out:json][timeout:2];
+(
+  node(around:${around})["name"]["amenity"];
+  node(around:${around})["name"]["shop"];
+  node(around:${around})["name"]["tourism"];
+  node(around:${around})["name"]["leisure"];
+);
+out qt ${PREVIEW_FETCH_LIMIT};`;
+}
+
+function cacheTtlMs(): number {
+  return Number(process.env.PLACES_CACHE_TTL_MS ?? CACHE_TTL_MS);
+}
+
+function staleWindowMs(): number {
+  return Number(process.env.PLACES_STALE_CACHE_MS ?? STALE_CACHE_MS);
 }
 
 async function providerFetch(
   url: string,
   init: RequestInit,
   attempts = 3,
+  timeoutMs = Number(process.env.PLACES_PROVIDER_TIMEOUT_MS ?? 8_000),
 ): Promise<Response> {
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const response = await fetch(url, {
         ...init,
-        signal: AbortSignal.timeout(
-          Number(process.env.PLACES_PROVIDER_TIMEOUT_MS ?? 8_000),
-        ),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (response.ok) return response;
       if (response.status !== 429 && response.status < 500) {
@@ -342,25 +373,123 @@ async function providerFetch(
   );
 }
 
-export async function fetchOverpassPlaces(
+type PhotonFeature = {
+  geometry?: { coordinates?: number[] };
+  properties?: {
+    name?: string;
+    osm_type?: string;
+    osm_id?: number;
+    osm_key?: string;
+    osm_value?: string;
+    housenumber?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    postcode?: string;
+  };
+};
+
+const PHOTON_OSM_TYPES: Record<string, "node" | "way" | "relation"> = {
+  N: "node",
+  W: "way",
+  R: "relation",
+};
+
+function photonRequestUrl(center: GeoPoint): string {
+  const url = new URL(process.env.PHOTON_REVERSE_URL ?? DEFAULT_PHOTON_URL);
+  url.searchParams.set("lat", String(center.latitude));
+  url.searchParams.set("lon", String(center.longitude));
+  url.searchParams.set("limit", String(PREVIEW_FETCH_LIMIT));
+  for (const tag of ["amenity", "shop", "tourism", "leisure"]) {
+    url.searchParams.append("osm_tag", tag);
+  }
+  return url.toString();
+}
+
+function placesFromPhoton(payload: { features?: PhotonFeature[] }): SpatialPlace[] {
+  const syncedAt = new Date().toISOString();
+  const places: SpatialPlace[] = [];
+  for (const feature of payload.features ?? []) {
+    const props = feature.properties ?? {};
+    const kind = PHOTON_OSM_TYPES[props.osm_type ?? ""];
+    const longitude = finiteNumber(feature.geometry?.coordinates?.[0]);
+    const latitude = finiteNumber(feature.geometry?.coordinates?.[1]);
+    const name = props.name?.trim();
+    const key = props.osm_key ?? "";
+    if (
+      !name ||
+      !kind ||
+      !Number.isFinite(props.osm_id) ||
+      !["amenity", "shop", "tourism", "leisure"].includes(key) ||
+      !isGeoPoint({ latitude, longitude })
+    ) {
+      continue;
+    }
+    const providerPlaceId = `${kind}/${props.osm_id}`;
+    const street = [props.housenumber, props.street].filter(Boolean).join(" ");
+    const locality = [props.city, props.state, props.postcode]
+      .filter(Boolean)
+      .join(", ");
+    const address = [street, locality].filter(Boolean).join(", ");
+    places.push({
+      id: `osm_${kind}_${props.osm_id}`,
+      zoneId: assignSpatialZone({
+        latitude: latitude as number,
+        longitude: longitude as number,
+      }).id,
+      name,
+      category: (props.osm_value || "place").toLowerCase(),
+      latitude: latitude as number,
+      longitude: longitude as number,
+      ...(address ? { address } : {}),
+      provider: "openstreetmap",
+      providerPlaceId,
+      externalIds: { openstreetmap: providerPlaceId },
+      attributes: {},
+      sources: [
+        {
+          provider: "openstreetmap",
+          providerPlaceId,
+          attribution: OSM_ATTRIBUTION,
+          license: OSM_LICENSE,
+          sourceUpdatedAt: null,
+        },
+      ],
+      lastSyncedAt: syncedAt,
+    });
+  }
+  const unique = deduplicatePlaces(places);
+  placeIngestionMetrics.normalizedPlaces += unique.length;
+  return unique;
+}
+
+function placesFromPayload(payload: {
+  elements?: OverpassElement[];
+}): SpatialPlace[] {
+  const syncedAt = new Date().toISOString();
+  const places = deduplicatePlaces(
+    (payload.elements ?? [])
+      .map((element) => normalizeOverpassElement(element, syncedAt))
+      .filter((place): place is SpatialPlace => Boolean(place)),
+  );
+  placeIngestionMetrics.normalizedPlaces += places.length;
+  return places;
+}
+
+async function queryOverpass(
   center: GeoPoint,
   radiusMeters: number,
 ): Promise<SpatialPlace[]> {
-  const endpoints = (
-    process.env.OVERPASS_API_URLS ??
-    process.env.OVERPASS_API_URL ??
-    DEFAULT_OVERPASS_URLS.join(",")
-  )
-    .split(",")
-    .map((url) => url.trim())
-    .filter(Boolean);
-  let response: Response | null = null;
+  const endpoints = overpassEndpoints().slice(0, 2);
+  const timeoutMs = Number(
+    process.env.PLACES_PREVIEW_TIMEOUT_MS ?? PREVIEW_TIMEOUT_MS,
+  );
   let lastError: unknown;
-  for (let index = 0; index < endpoints.length; index += 1) {
+  for (const url of endpoints) {
     placeIngestionMetrics.providerRequests += 1;
     try {
-      response = await providerFetch(
-        endpoints[index],
+      const response = await providerFetch(
+        url,
         {
           method: "POST",
           headers: {
@@ -370,45 +499,109 @@ export async function fetchOverpassPlaces(
               "NearbyHello/0.1 (nearbyhello.com)",
           },
           body: new URLSearchParams({
-            data: overpassQuery(
+            data: previewQuery(
               center,
               Math.min(MAX_PLACE_RADIUS_METERS, radiusMeters),
             ),
           }),
         },
         1,
+        timeoutMs,
       );
-      lastError = null;
-      break;
+      return placesFromPayload(
+        (await response.json()) as { elements?: OverpassElement[] },
+      );
     } catch (error) {
       lastError = error;
-      if (index < endpoints.length - 1) {
-        const base = Number(process.env.PLACES_RETRY_BASE_MS ?? 250);
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.max(0, base) * 2 ** index),
-        );
-      }
     }
   }
-  if (lastError || !response) {
+  placeIngestionMetrics.providerFailures += 1;
+  throw lastError instanceof Error
+    ? lastError
+    : new PlaceError(
+        "Place provider unavailable.",
+        503,
+        "provider_unavailable",
+      );
+}
+
+async function queryPlaces(center: GeoPoint): Promise<SpatialPlace[]> {
+  const timeoutMs = Number(
+    process.env.PLACES_PREVIEW_TIMEOUT_MS ?? PREVIEW_TIMEOUT_MS,
+  );
+  placeIngestionMetrics.providerRequests += 1;
+  try {
+    const response = await providerFetch(
+      photonRequestUrl(center),
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent":
+            process.env.OSM_USER_AGENT ??
+            "NearbyHello/0.1 (nearbyhello.com)",
+        },
+      },
+      1,
+      timeoutMs,
+    );
+    const payload = (await response.json()) as {
+      elements?: OverpassElement[];
+      features?: PhotonFeature[];
+    };
+    if (Array.isArray(payload.elements)) return placesFromPayload(payload);
+    return placesFromPhoton(payload);
+  } catch (error) {
     placeIngestionMetrics.providerFailures += 1;
-    throw lastError instanceof Error
-      ? lastError
+    throw error instanceof Error
+      ? error
       : new PlaceError(
           "Place provider unavailable.",
           503,
           "provider_unavailable",
         );
   }
-  const payload = (await response.json()) as { elements?: OverpassElement[] };
-  const syncedAt = new Date().toISOString();
-  const places = deduplicatePlaces(
-    (payload.elements ?? [])
-      .map((element) => normalizeOverpassElement(element, syncedAt))
-      .filter((place): place is SpatialPlace => Boolean(place)),
-  );
-  placeIngestionMetrics.normalizedPlaces += places.length;
-  return places;
+}
+
+export async function fetchOverpassPlaces(
+  center: GeoPoint,
+  radiusMeters: number,
+): Promise<SpatialPlace[]> {
+  try {
+    const first = await queryPlaces(center);
+    if (first.length > 0) return first;
+  } catch (error) {
+    try {
+      return await queryOverpass(
+        center,
+        Math.min(MAX_PLACE_RADIUS_METERS, Math.max(radiusMeters, 1_200)),
+      );
+    } catch {
+      throw error;
+    }
+  }
+  try {
+    return await queryPlaces(center);
+  } catch {
+    return [];
+  }
+}
+
+function previewFlight(
+  center: GeoPoint,
+  radiusMeters: number,
+): Promise<SpatialPlace[]> {
+  const key = [
+    center.latitude.toFixed(3),
+    center.longitude.toFixed(3),
+    radiusMeters,
+  ].join(":");
+  const existing = previewFlights.get(key);
+  if (existing) return existing;
+  const flight = fetchOverpassPlaces(center, radiusMeters).finally(() => {
+    previewFlights.delete(key);
+  });
+  previewFlights.set(key, flight);
+  return flight;
 }
 
 function cacheKey(
@@ -440,7 +633,9 @@ function normalizeStoredPlace(value: unknown): SpatialPlace | null {
 }
 
 async function readCache(key: string): Promise<PlaceCache | null> {
-  if (!isFirebaseConfigured()) return memoryCache.get(key) ?? null;
+  const memory = memoryCache.get(key);
+  if (memory) return memory;
+  if (!isFirebaseConfigured()) return null;
   const snapshot = await getFirebaseAdmin()
     .firestore()
     .collection("spatialPlaceLookups")
@@ -467,24 +662,24 @@ async function readCache(key: string): Promise<PlaceCache | null> {
 
 async function persistPlaces(key: string, cache: PlaceCache): Promise<void> {
   placeIngestionMetrics.upsertedPlaces += cache.places.length;
-  if (!isFirebaseConfigured()) {
-    memoryCache.set(key, cache);
-    for (const place of cache.places) memoryPlaces.set(place.id, place);
-    return;
-  }
+  memoryCache.set(key, cache);
+  for (const place of cache.places) memoryPlaces.set(place.id, place);
+  if (!isFirebaseConfigured()) return;
   const db = getFirebaseAdmin().firestore();
-  await Promise.all([
-    db
-      .collection("spatialPlaceLookups")
-      .doc(key)
-      .set(cache as unknown as Record<string, unknown>),
-    ...cache.places.map((place) =>
+  await db
+    .collection("spatialPlaceLookups")
+    .doc(key)
+    .set(cache as unknown as Record<string, unknown>);
+  void Promise.all(
+    cache.places.map((place) =>
       db
         .collection("spatialPlaces")
         .doc(place.id)
         .set(place as unknown as Record<string, unknown>, { merge: true }),
     ),
-  ]);
+  ).catch(() => {
+    // The lookup cache already answers the next request.
+  });
 }
 
 export async function getSpatialPlaceById(
@@ -579,6 +774,83 @@ function pagePlaces(
   return { places: sorted.slice(start, start + pageSize), total: sorted.length };
 }
 
+function rememberedNear(center: GeoPoint, radiusMeters: number): SpatialPlace[] {
+  const radius = Math.min(MAX_PLACE_RADIUS_METERS, Math.max(radiusMeters, 2_500));
+  return [...memoryPlaces.values()].filter(
+    (place) => distanceMeters(center, place) <= radius,
+  );
+}
+
+function toResponse(
+  places: SpatialPlace[],
+  query: ReturnType<typeof parseNearbyPlaceQuery>,
+  fetchedAt: number,
+  cacheStatus: "fresh" | "stale",
+): NearbyPlacesResponse {
+  let radiusMeters = query.radiusMeters;
+  let result = pagePlaces(
+    places,
+    query.center,
+    radiusMeters,
+    query.category,
+    query.page,
+    query.pageSize,
+  );
+  if (result.total === 0 && places.length > 0 && !query.category) {
+    radiusMeters = MAX_PLACE_RADIUS_METERS;
+    result = pagePlaces(
+      places,
+      query.center,
+      radiusMeters,
+      null,
+      query.page,
+      query.pageSize,
+    );
+  }
+  return {
+    ...result,
+    page: query.page,
+    pageSize: query.pageSize,
+    radiusMeters,
+    center: query.center,
+    attribution: OSM_ATTRIBUTION,
+    fetchedAt: new Date(fetchedAt).toISOString(),
+    cacheStatus,
+  };
+}
+
+function scheduleRefresh(
+  key: string,
+  query: ReturnType<typeof parseNearbyPlaceQuery>,
+): void {
+  if (refreshing.has(key)) return;
+  refreshing.add(key);
+  const generation = cacheGeneration;
+  const radiusMeters = Math.min(
+    MAX_PLACE_RADIUS_METERS,
+    query.radiusMeters + 250,
+  );
+  void (async () => {
+    try {
+      const places = await previewFlight(query.center, radiusMeters);
+      if (generation !== cacheGeneration || places.length === 0) return;
+      const now = Date.now();
+      await persistPlaces(key, {
+        center: query.center,
+        radiusMeters: query.radiusMeters,
+        category: null,
+        places,
+        fetchedAt: now,
+        expiresAt: now + cacheTtlMs(),
+      });
+    } catch {
+      // Keep the places already on screen.
+    } finally {
+      refreshing.delete(key);
+    }
+  })();
+}
+
 export async function nearbyPlaces(
   userId: string,
   query: ReturnType<typeof parseNearbyPlaceQuery>,
@@ -587,49 +859,66 @@ export async function nearbyPlaces(
   if (!options.skipRateLimit) await enforceRateLimit(userId);
   const key = cacheKey(query.center, query.radiusMeters);
   const now = Date.now();
-  let cached = await readCache(key);
-  let cacheStatus: "fresh" | "stale" = "fresh";
-  if (!cached || cached.expiresAt <= now) {
-    try {
-      const places = await fetchOverpassPlaces(
-        query.center,
-        Math.min(MAX_PLACE_RADIUS_METERS, query.radiusMeters + 250),
-      );
-      cached = {
-        center: query.center,
-        radiusMeters: query.radiusMeters,
-        category: query.category,
-        places,
-        fetchedAt: now,
-        expiresAt:
-          now + Number(process.env.PLACES_CACHE_TTL_MS ?? CACHE_TTL_MS),
-      };
-      await persistPlaces(key, cached);
-    } catch (error) {
-      if (!cached || now - cached.fetchedAt > STALE_CACHE_MS) throw error;
-      cacheStatus = "stale";
-    }
-  } else {
-    placeIngestionMetrics.cacheHits += 1;
+  const cached = await readCache(key);
+  if (cached && cached.expiresAt > now) {
+    if (cached.places.length > 0) placeIngestionMetrics.cacheHits += 1;
+    return toResponse(cached.places, query, cached.fetchedAt, "fresh");
   }
-  const result = pagePlaces(
-    cached.places,
-    query.center,
-    query.radiusMeters,
-    query.category,
-    query.page,
-    query.pageSize,
+  if (
+    cached &&
+    cached.places.length > 0 &&
+    now - cached.fetchedAt <= staleWindowMs()
+  ) {
+    scheduleRefresh(key, query);
+    return toResponse(cached.places, query, cached.fetchedAt, "fresh");
+  }
+  const remembered = rememberedNear(query.center, query.radiusMeters);
+  if (remembered.length > 0) {
+    scheduleRefresh(key, query);
+    return toResponse(remembered, query, now, "fresh");
+  }
+  const radiusMeters = Math.min(
+    MAX_PLACE_RADIUS_METERS,
+    query.radiusMeters + 250,
   );
-  return {
-    ...result,
-    page: query.page,
-    pageSize: query.pageSize,
-    radiusMeters: query.radiusMeters,
-    center: query.center,
-    attribution: OSM_ATTRIBUTION,
-    fetchedAt: new Date(cached.fetchedAt).toISOString(),
-    cacheStatus,
-  };
+  try {
+    const places = await previewFlight(query.center, radiusMeters);
+    const stored: PlaceCache = {
+      center: query.center,
+      radiusMeters: query.radiusMeters,
+      category: query.category,
+      places,
+      fetchedAt: now,
+      expiresAt: now + (places.length > 0 ? cacheTtlMs() : EMPTY_CACHE_TTL_MS),
+    };
+    await persistPlaces(key, stored);
+    if (places.length === 0) {
+      const nearby = await cachedPlacesNear(
+        query.center,
+        Math.min(MAX_PLACE_RADIUS_METERS, 2_500),
+      );
+      if (nearby.length > 0) {
+        return toResponse(nearby, query, now, "stale");
+      }
+    }
+    return toResponse(places, query, now, "fresh");
+  } catch (error) {
+    if (cached && cached.places.length > 0) {
+      return toResponse(cached.places, query, cached.fetchedAt, "stale");
+    }
+    try {
+      const nearby = await cachedPlacesNear(
+        query.center,
+        Math.min(MAX_PLACE_RADIUS_METERS, 2_500),
+      );
+      if (nearby.length > 0) {
+        return toResponse(nearby, query, now, "stale");
+      }
+    } catch {
+      // Fall through to the provider error.
+    }
+    throw error;
+  }
 }
 
 export async function searchLocations(
@@ -701,10 +990,13 @@ export async function syncConfiguredPilotPlaces(): Promise<number> {
 }
 
 export function resetPlacesForTest(): void {
+  cacheGeneration += 1;
   memoryPlaces.clear();
   memoryCache.clear();
   searchCache.clear();
   rateCounters.clear();
+  previewFlights.clear();
+  refreshing.clear();
   placeIngestionMetrics.providerRequests = 0;
   placeIngestionMetrics.providerFailures = 0;
   placeIngestionMetrics.cacheHits = 0;

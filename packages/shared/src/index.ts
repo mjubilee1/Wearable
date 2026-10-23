@@ -219,6 +219,7 @@ export * from "./spatial.js";
 export * from "./spatial-intelligence.js";
 export * from "./discovery.js";
 export * from "./observation-network.js";
+export * from "./auth-errors.js";
 
 export {
   applyNationalPhoneInput,

@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Link, useRouter } from "expo-router";
+import { friendlyAuthError } from "@nearby/shared";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
@@ -29,7 +30,7 @@ export default function LoginScreen() {
       await signIn(email.trim(), password);
       router.replace("/(tabs)/nearby");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not sign in");
+      setError(friendlyAuthError(err, "Could not sign in"));
     } finally {
       setSubmitting(false);
     }

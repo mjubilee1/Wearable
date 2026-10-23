@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   DEFAULT_PLACE_RADIUS_METERS,
+  PREVIEW_PLACE_LIMIT,
   intentForPlaceCategory,
   intentTitle,
+  placesFromStoredPreview,
   type NearbySpatialPlace,
   type PlaceSearchResult,
+  type StoredPlacePreview,
 } from "@nearby/shared";
 import { TabBar } from "@/components/TabBar";
 import { useAuth } from "@/lib/auth-context";
@@ -35,6 +38,41 @@ function project(
   };
 }
 
+const PREVIEW_KEY = "nearby.explore.preview";
+
+function readPreview(location: { latitude: number; longitude: number }) {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = sessionStorage.getItem(PREVIEW_KEY);
+    if (!raw) return [];
+    return (
+      placesFromStoredPreview(JSON.parse(raw) as StoredPlacePreview, location) ??
+      []
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writePreview(
+  location: { latitude: number; longitude: number },
+  places: NearbySpatialPlace[],
+) {
+  if (typeof window === "undefined" || places.length === 0) return;
+  const stored: StoredPlacePreview = {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    places: places.slice(0, PREVIEW_PLACE_LIMIT),
+    savedAt: Date.now(),
+  };
+  sessionStorage.setItem(PREVIEW_KEY, JSON.stringify(stored));
+}
+
+function distanceLabel(meters: number): string {
+  if (meters < 1_000) return `${meters} m`;
+  return `${(meters / 1_000).toFixed(1)} km`;
+}
+
 export function ExploreMap() {
   const { user } = useAuth();
   const spatial = useSpatialLocation();
@@ -44,32 +82,56 @@ export function ExploreMap() {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<PlaceSearchResult[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const placesRef = useRef<NearbySpatialPlace[]>([]);
+  const requestId = useRef(0);
+  placesRef.current = places;
 
   const load = useCallback(async () => {
     if (!user || !spatial.ready) return;
+    const id = ++requestId.current;
     setBusy(true);
     setMessage(null);
     try {
       const token = await user.getIdToken();
       const response = await getNearbyPlaces(token, spatial.location, {
         radiusMeters: DEFAULT_PLACE_RADIUS_METERS,
-        limit: 40,
+        limit: PREVIEW_PLACE_LIMIT,
       });
-      setPlaces(response.places);
-      if (response.cacheStatus === "stale") {
-        setMessage("Showing saved places while the map service is down.");
+      if (id !== requestId.current) return;
+      const next = response.places.slice(0, PREVIEW_PLACE_LIMIT);
+      if (next.length > 0) {
+        setPlaces(next);
+        writePreview(spatial.location, next);
+        if (response.cacheStatus === "stale") {
+          setMessage("Showing saved places while the map service is down.");
+        }
+      } else if (placesRef.current.length === 0) {
+        setMessage(
+          "No named places are mapped this close. Search a neighborhood above.",
+        );
+      } else {
+        setMessage("Showing the last places we found.");
       }
     } catch (caught) {
-      setPlaces([]);
-      setMessage(
-        caught instanceof Error
-          ? caught.message
-          : "Could not load nearby places.",
-      );
+      if (id !== requestId.current) return;
+      if (placesRef.current.length === 0) {
+        setMessage(
+          caught instanceof Error
+            ? caught.message
+            : "Could not load nearby places.",
+        );
+      } else {
+        setMessage("Showing the last places we found.");
+      }
     } finally {
-      setBusy(false);
+      if (id === requestId.current) setBusy(false);
     }
   }, [spatial.location, spatial.ready, user]);
+
+  useEffect(() => {
+    if (!spatial.ready) return;
+    setPlaces(readPreview(spatial.location));
+  }, [spatial.ready, spatial.location.latitude, spatial.location.longitude]);
 
   useEffect(() => {
     void load();
@@ -88,13 +150,21 @@ export function ExploreMap() {
     }
   }
 
+  const mapRadius = useMemo(() => {
+    const farthest = places.reduce(
+      (max, place) => Math.max(max, place.distanceMeters),
+      0,
+    );
+    return Math.max(DEFAULT_PLACE_RADIUS_METERS, Math.round(farthest * 1.15));
+  }, [places]);
+
   const pins = useMemo(
     () =>
       places.map((place) => ({
         place,
-        point: project(place, spatial.location, DEFAULT_PLACE_RADIUS_METERS),
+        point: project(place, spatial.location, mapRadius),
       })),
-    [places, spatial.location],
+    [mapRadius, places, spatial.location],
   );
 
   const selected = places.find((place) => place.id === selectedId) ?? null;
@@ -111,7 +181,11 @@ export function ExploreMap() {
         </p>
         <p className="text-sm text-muted">
           {spatial.label}
-          {busy ? " · Loading…" : ` · ${places.length} places`}
+          {busy && places.length === 0
+            ? " · Finding places…"
+            : places.length > 0
+              ? ` · ${places.length} ${places.length === 1 ? "place" : "places"}`
+              : " · No places this close"}
         </p>
       </header>
 
@@ -163,6 +237,41 @@ export function ExploreMap() {
             </button>
           ))}
         </div>
+      ) : null}
+
+      {places.length > 0 ? (
+        <ul className="mb-4 divide-y divide-ink/10 border border-ink/10">
+          {places.map((place) => {
+            const active = place.id === selectedId;
+            return (
+              <li key={place.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(place.id)}
+                  className={
+                    active
+                      ? "flex w-full items-baseline justify-between gap-3 bg-surface px-3 py-3 text-left"
+                      : "flex w-full items-baseline justify-between gap-3 px-3 py-3 text-left hover:bg-surface"
+                  }
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-ink">
+                      {place.name}
+                    </span>
+                    <span className="mt-0.5 block text-sm capitalize text-muted">
+                      {place.category.replaceAll("_", " ")}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-sm text-muted">
+                    {distanceLabel(place.distanceMeters)}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : busy ? (
+        <p className="mb-4 text-sm text-muted">Finding a few places near you…</p>
       ) : null}
 
       <section

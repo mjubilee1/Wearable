@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { Link } from "expo-router";
-import { isEmailLikeName } from "@nearby/shared";
+import { friendlyAuthError, isEmailLikeName } from "@nearby/shared";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { colors } from "@/lib/theme";
@@ -39,7 +39,7 @@ export default function SignupScreen() {
         name: trimmed,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create account");
+      setError(friendlyAuthError(err, "Could not create account"));
     } finally {
       setSubmitting(false);
     }

@@ -22,7 +22,7 @@ export default function ProfilePage() {
 
   if (!profile) {
     return (
-      <div className="app-shell mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5 pb-16 pt-20">
+      <div className="app-shell mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-5 pb-16 pt-20">
         <main className="flex flex-1 items-center justify-center">
           <p className="text-sm text-muted">Loading…</p>
         </main>
@@ -57,24 +57,18 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="app-shell mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5 pb-16 pt-20">
+    <div className="app-shell mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-5 pb-16 pt-20">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight text-ink">
           Profile
         </h1>
+        <p className="mt-1 text-sm text-muted">
+          Your name and email for this account.
+        </p>
       </header>
 
-      <main className="max-w-xl flex-1">
-        <div className="mb-8 space-y-3 text-sm">
-          <Link href="/nearby" className="block text-ink hover:underline">
-            Nearby
-          </Link>
-          <Link href="/settings" className="block text-ink hover:underline">
-            Settings
-          </Link>
-        </div>
-
-        <form onSubmit={onSave} className="space-y-4">
+      <main className="flex max-w-md flex-1 flex-col">
+        <form onSubmit={onSave} className="space-y-5">
           <label className="block space-y-1.5">
             <span className="text-sm text-muted">First name</span>
             <input
@@ -89,11 +83,13 @@ export default function ProfilePage() {
 
           <div className="space-y-1.5">
             <p className="text-sm text-muted">Email</p>
-            <p className="text-sm text-ink">{profile.email}</p>
+            <p className="border border-ink/10 bg-surface px-3 py-2.5 text-sm text-ink">
+              {profile.email}
+            </p>
           </div>
 
-          {error ? <p className="text-sm text-muted">{error}</p> : null}
-          {message ? <p className="text-sm text-muted">{message}</p> : null}
+          {error ? <p className="text-sm text-coral">{error}</p> : null}
+          {message ? <p className="text-sm text-teal">{message}</p> : null}
 
           <button
             type="submit"
@@ -104,10 +100,27 @@ export default function ProfilePage() {
           </button>
         </form>
 
+        <div className="mt-10 border-t border-ink/10 pt-6">
+          <Link
+            href="/settings"
+            className="flex items-center justify-between gap-3 py-1 text-sm text-ink hover:text-ink/70"
+          >
+            <span>
+              <span className="font-medium">Settings</span>
+              <span className="mt-0.5 block text-muted">
+                Sensing, memory, and preferences
+              </span>
+            </span>
+            <span aria-hidden className="text-muted">
+              →
+            </span>
+          </Link>
+        </div>
+
         <button
           type="button"
           onClick={() => signOut()}
-          className="mt-6 text-sm text-muted hover:text-ink"
+          className="mt-8 self-start border border-ink/15 px-4 py-2.5 text-sm text-ink hover:bg-surface"
         >
           Sign out
         </button>

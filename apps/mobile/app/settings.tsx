@@ -1,6 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { BrandMark } from "@/components/BrandMark";
 import { MemorySettings } from "@/components/MemorySettings";
 import { SensingNetworkSettings } from "@/components/SensingNetworkSettings";
 import { VoiceReplySettings } from "@/components/VoiceReplySettings";
@@ -14,38 +13,37 @@ export default function SettingsScreen() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.headingRow}>
-        <View>
-          <BrandMark style={styles.eyebrow} />
-          <Text style={styles.title}>Settings</Text>
-        </View>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>Back to profile</Text>
-        </Pressable>
+      <Pressable onPress={() => router.back()} hitSlop={8}>
+        <Text style={styles.back}>← Profile</Text>
+      </Pressable>
+      <Text style={styles.title}>Settings</Text>
+      <Text style={styles.subtitle}>
+        Sensing, memory, and how Nearby Hello uses your contributions.
+      </Text>
+      <View style={styles.sections}>
+        <VoiceReplySettings />
+        <MemorySettings />
+        <SensingNetworkSettings />
       </View>
-      <VoiceReplySettings />
-      <MemorySettings />
-      <SensingNetworkSettings />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
-  content: { paddingHorizontal: 16, paddingTop: 56, paddingBottom: 40, gap: 24 },
-  headingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 16,
-  },
-  eyebrow: {
-    fontSize: 11,
+  content: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 40 },
+  back: { fontSize: 14, color: colors.muted },
+  title: {
+    marginTop: 12,
+    fontSize: 28,
     fontWeight: "700",
-    letterSpacing: 1.8,
-    textTransform: "uppercase",
-    color: colors.teal,
+    color: colors.ink,
   },
-  title: { marginTop: 4, fontSize: 28, fontWeight: "700", color: colors.ink },
-  back: { fontSize: 13, fontWeight: "700", color: colors.teal },
+  subtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.muted,
+  },
+  sections: { marginTop: 24, gap: 24 },
 });

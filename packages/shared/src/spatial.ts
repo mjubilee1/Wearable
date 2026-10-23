@@ -6,6 +6,8 @@ export const DEFAULT_AGGREGATION_WINDOW_MINUTES = 15;
 export const DEFAULT_PLACE_RADIUS_METERS = 1_000;
 export const MAX_PLACE_RADIUS_METERS = 5_000;
 export const MAX_PLACE_RESULTS = 50;
+/** First screen of Explore and Nearby. Enough to orient, small enough to return quickly. */
+export const PREVIEW_PLACE_LIMIT = 5;
 
 export type SensorCategory = "location" | "sound" | "motion" | "bluetooth";
 export type ObservationType =
@@ -279,6 +281,36 @@ export function isGeoPoint(value: unknown): value is GeoPoint {
         Number.isFinite(row.accuracyMeters) &&
         row.accuracyMeters >= 0))
   );
+}
+
+export type StoredPlacePreview = {
+  latitude: number;
+  longitude: number;
+  places: NearbySpatialPlace[];
+  savedAt: number;
+};
+
+/** Last good preview for this spot, or null when it is old or from somewhere else. */
+export function placesFromStoredPreview(
+  stored: StoredPlacePreview | null | undefined,
+  location: GeoPoint,
+  maxAgeMs = 24 * 60 * 60 * 1_000,
+  maxDriftMeters = 1_500,
+): NearbySpatialPlace[] | null {
+  if (!stored || !Array.isArray(stored.places) || stored.places.length === 0) {
+    return null;
+  }
+  if (!Number.isFinite(stored.savedAt) || Date.now() - stored.savedAt > maxAgeMs) {
+    return null;
+  }
+  if (
+    !isGeoPoint(stored) ||
+    !isGeoPoint(location) ||
+    distanceMeters(stored, location) > maxDriftMeters
+  ) {
+    return null;
+  }
+  return stored.places.slice(0, PREVIEW_PLACE_LIMIT);
 }
 
 export function distanceMeters(first: GeoPoint, second: GeoPoint): number {

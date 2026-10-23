@@ -6,19 +6,22 @@ import { TabBar } from "@/components/TabBar";
 
 export default function SettingsPage() {
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 pb-16 pt-20 sm:px-8">
-      <header className="mb-8 max-w-xl">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal">
-          Nearby
+    <div className="app-shell mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-5 pb-16 pt-20">
+      <header className="mb-8 max-w-md">
+        <Link
+          href="/profile"
+          className="text-sm text-muted hover:text-ink"
+        >
+          ← Profile
+        </Link>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink">
+          Settings
+        </h1>
+        <p className="mt-1 text-sm text-muted">
+          Sensing, memory, and how Nearby Hello uses your contributions.
         </p>
-        <div className="mt-1 flex items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold tracking-tight text-ink">Settings</h1>
-          <Link href="/profile" className="text-sm font-semibold text-teal">
-            Back to profile
-          </Link>
-        </div>
       </header>
-      <main className="max-w-xl flex-1">
+      <main className="max-w-md flex-1 space-y-8">
         <MemorySettings />
         <SensingNetworkSettings />
       </main>

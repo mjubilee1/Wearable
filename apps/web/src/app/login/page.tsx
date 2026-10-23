@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { friendlyAuthError } from "@nearby/shared";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { useSignupHref } from "@/lib/use-signup-href";
@@ -24,7 +25,7 @@ export default function LoginPage() {
       await signIn(email.trim(), password);
       router.replace("/nearby");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not sign in");
+      setError(friendlyAuthError(err, "Could not sign in"));
     } finally {
       setSubmitting(false);
     }

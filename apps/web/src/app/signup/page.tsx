@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { isEmailLikeName } from "@nearby/shared";
+import { friendlyAuthError, isEmailLikeName } from "@nearby/shared";
 import { BrandMark } from "@/components/BrandMark";
 import { useAuth } from "@/lib/auth-context";
 import { captureAttribution } from "@/lib/attribution";
@@ -62,7 +62,7 @@ export default function SignupPage() {
         campaign_name: touch.utm_campaign,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create account");
+      setError(friendlyAuthError(err, "Could not create account"));
     } finally {
       setSubmitting(false);
     }

@@ -10,5 +10,8 @@ export const colors = {
   card: "#ffffff",
   amberGlow: "#f59e0b",
   page: "#ffffff",
-  border: "rgba(0,0,0,0.08)",
+  /** Cool mist field used on Discover (matches web landing/discover shell). */
+  field: "#eef3f0",
+  fieldDeep: "#e6ece8",
+  border: "rgba(17,24,39,0.1)",
 } as const;
