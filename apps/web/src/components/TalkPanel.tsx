@@ -432,7 +432,7 @@ export function TalkPanel() {
         setBusy(false);
       }
     },
-    [busy, queryClient, timeZone, user],
+    [applyTurn, busy, queryClient, timeZone, user],
   );
 
   useEffect(() => {

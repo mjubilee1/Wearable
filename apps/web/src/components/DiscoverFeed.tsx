@@ -150,7 +150,7 @@ export function DiscoverFeed() {
     void load();
   }, [load]);
 
-  async function useMyLocation() {
+  async function handleUseMyLocation() {
     setLocating(true);
     setMessage(null);
     try {
@@ -300,7 +300,7 @@ export function DiscoverFeed() {
             <button
               type="button"
               disabled={locating || loading}
-              onClick={() => void useMyLocation()}
+              onClick={() => void handleUseMyLocation()}
               className="bg-ink px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
               {locating ? "Getting location…" : "Use my location"}

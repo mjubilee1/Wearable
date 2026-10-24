@@ -179,7 +179,7 @@ export function DiscoverFeed() {
     return readings.reduce((sum, value) => sum + value, 0) / readings.length;
   }
 
-  async function useMyLocation() {
+  async function handleUseMyLocation() {
     setLocating(true);
     setMessage(null);
     try {
@@ -324,7 +324,7 @@ export function DiscoverFeed() {
           <Pressable
             style={[styles.primaryBtn, (locating || loading) && styles.disabled]}
             disabled={locating || loading}
-            onPress={() => void useMyLocation()}
+            onPress={() => void handleUseMyLocation()}
           >
             <Text style={styles.primaryBtnText}>
               {locating ? "Getting location…" : "Use my location"}

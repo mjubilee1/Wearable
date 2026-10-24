@@ -124,7 +124,7 @@ export function ExploreMap() {
   useEffect(() => {
     if (!spatial.ready) return;
     setPlaces(readPreview(spatial.location));
-  }, [spatial.ready, spatial.location.latitude, spatial.location.longitude]);
+  }, [spatial.ready, spatial.location]);
 
   useEffect(() => {
     void load();

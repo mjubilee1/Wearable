@@ -92,9 +92,6 @@ export function NearbyMatches() {
     return () => window.clearInterval(id);
   }, [demoOn, selected]);
 
-  const displayScore =
-    selected && activeId === firstId ? demoScore : (selected?.score ?? 0);
-
   const sendMutation = useMutation({
     mutationFn: async (message: string) => {
       if (!profile || !activeId) throw new Error("Not ready");
