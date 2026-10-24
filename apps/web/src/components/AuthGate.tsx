@@ -19,7 +19,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const isMarketing = pathname === "/" || pathname === "/pricing";
   const isAuthScreen = AUTH_PATHS.has(pathname);
   const isInvite = pathname.startsWith("/invite/");
-  const isPublic = isMarketing || isAuthScreen || isInvite;
+  const isPublic =
+    isMarketing || isAuthScreen || isInvite || pathname === "/nearby";
   const createdAtMs = user
     ? Date.parse(user.metadata.creationTime ?? "") || 0
     : 0;

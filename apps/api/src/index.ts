@@ -414,6 +414,57 @@ app.get("/v1/spatial/patterns", async (c) => {
   }
 });
 
+app.get("/v1/spatial/work-spots", async (c) => {
+  const auth = await verifyAuth(c.req.header("Authorization"));
+  try {
+    const { applyCommunityReads, getWorkSpots, parseWorkSpotsQuery } =
+      await import("./work-spots.js");
+    const query = parseWorkSpotsQuery({
+      latitude: c.req.query("latitude"),
+      longitude: c.req.query("longitude"),
+      neighborhood: c.req.query("neighborhood"),
+    });
+    const response = await getWorkSpots(auth?.uid ?? null, query);
+    return c.json({
+      ...response,
+      spots: applyCommunityReads(response.spots),
+    });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
+app.post("/v1/spatial/work-spots/:id/readings", async (c) => {
+  try {
+    const body = (await c.req.json().catch(() => null)) as {
+      loudness?: number;
+      status?: string;
+      tags?: string[];
+    } | null;
+    const loudness = Number(body?.loudness);
+    if (!Number.isFinite(loudness) || loudness < 0 || loudness > 100) {
+      return c.json({ error: "Loudness must be between 0 and 100." }, 400);
+    }
+    const status =
+      body?.status === "quiet" ||
+      body?.status === "normal" ||
+      body?.status === "busy"
+        ? body.status
+        : null;
+    if (!status) {
+      return c.json({ error: "Status is required." }, 400);
+    }
+    const tags = Array.isArray(body?.tags)
+      ? body.tags.filter((tag) => typeof tag === "string").slice(0, 6)
+      : [];
+    const { recordCommunityRead } = await import("./work-spots.js");
+    recordCommunityRead(c.req.param("id"), { loudness, status, tags });
+    return c.json({ ok: true });
+  } catch (error) {
+    return spatialFailure(c, error);
+  }
+});
+
 app.get("/v1/spatial/places/nearby", async (c) => {
   const auth = await verifyAuth(c.req.header("Authorization"));
   if (!auth) return c.json({ error: "Unauthorized" }, 401);

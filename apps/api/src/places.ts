@@ -917,6 +917,10 @@ export async function nearbyPlaces(
     } catch {
       // Fall through to the provider error.
     }
+    console.error("[places] nearby lookup failed", {
+      center: query.center,
+      message: error instanceof Error ? error.message : String(error),
+    });
     throw error;
   }
 }
