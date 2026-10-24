@@ -1,20 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TrustBadge } from "@/components/TrustBadge";
+import { useAuth } from "@/lib/auth-context";
+import { useForegroundSensing } from "@/lib/sensing/session";
 import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { useRouter } from "expo-router";
+  mobileLocationProvider,
+  mobileMotionProvider,
+} from "@/lib/sensor-providers";
 import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-} from "expo-audio";
-import { File } from "expo-file-system";
+  getNearbyAreas,
+  getNearbyPlaces,
+  getPlaceInsights,
+  getSpatialSnapshot,
+  startSensorSession,
+  stopSensorSession,
+  submitObservation,
+} from "@/lib/spatial-api";
+import { colors } from "@/lib/theme";
+import { useSpatialLocation } from "@/lib/use-spatial-location";
 import {
   DEFAULT_PLACE_RADIUS_METERS,
   PREVIEW_PLACE_LIMIT,
@@ -27,24 +28,23 @@ import {
   type SpatialInsight,
   type SpatialSnapshot,
 } from "@nearby/shared";
-import { TrustBadge } from "@/components/TrustBadge";
-import { useAuth } from "@/lib/auth-context";
-import { useForegroundSensing } from "@/lib/sensing/session";
 import {
-  getNearbyAreas,
-  getNearbyPlaces,
-  getPlaceInsights,
-  getSpatialSnapshot,
-  startSensorSession,
-  stopSensorSession,
-  submitObservation,
-} from "@/lib/spatial-api";
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from "expo-audio";
+import { File } from "expo-file-system";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  mobileLocationProvider,
-  mobileMotionProvider,
-} from "@/lib/sensor-providers";
-import { useSpatialLocation } from "@/lib/use-spatial-location";
-import { colors } from "@/lib/theme";
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 type DiscoveryCard = {
   place: NearbySpatialPlace;
@@ -320,7 +320,7 @@ export function DiscoverFeed() {
 
       {exampleMode ? (
         <View style={styles.locationRow}>
-          <Text style={styles.meta}>Showing a Washington, DC sample area.</Text>
+          <Text style={styles.meta}>Showing a Washington, DC area.</Text>
           <Pressable
             style={[styles.primaryBtn, (locating || loading) && styles.disabled]}
             disabled={locating || loading}

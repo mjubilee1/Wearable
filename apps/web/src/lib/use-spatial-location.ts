@@ -5,14 +5,14 @@ import type { GeoPoint } from "@nearby/shared";
 import { browserLocationService } from "@/lib/device-location";
 
 const PILOT_LOCATION: GeoPoint = {
-  latitude: Number(process.env.NEXT_PUBLIC_PILOT_LATITUDE ?? 38.9072),
-  longitude: Number(process.env.NEXT_PUBLIC_PILOT_LONGITUDE ?? -77.0369),
+  latitude: Number(process.env.NEXT_PUBLIC_PILOT_LATITUDE ?? 38.9216),
+  longitude: Number(process.env.NEXT_PUBLIC_PILOT_LONGITUDE ?? -77.0425),
 };
 
 export function useSpatialLocation() {
   const [location, setLocation] = useState<GeoPoint>(PILOT_LOCATION);
   const [usingDevice, setUsingDevice] = useState(false);
-  const [label, setLabel] = useState("Washington, DC example area");
+  const [label, setLabel] = useState("Adams Morgan · DC");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
