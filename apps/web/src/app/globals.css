@@ -20,6 +20,13 @@
   color: var(--color-ink);
 }
 
+.discover-shell {
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(204, 251, 241, 0.55), transparent 55%),
+    linear-gradient(180deg, #eef3f0 0%, #f8faf9 28%, #ffffff 100%);
+  color: var(--color-ink);
+}
+
 * {
   box-sizing: border-box;
 }

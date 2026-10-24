@@ -154,10 +154,10 @@ export async function getWorkSpots(
 
   const seeded = seedSpotsForNeighborhood(query.neighborhood, query.center);
   const merged = dedupeSpots([
+    ...seeded,
     ...live
       .map((place) => mergeLivePlace(place, query.center, seeds))
       .filter((place): place is WorkSpot => Boolean(place)),
-    ...seeded,
   ]).slice(0, 15);
 
   const source =
